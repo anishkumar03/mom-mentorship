@@ -293,6 +293,26 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => setFollowIn7Days(lead)}>
                     +1 week
                   </button>
+<button
+  style={{ marginTop: 8, backgroundColor: "#1e293b", color: "white" }}
+  onClick={async () => {
+    await supabase.from("leads").update({ archived: true }).eq("id", lead.id);
+    location.reload();
+  }}
+>
+  Archive
+</button>
+
+<button
+  style={{ marginTop: 8, backgroundColor: "#dc2626", color: "white" }}
+  onClick={async () => {
+    if (!confirm("Delete this lead permanently?")) return;
+    await supabase.from("leads").delete().eq("id", lead.id);
+    location.reload();
+  }}
+>
+  Delete
+</button>
 
 <button style={btn} onClick={() => archiveLead(lead.id)}>Archive</button>
 <button style={btn} onClick={() => deleteLead(lead.id)}>Delete</button>
@@ -330,6 +350,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
