@@ -153,3 +153,29 @@ button:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* Mobile improvements */
+@media (max-width: 768px) {
+  h1 { font-size: 28px !important; }
+  h2 { font-size: 22px !important; }
+
+  /* Make inputs and buttons easier to tap */
+  input, select, textarea, button {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+
+  /* Prevent wide layouts */
+  .container, main {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+  }
+
+  /* Tables should scroll on mobile */
+  table {
+    display: block;
+    overflow-x: auto;
+    width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+}
