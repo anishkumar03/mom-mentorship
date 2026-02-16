@@ -299,7 +299,7 @@ export default function PipelinePage() {
 
 <button
   onClick={async () => {
-    await supabase.from("leads").update({ archived: true }).eq("id", l.id);
+    await supabase.from("leads").update({ archived: true }).eq("id", lead.id);
     location.reload();
   }}
   style={{ marginLeft: 8 }}
@@ -310,7 +310,7 @@ export default function PipelinePage() {
 <button
   onClick={async () => {
     if (!confirm("Delete this lead permanently?")) return;
-    await supabase.from("leads").delete().eq("id", l.id);
+    await supabase.from("leads").delete().eq("id", lead.id);
     location.reload();
   }}
   style={{ marginLeft: 8, background: "#7a1f1f" }}
@@ -330,6 +330,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
