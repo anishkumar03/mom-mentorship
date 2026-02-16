@@ -305,5 +305,3 @@ export default function PipelinePage() {
   );
 }
 
-
-
