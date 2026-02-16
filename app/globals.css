@@ -205,3 +205,43 @@ button:hover {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* Bottom tabs (mobile) */
+@media (max-width: 768px) {
+  body {
+    padding-bottom: 74px; /* space for bottom tabs */
+  }
+
+  .mom-bottom-tabs {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 9999;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    padding: 12px 12px 16px;
+    background: rgba(7, 16, 34, 0.92);
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(10px);
+  }
+
+  .mom-tab {
+    text-align: center;
+    padding: 12px 10px;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    background: rgba(255, 255, 255, 0.04);
+    color: rgba(255, 255, 255, 0.90);
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .mom-tab-active {
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.18);
+    color: #ffffff;
+  }
+}

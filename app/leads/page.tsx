@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -71,11 +71,10 @@ export default function LeadsPage() {
       return;
     }
 
-    const { data: rows, error } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("archived", false)
-      .order("created_at", { ascending: false });
+    let q = supabase.from("leads").select("*");
+if (filterProgram !== "all") q = q.eq("program", filterProgram);
+
+const { data: rows, error } = await q.order("created_at", { ascending: false });
 
     if (error) {
       setStatusText(error.message);
@@ -91,6 +90,8 @@ export default function LeadsPage() {
 
     setStatusText("Ready");
   };
+const [program, setProgram] = useState("april_group");
+const [filterProgram, setFilterProgram] = useState("april_group");
 
   useEffect(() => {
     load();
@@ -251,7 +252,21 @@ export default function LeadsPage() {
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Add lead</h3>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+  <div style={{ opacity: 0.8, fontSize: 14 }}>Program</div>
+  <select
+    value={filterProgram}
+    onChange={(e) => setFilterProgram(e.target.value)}
+    style={{ padding: 10, borderRadius: 12 }}
+  >
+    <option value="april_group">April Group Mentorship</option>
+    <option value="one_on_one">1 on 1 Mentorship</option>
+    <option value="general">General</option>
+    <option value="all">All</option>
+  </select>
+</div>
+
+
 
         <div className="grid2">
           <input
@@ -350,3 +365,4 @@ export default function LeadsPage() {
     </div>
   );
 }
+
