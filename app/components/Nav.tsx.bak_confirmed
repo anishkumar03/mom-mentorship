@@ -7,7 +7,6 @@ const links = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/leads", label: "Leads" },
-  { href: "/confirmed", label: "Confirmed" },
   { href: "/archive", label: "Archive" },
   { href: "/modules", label: "Modules" },
   { href: "/admin", label: "Admin" },
@@ -37,5 +36,4 @@ export default function Nav() {
     </div>
   );
 }
-
 

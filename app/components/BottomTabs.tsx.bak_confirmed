@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 const tabs = [
   { href: "/dashboard", label: "Dashboard" },
   { href: "/leads", label: "Leads" },
-  { href: "/confirmed", label: "Confirmed" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/admin", label: "Admin" },
 ];
@@ -34,4 +33,3 @@ export default function BottomTabs() {
     </div>
   );
 }
-
