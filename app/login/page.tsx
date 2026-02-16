@@ -16,7 +16,7 @@ export default function LoginPage() {
     setMsg("");
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: "http://localhost:3000/admin" },
+      options: { emailRedirectTo: `${window.location.origin}/admin` },
     });
 
     if (error) setMsg(error.message);
