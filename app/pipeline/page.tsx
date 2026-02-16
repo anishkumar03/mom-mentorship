@@ -284,6 +284,8 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => openWhatsApp(lead)}>
                     WhatsApp
                   </button>
+<button style={btn} onClick={() => archiveLead(lead)}>Archive</button>
+<button style={btn} onClick={() => deleteLead(lead)}>Delete</button>
 
                   <button style={btn} onClick={() => setCallDone(lead)}>
                     Call done
@@ -325,6 +327,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
