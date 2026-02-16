@@ -293,6 +293,8 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => setFollowIn7Days(lead)}>
                     +1 week
                   </button>
+<button style={btn} onClick={() => archiveLead(lead)}>Archive</button>
+<button style={btn} onClick={() => deleteLead(lead)}>Delete</button>
 
 <button
   onClick={async () => {
@@ -327,6 +329,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
