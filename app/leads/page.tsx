@@ -238,9 +238,8 @@ export default function LeadsPage() {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div>
             <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>Program</div>
-            <select value={program} onChange={(e) => 
-<option value="__ALL__">All programs</option>
-setProgram(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10 }}>
+            <select value={program} onChange={(e) => setProgram(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10 }}>
+  <option value="__ALL__">All programs</option>
               {PROGRAMS.map((p) => (
                 <option key={p} value={p}>
                   {p}
@@ -369,5 +368,6 @@ setSource(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10
     </div>
   );
 }
+
 
 
