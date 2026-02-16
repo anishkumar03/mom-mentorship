@@ -295,6 +295,8 @@ export default function PipelinePage() {
                   </button>
 <button style={btn} onClick={() => archiveLead(lead)}>Archive</button>
 <button style={btn} onClick={() => deleteLead(lead)}>Delete</button>
+<button style={btn} onClick={() => archiveLead(lead)}>Archive</button>
+<button style={btn} onClick={() => deleteLead(lead)}>Delete</button>
 
 <button
   onClick={async () => {
@@ -329,6 +331,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
