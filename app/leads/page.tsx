@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { archiveLead, deleteLead } from "..\/lib\/leadsActions";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -364,3 +365,4 @@ export default function LeadsPage() {
     </div>
   );
 }
+

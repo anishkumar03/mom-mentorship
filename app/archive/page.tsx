@@ -43,8 +43,7 @@ export default function ArchivePage() {
     }
 
     const { data: rows, error } = await supabase
-      .from("leads")
-      .select("*")
+      .from("leads").select("*").not("archived_at", "is", null)
       .eq("archived", true)
       .order("created_at", { ascending: false });
 
@@ -106,3 +105,4 @@ export default function ArchivePage() {
     </div>
   );
 }
+
