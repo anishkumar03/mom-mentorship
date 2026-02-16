@@ -293,7 +293,7 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => setFollowIn7Days(lead)}>
                     +1 week
                   </button>
-<div style={{fontSize:12,opacity:0.8}}>TEST_MARKER_123</div>
+
 <button style={btn} onClick={() => archiveLead(lead.id)}>Archive</button>
 <button style={btn} onClick={() => deleteLead(lead.id)}>Delete</button>
 
@@ -330,6 +330,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
