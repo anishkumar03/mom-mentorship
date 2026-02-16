@@ -250,9 +250,8 @@ export default function LeadsPage() {
 
           <div>
             <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>Source</div>
-            <select value={source} onChange={(e) => 
-<option value="__ALL__">All programs</option>
-setSource(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10 }}>
+            <select value={source} onChange={(e) => setSource(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10 }}>
+  <option value="__ALL__">All sources</option>
               <option value="instagram">instagram</option>
               <option value="whatsapp">whatsapp</option>
               <option value="referral">referral</option>
@@ -368,6 +367,7 @@ setSource(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10
     </div>
   );
 }
+
 
 
 
