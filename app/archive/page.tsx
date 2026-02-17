@@ -78,9 +78,7 @@ export default function ArchivePage() {
 
   return (
     <div className="container">
-      <Nav />
-
-      <div className="card">
+<div className="card">
         <h1>Archive</h1>
         <div className="sub">{statusText}</div>
         <div className="sub">Won and Lost leads are stored here so your Leads page stays clean.</div>
@@ -105,4 +103,5 @@ export default function ArchivePage() {
     </div>
   );
 }
+
 

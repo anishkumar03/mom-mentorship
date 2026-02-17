@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -110,8 +110,7 @@ export default function DashboardPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "40px auto", fontFamily: "sans-serif" }}>
-      <Nav />
-      <h2>Dashboard</h2>
+<h2>Dashboard</h2>
       <p>{statusText}</p>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginTop: 16 }}>
@@ -155,3 +154,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -132,3 +132,4 @@ const tdStyle: React.CSSProperties = {
   borderBottom: "1px solid rgba(255,255,255,0.06)",
   fontSize: 14,
 };
+

@@ -239,9 +239,7 @@ const [filterProgram, setFilterProgram] = useState("april_group");
 
   return (
     <div className="container">
-      <Nav />
-
-      <div className="card">
+<div className="card">
         <h1>Leads</h1>
         <div className="sub">{statusText}</div>
 
@@ -365,6 +363,7 @@ const [filterProgram, setFilterProgram] = useState("april_group");
     </div>
   );
 }
+
 
 
 
