@@ -402,7 +402,7 @@ export default function LeadsPage() {
         <div key={r.id} style={{ padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
           <div style={{ fontWeight: 700 }}>{r.name || "Lead"}</div>
           <div style={{ fontSize: 13, opacity: 0.9, marginTop: 6 }}>
-            {r.reminder_at ? new Date(r.reminder_at).toLocaleString() : ""} {r.reminder_type ? () : ""}
+            {r.reminder_at ? new Date(r.reminder_at).toLocaleString() : ""} {r.reminder_type ? "(" + r.reminder_type + ")" : ""}
           </div>
           {r.reminder_note ? (
             <div style={{ fontSize: 13, opacity: 0.85, marginTop: 6 }}>{r.reminder_note}</div>
@@ -419,6 +419,7 @@ export default function LeadsPage() {
     </div>
   );
 }
+
 
 
 
