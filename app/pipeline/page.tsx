@@ -1,5 +1,73 @@
 ﻿"use client";
 
+
+
+function formatLocal(dtIso: string) {
+  try {
+    return new Date(dtIso).toLocaleString();
+  } catch {
+    return dtIso;
+  }
+}
+
+function buildIcs(title: string, details: string, startIso: string, minutes: number) {
+  const start = new Date(startIso);
+  const end = new Date(start.getTime() + minutes * 60000);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const toIcs = (d: Date) =>
+    d.getUTCFullYear().toString() +
+    pad(d.getUTCMonth() + 1) +
+    pad(d.getUTCDate()) + "T" +
+    pad(d.getUTCHours()) +
+    pad(d.getUTCMinutes()) +
+    pad(d.getUTCSeconds()) + "Z";
+
+  const uid = ${Date.now()}@mindovermarkets;
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Mind Over Markets//Mentorship CRM//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VEVENT",
+    UID:,
+    DTSTAMP:,
+    DTSTART:,
+    DTEND:,
+    SUMMARY:,
+    DESCRIPTION:,
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ];
+  return lines.join("\r\n");
+}
+
+async function markReminderDone(supabase: any, leadId: string) {
+  await supabase.from("leads").update({ reminder_done: true }).eq("id", leadId);
+}
+
+async function snoozeReminder(supabase: any, leadId: string, days: number) {
+  const next = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  await supabase.from("leads").update({ reminder_at: next, reminder_done: false }).eq("id", leadId);
+}
+
+function addToCalendarForLead(lead: any) {
+  if (!lead?.reminder_at) return;
+  const who = lead.name ? lead.name : "Lead";
+  const phone = lead.phone ? Phone:  : "";
+  const handle = lead.handle ? IG:  : "";
+  const note = lead.reminder_note ? Note:  : "";
+  const type = lead.reminder_type ? Type:  : "";
+  const program = lead.program ? Program:  : "";
+
+  const title = MOM : ;
+  const details = [program, phone, handle, type, note].filter(Boolean).join(" | ");
+
+  const ics = buildIcs(title, details, lead.reminder_at, 10);
+  const url = "data:text/calendar;charset=utf-8," + encodeURIComponent(ics);
+  window.open(url, "_blank");
+}
 function handleArchiveLead(l: any) {
   try {
     const id = l?.id;
@@ -359,6 +427,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
