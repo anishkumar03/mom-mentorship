@@ -9,6 +9,11 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+
+
+
+
+
 type Lead = {
   id: string;
   name: string | null;
@@ -284,6 +289,19 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => openWhatsApp(lead)}>
                     WhatsApp
                   </button>
+<button
+  style={{ ...btn, background: "#1f3b2d", borderColor: "#2f6b4b" }}
+  onClick={() => archiveLead(lead.id)}
+>
+  Archive
+</button>
+
+<button
+  style={{ ...btn, background: "#6b1f1f", borderColor: "#b33a3a", color: "white" }}
+  onClick={() => deleteLead(lead.id)}
+>
+  Delete
+</button>
 
                   <button style={btn} onClick={() => setCallDone(lead)}>
                     Call done
@@ -304,4 +322,9 @@ export default function PipelinePage() {
     </div>
   );
 }
+
+
+
+
+
 
