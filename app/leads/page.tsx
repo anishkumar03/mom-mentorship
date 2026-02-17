@@ -1,5 +1,33 @@
 ﻿"use client";
 
+
+
+  async function fetchReminders(selectedProgram: string) {
+    try {
+      const now = new Date();
+      const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      let q = supabase
+        .from("leads")
+        .select("*")
+        .is("archived", null)
+        .or("archived.is.null,archived.eq.false")
+        .eq("reminder_done", false)
+        .not("reminder_at", "is", null)
+        .gte("reminder_at", now.toISOString())
+        .lte("reminder_at", end.toISOString())
+        .order("reminder_at", { ascending: true });
+
+      if (selectedProgram && selectedProgram !== "__ALL__") {
+        q = q.eq("program", selectedProgram);
+      }
+
+      const { data } = await q;
+      setReminders(Array.isArray(data) ? data : []);
+    } catch {
+      setReminders([]);
+    }
+  }
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { archiveLead, deleteLead } from "..\/lib\/leadsActions";
@@ -364,9 +392,34 @@ export default function LeadsPage() {
       </div>
 
       <div style={{ height: 40 }} />
+<div style={{ marginTop: 28 }}>
+  <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Upcoming reminders</div>
+  {reminders.length === 0 ? (
+    <div style={{ opacity: 0.8 }}>No reminders in the next 14 days.</div>
+  ) : (
+    <div style={{ display: "grid", gap: 10 }}>
+      {reminders.map((r) => (
+        <div key={r.id} style={{ padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
+          <div style={{ fontWeight: 700 }}>{r.name || "Lead"}</div>
+          <div style={{ fontSize: 13, opacity: 0.9, marginTop: 6 }}>
+            {r.reminder_at ? new Date(r.reminder_at).toLocaleString() : ""} {r.reminder_type ? () : ""}
+          </div>
+          {r.reminder_note ? (
+            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 6 }}>{r.reminder_note}</div>
+          ) : null}
+          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+            {r.program ? Program:  : ""} {r.phone ?  | Phone:  : ""} {r.email ?  | Email:  : ""}
+          </div>
+        </div>
+      ))}
+    </div>
+  )}
+</div>
+
     </div>
   );
 }
+
 
 
 
