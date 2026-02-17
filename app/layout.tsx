@@ -1,4 +1,5 @@
-﻿
+﻿import Nav from "./components/Nav";
+
 <nav style={{
   display: "flex",
   gap: 20,
@@ -42,12 +43,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+      <Nav />
         {children}
 
 </body>
     </html>
   );
 }
+
 
 
 
