@@ -1,5 +1,42 @@
 ﻿"use client";
 
+function handleArchiveLead(l: any) {
+  try {
+    const id = l?.id;
+    if (!id) { alert("Archive failed: missing lead id"); return; }
+    if (!confirm("Archive this lead?")) return;
+
+    Promise.resolve(archiveLead(id))
+      .then(() => location.reload())
+      .catch((e:any) => {
+        console.error("Archive failed:", e);
+        alert("Archive failed: " + (e?.message || JSON.stringify(e)));
+      });
+  } catch (e:any) {
+    console.error("Archive exception:", e);
+    alert("Archive exception: " + (e?.message || e));
+  }
+}
+
+function handleDeleteLead(l: any) {
+  try {
+    const id = l?.id;
+    if (!id) { alert("Delete failed: missing lead id"); return; }
+    if (!confirm("Delete this lead permanently?")) return;
+
+    Promise.resolve(deleteLead(id))
+      .then(() => location.reload())
+      .catch((e:any) => {
+        console.error("Delete failed:", e);
+        alert("Delete failed: " + (e?.message || JSON.stringify(e)));
+      });
+  } catch (e:any) {
+    console.error("Delete exception:", e);
+    alert("Delete exception: " + (e?.message || e));
+  }
+}
+
+
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { archiveLead, deleteLead } from "..\/lib\/leadsActions";
@@ -291,14 +328,14 @@ export default function PipelinePage() {
                   </button>
 <button
   style={{ ...btn, background: "#1f3b2d", borderColor: "#2f6b4b" }}
-  onClick={() => archiveLead(lead.id)}
+  onClick={() => handleArchiveLead(lead)}
 >
   Archive
 </button>
 
 <button
   style={{ ...btn, background: "#6b1f1f", borderColor: "#b33a3a", color: "white" }}
-  onClick={() => deleteLead(lead.id)}
+  onClick={() => handleDeleteLead(lead)}
 >
   Delete
 </button>
@@ -322,6 +359,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
