@@ -138,6 +138,17 @@ function digitsOnly(v: string) {
       alert(e?.message || "Failed to set follow-up");
     }
   };
+  // Normalize status values so small differences don't break columns
+  const stageKey = (s: any) => {
+    const v = (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, "");
+    if (v === "follow" || v === "followup") return "Follow Up";
+    if (v === "new") return "New";
+    if (v === "contacted") return "Contacted";
+    if (v === "callscheduled" || v === "callschedule" || v === "call") return "Call Scheduled";
+    if (v === "confirmed") return "Confirmed";
+    if (v === "lost") return "Lost";
+    return (s ?? "New") as any;
+  };
 return (v || "").replace(/[^\d]/g, "");
 }
 
@@ -287,6 +298,17 @@ export default function PipelinePage() {
       alert(e?.message || "Failed to set follow-up");
     }
   };
+  // Normalize status values so small differences don't break columns
+  const stageKey = (s: any) => {
+    const v = (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, "");
+    if (v === "follow" || v === "followup") return "Follow Up";
+    if (v === "new") return "New";
+    if (v === "contacted") return "Contacted";
+    if (v === "callscheduled" || v === "callschedule" || v === "call") return "Call Scheduled";
+    if (v === "confirmed") return "Confirmed";
+    if (v === "lost") return "Lost";
+    return (s ?? "New") as any;
+  };
 return (
     <div style={container}>
       <h1 style={{ margin: "6px 0 10px" }}>Pipeline</h1>
@@ -368,5 +390,6 @@ return (
     </div>
   );
 }
+
 
 
