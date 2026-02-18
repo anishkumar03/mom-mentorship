@@ -1,4 +1,14 @@
 ﻿"use client";
+function stageKey(s: any) {
+  const v = (s ?? "").toString().trim().toLowerCase().replace(/\s+/g, "");
+  if (v === "follow" || v === "followup") return "Follow Up";
+  if (v === "new") return "New";
+  if (v === "contacted") return "Contacted";
+  if (v === "callscheduled" || v === "callschedule" || v === "call") return "Call Scheduled";
+  if (v === "confirmed") return "Confirmed";
+  if (v === "lost") return "Lost";
+  return (s ?? "New") as any;
+}
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -390,6 +400,7 @@ return (
     </div>
   );
 }
+
 
 
 
