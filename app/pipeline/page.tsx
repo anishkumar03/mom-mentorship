@@ -11,44 +11,59 @@ const supabase = createClient(
 
 
 
-function toIsoFromPrompt(input: string) {
-  const v = input.trim().replace(" ", "T");
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+function toIsoFromPrompt(input: string): string | null {
+  // Expect: YYYY-MM-DD HH:mm (local time)
+  const m = input.trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+  if (!m) return null;
+
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1;
+  const d = Number(m[3]);
+  const hh = Number(m[4]);
+  const mm = Number(m[5]);
+
+  const dt = new Date(y, mo, d, hh, mm, 0, 0);
+  if (Number.isNaN(dt.getTime())) return null;
+
+  return dt.toISOString();
 }
 
-async function setFollowWithPrompt(lead: Lead) {
-  if (!lead?.id) return;
+const setFollowWithPrompt = async (lead: any) => {
+  try {
+    if (!lead?.id) return;
 
-  const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    // default = +7 days (rounded to next hour)
+    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    def.setMinutes(0, 0, 0);
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const defStr = `${def.getFullYear()}-${pad2(def.getMonth() + 1)}-${pad2(def.getDate())} ${pad2(def.getHours())}:${pad2(def.getMinutes())}`;
 
-  const yyyy = String(def.getFullYear());
-  const mm = String(def.getMonth() + 1).padStart(2, "0");
-  const dd = String(def.getDate()).padStart(2, "0");
-  const hh = String(def.getHours()).padStart(2, "0");
-  const mi = String(def.getMinutes()).padStart(2, "0");
+    const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+    if (input === null) return;
 
-  const defStr = yyyy + "-" + mm + "-" + dd + " " + hh + ":" + mi;
-  const { error } = await supabase
-    .from("leads")
-    .update({ status: "Follow Up", follow_up_at: followIso })
-    .eq("id", lead.id);
+    const followIso = toIsoFromPrompt(input);
+    if (!followIso) {
+      alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
+      return;
+    }
 
-  if (error) { alert(error.message); } else { location.reload(); }
-}const { error } = await supabase
-    .from("leads")
-    .update({ status: "Follow Up", follow_up_at: followIso })
-    .eq("id", lead.id);
+    const { error } = await supabase
+      .from("leads")
+      .update({ status: "Follow Up", follow_up_at: followIso })
+      .eq("id", lead.id);
 
-  if (error) { alert(error.message); } else { location.reload(); }
-  const { error } = await supabase
-    .from("leads")
-    .update({ status: "Follow Up", follow_up_at: followIso })
-    .eq("id", lead.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
 
-  if (error) { alert(error.message); } else { location.reload(); }
-}
+    location.reload();
+  } catch (e: any) {
+    alert(e?.message || "Failed to set follow-up");
+  }
+};
+
+
 type Lead = {
   id: string;
   name: string | null;
@@ -405,6 +420,7 @@ return (
     </div>
   );
 }
+
 
 
 
