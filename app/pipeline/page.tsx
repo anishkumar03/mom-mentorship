@@ -45,23 +45,13 @@ async function setFollowWithPrompt(lead: Lead) {
     .update({ status: "Follow Up", follow_up_at: followIso })
     .eq("id", lead.id);
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  location.reload();
+  if (error) { alert(error.message); } else { location.reload(); }
 }const { error } = await supabase
     .from("leads")
     .update({ status: "Follow Up", follow_up_at: followIso })
     .eq("id", lead.id);
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  location.reload();
+  if (error) { alert(error.message); } else { location.reload(); }
 }-- :;
 
   const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
@@ -78,12 +68,7 @@ async function setFollowWithPrompt(lead: Lead) {
     .update({ status: "Follow Up", follow_up_at: followIso })
     .eq("id", lead.id);
 
-  if (error) {
-    alert(error.message);
-    return;
-  }
-
-  location.reload();
+  if (error) { alert(error.message); } else { location.reload(); }
 }
 type Lead = {
   id: string;
@@ -380,6 +365,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
