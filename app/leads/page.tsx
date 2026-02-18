@@ -10,8 +10,7 @@
       let q = supabase
         .from("leads")
         .select("*")
-        .is("archived", null)
-        .or("archived.is.null,archived.eq.false")
+.or("archived.is.null,archived.eq.false")
         .eq("reminder_done", false)
         .not("reminder_at", "is", null)
         .gte("reminder_at", now.toISOString())
@@ -431,6 +430,7 @@ export default function LeadsPage() {
     </div>
   );
 }
+
 
 
 
