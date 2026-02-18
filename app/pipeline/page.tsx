@@ -9,6 +9,42 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+
+
+function toIsoFromPrompt(input: string) {
+  const v = input.trim().replace(" ", "T");
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString();
+}
+
+async function setFollowWithPrompt(lead: Lead) {
+  if (!lead?.id) return;
+
+  const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const defStr = ${def.getFullYear()}-- :;
+
+  const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+  if (input === null) return;
+
+  const followIso = toIsoFromPrompt(input);
+  if (!followIso) {
+    alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ status: "Follow Up", follow_up_at: followIso })
+    .eq("id", lead.id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  location.reload();
+}
 type Lead = {
   id: string;
   name: string | null;
@@ -304,6 +340,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
