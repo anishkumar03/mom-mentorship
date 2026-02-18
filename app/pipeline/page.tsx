@@ -30,16 +30,6 @@ async function setFollowWithPrompt(lead: Lead) {
   const mi = String(def.getMinutes()).padStart(2, "0");
 
   const defStr = yyyy + "-" + mm + "-" + dd + " " + hh + ":" + mi;
-
-  const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
-  if (input === null) return;
-
-  const followIso = toIsoFromPrompt(input);
-  if (!followIso) {
-    alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
-    return;
-  }
-
   const { error } = await supabase
     .from("leads")
     .update({ status: "Follow Up", follow_up_at: followIso })
@@ -52,15 +42,6 @@ async function setFollowWithPrompt(lead: Lead) {
     .eq("id", lead.id);
 
   if (error) { alert(error.message); } else { location.reload(); }
-  const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
-  if (input === null) return;
-
-  const followIso = toIsoFromPrompt(input);
-  if (!followIso) {
-    alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
-    return;
-  }
-
   const { error } = await supabase
     .from("leads")
     .update({ status: "Follow Up", follow_up_at: followIso })
@@ -165,7 +146,38 @@ function fmt(dt: string | null) {
 }
 
 function digitsOnly(v: string) {
-  return (v || "").replace(/[^\d]/g, "");
+const setFollowWithPrompt = async (lead: any) => {
+  try {
+    if (!lead?.id) return;
+
+    // default = +7 days (rounded to next hour)
+    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    def.setMinutes(0, 0, 0);
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const defStr = `${def.getFullYear()}-${pad2(def.getMonth() + 1)}-${pad2(def.getDate())} ${pad2(def.getHours())}:${pad2(def.getMinutes())}`;
+
+    const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+    if (input === null) return;
+
+    const followIso = toIsoFromPrompt(input);
+    if (!followIso) {
+      alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ status: "Follow Up", follow_up_at: followIso })
+      .eq("id", lead.id);
+
+    if (error) alert(error.message);
+    else location.reload();
+  } catch (e: any) {
+    alert(e?.message || "Failed to set follow-up");
+  }
+};
+
+return (v || "").replace(/[^\d]/g, "");
 }
 
 function whatsappUrl(phone: string, msg: string) {
@@ -281,8 +293,38 @@ export default function PipelinePage() {
     }
     return map;
   }, [leads, columns]);
+const setFollowWithPrompt = async (lead: any) => {
+  try {
+    if (!lead?.id) return;
 
-  return (
+    // default = +7 days (rounded to next hour)
+    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    def.setMinutes(0, 0, 0);
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const defStr = `${def.getFullYear()}-${pad2(def.getMonth() + 1)}-${pad2(def.getDate())} ${pad2(def.getHours())}:${pad2(def.getMinutes())}`;
+
+    const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+    if (input === null) return;
+
+    const followIso = toIsoFromPrompt(input);
+    if (!followIso) {
+      alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ status: "Follow Up", follow_up_at: followIso })
+      .eq("id", lead.id);
+
+    if (error) alert(error.message);
+    else location.reload();
+  } catch (e: any) {
+    alert(e?.message || "Failed to set follow-up");
+  }
+};
+
+return (
     <div style={container}>
       <h1 style={{ margin: "6px 0 10px" }}>Pipeline</h1>
       <div style={{ opacity: 0.9, marginBottom: 12 }}>{status}</div>
@@ -363,6 +405,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
