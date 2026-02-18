@@ -159,7 +159,7 @@ function digitsOnly(v: string) {
     if (v === "lost") return "Lost";
     return (s ?? "New") as any;
   };
-return (v || "").replace(/[^\d]/g, "");
+
 }
 
 function whatsappUrl(phone: string, msg: string) {
@@ -400,6 +400,7 @@ return (
     </div>
   );
 }
+
 
 
 
