@@ -23,9 +23,9 @@
       }
 
       const { data } = await q;
-      setReminders(Array.isArray(data) ? data : []);
+      return Array.isArray(data) ? data : [];
     } catch {
-      setReminders([]);
+      return [];
     }
   }
 import { useEffect, useMemo, useState } from "react";
@@ -91,6 +91,18 @@ function waLink(phone: string | null, msg?: string) {
 export default function LeadsPage() {
   const [statusText, setStatusText] = useState("Loading...");
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [reminders, setReminders] = useState<any[]>([]);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchReminders(program);
+        setReminders(Array.isArray(data) ? data : []);
+      } catch {
+        setReminders([]);
+      }
+    })();
+  }, []);
 
   const [program, setProgram] = useState<string>(PROGRAMS[0]);
   const [source, setSource] = useState<string>("instagram");
@@ -408,8 +420,8 @@ export default function LeadsPage() {
             <div style={{ fontSize: 13, opacity: 0.85, marginTop: 6 }}>{r.reminder_note}</div>
           ) : null}
           <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-            {r.program ? Program:  : ""} {r.phone ?  | Phone:  : ""} {r.email ?  | Email:  : ""}
-          </div>
+  {r.program ? `Program: ${r.program}` : ""}{r.phone ? ` | Phone: ${r.phone}` : ""}{r.email ? ` | Email: ${r.email}` : ""}
+</div>
         </div>
       ))}
     </div>
@@ -419,6 +431,18 @@ export default function LeadsPage() {
     </div>
   );
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
