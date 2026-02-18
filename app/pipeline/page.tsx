@@ -288,7 +288,7 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => setCallDone(lead)}>
                     Call done
                   </button>
-                  <button style={btn} onClick={() => setFollowIn7Days(lead)}>
+                  <button style={btn} onClick={() => setFollowWithPrompt(lead)}>
                     +1 week
                   </button>
                 </div>
@@ -304,4 +304,5 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
