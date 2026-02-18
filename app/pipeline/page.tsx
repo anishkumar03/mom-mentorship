@@ -9,61 +9,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-
-
-function toIsoFromPrompt(input: string): string | null {
-  // Expect: YYYY-MM-DD HH:mm (local time)
-  const m = input.trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
-  if (!m) return null;
-
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  const hh = Number(m[4]);
-  const mm = Number(m[5]);
-
-  const dt = new Date(y, mo, d, hh, mm, 0, 0);
-  if (Number.isNaN(dt.getTime())) return null;
-
-  return dt.toISOString();
-}
-
-const setFollowWithPrompt = async (lead: any) => {
-  try {
-    if (!lead?.id) return;
-
-    // default = +7 days (rounded to next hour)
-    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    def.setMinutes(0, 0, 0);
-    const pad2 = (n: number) => String(n).padStart(2, "0");
-    const defStr = `${def.getFullYear()}-${pad2(def.getMonth() + 1)}-${pad2(def.getDate())} ${pad2(def.getHours())}:${pad2(def.getMinutes())}`;
-
-    const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
-    if (input === null) return;
-
-    const followIso = toIsoFromPrompt(input);
-    if (!followIso) {
-      alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("leads")
-      .update({ status: "Follow Up", follow_up_at: followIso })
-      .eq("id", lead.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    location.reload();
-  } catch (e: any) {
-    alert(e?.message || "Failed to set follow-up");
-  }
-};
-
-
 type Lead = {
   id: string;
   name: string | null;
@@ -161,38 +106,7 @@ function fmt(dt: string | null) {
 }
 
 function digitsOnly(v: string) {
-const setFollowWithPrompt = async (lead: any) => {
-  try {
-    if (!lead?.id) return;
-
-    // default = +7 days (rounded to next hour)
-    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    def.setMinutes(0, 0, 0);
-    const pad2 = (n: number) => String(n).padStart(2, "0");
-    const defStr = `${def.getFullYear()}-${pad2(def.getMonth() + 1)}-${pad2(def.getDate())} ${pad2(def.getHours())}:${pad2(def.getMinutes())}`;
-
-    const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
-    if (input === null) return;
-
-    const followIso = toIsoFromPrompt(input);
-    if (!followIso) {
-      alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("leads")
-      .update({ status: "Follow Up", follow_up_at: followIso })
-      .eq("id", lead.id);
-
-    if (error) alert(error.message);
-    else location.reload();
-  } catch (e: any) {
-    alert(e?.message || "Failed to set follow-up");
-  }
-};
-
-return (v || "").replace(/[^\d]/g, "");
+  return (v || "").replace(/[^\d]/g, "");
 }
 
 function whatsappUrl(phone: string, msg: string) {
@@ -308,38 +222,8 @@ export default function PipelinePage() {
     }
     return map;
   }, [leads, columns]);
-const setFollowWithPrompt = async (lead: any) => {
-  try {
-    if (!lead?.id) return;
 
-    // default = +7 days (rounded to next hour)
-    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    def.setMinutes(0, 0, 0);
-    const pad2 = (n: number) => String(n).padStart(2, "0");
-    const defStr = `${def.getFullYear()}-${pad2(def.getMonth() + 1)}-${pad2(def.getDate())} ${pad2(def.getHours())}:${pad2(def.getMinutes())}`;
-
-    const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
-    if (input === null) return;
-
-    const followIso = toIsoFromPrompt(input);
-    if (!followIso) {
-      alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("leads")
-      .update({ status: "Follow Up", follow_up_at: followIso })
-      .eq("id", lead.id);
-
-    if (error) alert(error.message);
-    else location.reload();
-  } catch (e: any) {
-    alert(e?.message || "Failed to set follow-up");
-  }
-};
-
-return (
+  return (
     <div style={container}>
       <h1 style={{ margin: "6px 0 10px" }}>Pipeline</h1>
       <div style={{ opacity: 0.9, marginBottom: 12 }}>{status}</div>
@@ -404,7 +288,7 @@ return (
                   <button style={btn} onClick={() => setCallDone(lead)}>
                     Call done
                   </button>
-                  <button style={btn} onClick={() => setFollowWithPrompt(lead)}>
+                  <button style={btn} onClick={() => setFollowIn7Days(lead)}>
                     +1 week
                   </button>
                 </div>
@@ -420,16 +304,4 @@ return (
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
 
