@@ -22,7 +22,36 @@ async function setFollowWithPrompt(lead: Lead) {
   if (!lead?.id) return;
 
   const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const defStr = ${def.getFullYear()}-- :;
+
+  const yyyy = String(def.getFullYear());
+  const mm = String(def.getMonth() + 1).padStart(2, "0");
+  const dd = String(def.getDate()).padStart(2, "0");
+  const hh = String(def.getHours()).padStart(2, "0");
+  const mi = String(def.getMinutes()).padStart(2, "0");
+
+  const defStr = yyyy + "-" + mm + "-" + dd + " " + hh + ":" + mi;
+
+  const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+  if (input === null) return;
+
+  const followIso = toIsoFromPrompt(input);
+  if (!followIso) {
+    alert("Invalid date/time. Use YYYY-MM-DD HH:mm");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("leads")
+    .update({ status: "Follow Up", follow_up_at: followIso })
+    .eq("id", lead.id);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  location.reload();
+}-- :;
 
   const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
   if (input === null) return;
@@ -340,6 +369,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
