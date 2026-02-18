@@ -52,8 +52,6 @@ async function setFollowWithPrompt(lead: Lead) {
     .eq("id", lead.id);
 
   if (error) { alert(error.message); } else { location.reload(); }
-}-- :;
-
   const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
   if (input === null) return;
 
@@ -365,6 +363,7 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
 
 
