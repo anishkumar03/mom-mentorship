@@ -106,7 +106,39 @@ function fmt(dt: string | null) {
 }
 
 function digitsOnly(v: string) {
-  return (v || "").replace(/[^\d]/g, "");
+    // Follow-up with date/time picker (simple prompt)
+  const setFollowWithPrompt = async (lead: any) => {
+    try {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const def = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const defStr =
+        `${def.getFullYear()}-${pad(def.getMonth() + 1)}-${pad(def.getDate())} ` +
+        `${pad(def.getHours())}:${pad(def.getMinutes())}`;
+
+      const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+      if (input === null) return;
+
+      const m = String(input).trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+      if (!m) { alert("Invalid format. Use YYYY-MM-DD HH:mm"); return; }
+
+      const iso = new Date(
+        Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+        Number(m[4]), Number(m[5]), 0, 0
+      ).toISOString();
+
+      const { error } = await supabase
+        .from("leads")
+        .update({ status: "Follow Up", follow_up_at: iso })
+        .eq("id", lead.id);
+
+      if (error) { alert(error.message); return; }
+      location.reload();
+    } catch (e: any) {
+      alert(e?.message || "Failed to set follow-up");
+    }
+  };
+return (v || "").replace(/[^\d]/g, "");
 }
 
 function whatsappUrl(phone: string, msg: string) {
@@ -223,7 +255,39 @@ export default function PipelinePage() {
     return map;
   }, [leads, columns]);
 
-  return (
+    // Follow-up with date/time picker (simple prompt)
+  const setFollowWithPrompt = async (lead: any) => {
+    try {
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const def = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      const defStr =
+        `${def.getFullYear()}-${pad(def.getMonth() + 1)}-${pad(def.getDate())} ` +
+        `${pad(def.getHours())}:${pad(def.getMinutes())}`;
+
+      const input = prompt("Follow up date/time (YYYY-MM-DD HH:mm)", defStr);
+      if (input === null) return;
+
+      const m = String(input).trim().match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/);
+      if (!m) { alert("Invalid format. Use YYYY-MM-DD HH:mm"); return; }
+
+      const iso = new Date(
+        Number(m[1]), Number(m[2]) - 1, Number(m[3]),
+        Number(m[4]), Number(m[5]), 0, 0
+      ).toISOString();
+
+      const { error } = await supabase
+        .from("leads")
+        .update({ status: "Follow Up", follow_up_at: iso })
+        .eq("id", lead.id);
+
+      if (error) { alert(error.message); return; }
+      location.reload();
+    } catch (e: any) {
+      alert(e?.message || "Failed to set follow-up");
+    }
+  };
+return (
     <div style={container}>
       <h1 style={{ margin: "6px 0 10px" }}>Pipeline</h1>
       <div style={{ opacity: 0.9, marginBottom: 12 }}>{status}</div>
@@ -271,7 +335,7 @@ export default function PipelinePage() {
                   <button style={btn} onClick={() => setStatusOnly(lead, "call_scheduled")}>
                     Call
                   </button>
-                  <button style={btn} onClick={() => setStatusOnly(lead, "follow_up")}>
+                  <button style={btn} onClick={() => setFollowWithPrompt(lead)}>
                     Follow
                   </button>
 
@@ -304,4 +368,5 @@ export default function PipelinePage() {
     </div>
   );
 }
+
 
