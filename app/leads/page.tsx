@@ -581,7 +581,7 @@ export default function LeadsPage() {
 const page: React.CSSProperties = {
   maxWidth: 1100,
   margin: "20px auto",
-  padding: 16,
+  padding: 12,
   color: "white",
   fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
@@ -597,7 +597,7 @@ const panel: React.CSSProperties = {
 
 const grid2: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
   gap: 10
 };
 
@@ -682,3 +682,4 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+

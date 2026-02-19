@@ -233,7 +233,7 @@ export default function PipelinePage() {
 const page: React.CSSProperties = {
   maxWidth: 1200,
   margin: "20px auto",
-  padding: 16,
+  padding: 12,
   color: "white",
   fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
@@ -249,7 +249,7 @@ const panel: React.CSSProperties = {
 
 const board: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(5, 1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
   gap: 12,
   marginTop: 12
 };
@@ -330,3 +330,4 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+
