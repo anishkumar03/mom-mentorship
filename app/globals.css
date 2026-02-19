@@ -245,3 +245,10 @@ button:hover {
     color: #ffffff;
   }
 }
+
+
+/* System font stack (offline-safe) */
+:root {
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+
