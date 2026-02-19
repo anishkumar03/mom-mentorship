@@ -10,126 +10,189 @@ const supabase = createClient(
 
 type Lead = {
   id: string;
+  full_name: string | null;
   name: string | null;
   handle: string | null;
   phone: string | null;
   email: string | null;
   notes: string | null;
-  source: string | null;
+
   program: string | null;
-  confirmed_at: string | null;
-  paid_at: string | null;
+  status: string | null;
+
+  follow_up_at: string | null;
+  archived?: boolean | null;
   created_at?: string | null;
 };
 
+const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
+
+function stageKey(s: any) {
+  const v = (s ?? "New").toString().trim().toLowerCase().replace(/\s+/g, "");
+  if (v.startsWith("follow")) return "Follow Up";
+  if (v === "new") return "New";
+  if (v === "contacted") return "Contacted";
+  if (v === "confirmed") return "Confirmed";
+  if (v === "lost") return "Lost";
+  return "New";
+}
+
+function safeName(l: Lead) {
+  return (l.full_name ?? l.name ?? "").trim() || "(no name)";
+}
+
+function downloadCSV(filename: string, rows: string[][]) {
+  const esc = (v: string) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const csv = rows.map(r => r.map(esc).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function ConfirmedPage() {
-  const [rows, setRows] = useState<Lead[]>([]);
-  const [msg, setMsg] = useState("Loading...");
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [program, setProgram] = useState<string>("__ALL__");
 
-  const program = "April Group Mentorship";
+  const fetchAll = async () => {
+    setLoading(true);
 
-  const load = async () => {
-    setMsg("Loading...");
-    const { data, error } = await supabase
+    let q = supabase
       .from("leads")
       .select("*")
-      .eq("program", program)
-      .not("confirmed_at", "is", null)
-      .order("confirmed_at", { ascending: false });
+      .or("archived.is.null,archived.eq.false")
+      .order("created_at", { ascending: false });
 
-    if (error) setMsg(error.message);
-    else {
-      setRows((data ?? []) as Lead[]);
-      setMsg("Ready");
+    const { data, error } = await q;
+
+    if (error) {
+      console.error(error);
+      setLeads([]);
+    } else {
+      setLeads(Array.isArray(data) ? (data as any) : []);
     }
+
+    setLoading(false);
   };
 
   useEffect(() => {
-    load();
+    fetchAll();
   }, []);
 
-  const exportCsv = () => {
-    const headers = [
-      "Name",
-      "Instagram Handle",
-      "Phone",
-      "Email",
-      "Confirmed At",
-      "Paid At",
-      "Notes"
-    ];
+  const confirmed = useMemo(() => {
+    return leads
+      .filter((l) => stageKey(l.status) === "Confirmed")
+      .filter((l) => (program === "__ALL__" ? true : (l.program ?? "") === program));
+  }, [leads, program]);
 
-    const lines = [
-      headers.join(","),
-      ...rows.map(r => {
-        const values = [
-          r.name ?? "",
-          r.handle ?? "",
-          r.phone ?? "",
-          r.email ?? "",
-          r.confirmed_at ?? "",
-          r.paid_at ?? "",
-          (r.notes ?? "").replace(/\r?\n/g, " ")
-        ];
-        return values.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",");
-      })
-    ];
+  const exportConfirmed = () => {
+    const header = ["Name", "Program", "Email", "Phone", "Instagram", "Status", "Notes", "Created At"];
+    const body = confirmed.map((l) => [
+      safeName(l),
+      l.program ?? "",
+      l.email ?? "",
+      l.phone ?? "",
+      l.handle ? `@${l.handle}` : "",
+      stageKey(l.status),
+      l.notes ?? "",
+      l.created_at ? new Date(l.created_at).toLocaleString() : ""
+    ]);
 
-    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "april-confirmed.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCSV(`MOM_Confirmed_${program === "__ALL__" ? "ALL" : program}.csv`, [header, ...body]);
   };
 
   return (
-    <div style={{ maxWidth: 1100, margin: "0 auto", padding: 20, color: "white" }}>
-      <h1 style={{ marginBottom: 6 }}>Confirmed (April Group)</h1>
-      <div style={{ opacity: 0.85, marginBottom: 16 }}>{msg}</div>
+    <div style={page}>
+      <h2 style={{ margin: 0 }}>Confirmed</h2>
+      <div style={{ opacity: 0.85, marginTop: 6 }}>
+        Only unarchived leads with status Confirmed.
+      </div>
 
-      <button
-        onClick={exportCsv}
-        style={{
-          background: "#1f3558",
-          color: "white",
-          border: "1px solid rgba(255,255,255,0.15)",
-          padding: "10px 14px",
-          borderRadius: 10,
-          cursor: "pointer",
-          marginBottom: 14
-        }}
-      >
-        Export CSV (Excel)
-      </button>
+      <div style={{ ...panel, marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ opacity: 0.85 }}>Program</span>
+        <select value={program} onChange={(e) => setProgram(e.target.value)} style={inputSmall}>
+          <option value="__ALL__">All</option>
+          {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
 
-      <div style={{ border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14, overflow: "hidden" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "rgba(255,255,255,0.06)" }}>
-            <tr>
-              <th style={{ textAlign: "left", padding: 10 }}>Name</th>
-              <th style={{ textAlign: "left", padding: 10 }}>Handle</th>
-              <th style={{ textAlign: "left", padding: 10 }}>Phone</th>
-              <th style={{ textAlign: "left", padding: 10 }}>Email</th>
-              <th style={{ textAlign: "left", padding: 10 }}>Confirmed</th>
-              <th style={{ textAlign: "left", padding: 10 }}>Paid</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.id} style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                <td style={{ padding: 10 }}>{r.name ?? ""}</td>
-                <td style={{ padding: 10 }}>{r.handle ?? ""}</td>
-                <td style={{ padding: 10 }}>{r.phone ?? ""}</td>
-                <td style={{ padding: 10 }}>{r.email ?? ""}</td>
-                <td style={{ padding: 10 }}>{r.confirmed_at ? new Date(r.confirmed_at).toLocaleString() : ""}</td>
-                <td style={{ padding: 10 }}>{r.paid_at ? new Date(r.paid_at).toLocaleString() : ""}</td>
-              </tr>
+        <button onClick={exportConfirmed} style={btnPrimary}>
+          Export Confirmed (CSV)
+        </button>
+
+        <div style={{ marginLeft: "auto", opacity: 0.85 }}>
+          {loading ? "Loading..." : `${confirmed.length} confirmed`}
+        </div>
+      </div>
+
+      <div style={{ ...panel, marginTop: 12 }}>
+        {confirmed.length === 0 ? (
+          <div style={{ opacity: 0.85 }}>No confirmed leads found.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            {confirmed.map((l) => (
+              <div key={l.id} style={card}>
+                <div style={{ fontWeight: 800 }}>{safeName(l)}</div>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>
+                  {l.program ?? "—"} • Confirmed
+                </div>
+                <div style={{ fontSize: 13, opacity: 0.85 }}>
+                  {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
+                </div>
+                {l.notes ? (
+                  <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>{l.notes}</div>
+                ) : null}
+              </div>
             ))}
-          </tbody>
-        </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
+const page: React.CSSProperties = {
+  maxWidth: 1100,
+  margin: "20px auto",
+  padding: 12,
+  color: "white",
+  fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+  background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
+  minHeight: "100vh"
+};
+
+const panel: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.03)"
+};
+
+const card: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 12,
+  padding: 12,
+  background: "rgba(255,255,255,0.03)"
+};
+
+const inputSmall: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(0,0,0,0.25)",
+  color: "white"
+};
+
+const btnPrimary: React.CSSProperties = {
+  padding: "9px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "#1f4fff",
+  color: "white",
+  cursor: "pointer"
+};
