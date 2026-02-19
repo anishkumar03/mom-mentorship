@@ -39,6 +39,23 @@ function stageKey(s: any) {
   return "New";
 }
 
+function leadName(l: Lead) {
+  const full = (l.full_name ?? "").toString().trim();
+  if (full) return full;
+  const name = (l.name ?? "").toString().trim();
+  return name || "(no name)";
+}
+
+function maskSupabaseUrl(raw?: string) {
+  if (!raw) return "(missing)";
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return raw.split("/")[0] || raw;
+  }
+}
+
 function toLocalInputValue(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -51,6 +68,13 @@ export default function PipelinePage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [program, setProgram] = useState<string>("__ALL__");
   const [loading, setLoading] = useState(true);
+  const [leadColumns, setLeadColumns] = useState<string[]>([]);
+  const [debugCount, setDebugCount] = useState<number | null>(null);
+  const [debugError, setDebugError] = useState<string | null>(null);
+
+  const debugVisible =
+    process.env.NODE_ENV === "development" ||
+    (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1");
 
   // Follow-up modal
   const [followOpen, setFollowOpen] = useState(false);
@@ -60,42 +84,28 @@ export default function PipelinePage() {
   const fetchAll = async () => {
     setLoading(true);
 
-    let q = supabase
+    const { data, error } = await supabase
       .from("leads")
       .select("*")
-      .or("archived.is.null,archived.eq.false")
       .order("created_at", { ascending: false });
 
-    if (program !== "__ALL__") {
-      q = q.eq("program", program);
-    }
-
-    const { data, error } = await q;
-
     if (error) {
-      const msg = (error.message || "").toLowerCase();
-      if (msg.includes("archived") || msg.includes("column")) {
-        let fallback = supabase
-          .from("leads")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (program !== "__ALL__") {
-          fallback = fallback.eq("program", program);
-        }
-        const fallbackRes = await fallback;
-        if (fallbackRes.error) {
-          console.error(fallbackRes.error);
-          setLeads([]);
-        } else {
-          setLeads(Array.isArray(fallbackRes.data) ? (fallbackRes.data as any) : []);
-        }
-      } else {
-        console.error(error);
-        setLeads([]);
-      }
-    } else {
-      setLeads(Array.isArray(data) ? (data as any) : []);
+      console.error(error);
+      setLeads([]);
+      setLeadColumns([]);
+      setLoading(false);
+      return;
     }
+
+    const rows = Array.isArray(data) ? (data as any) : [];
+    const cols = rows.length ? Object.keys(rows[0] ?? {}) : [];
+    setLeadColumns(cols);
+
+    const hasArchived = cols.includes("archived");
+    const base = hasArchived ? rows.filter((l: any) => !l.archived) : rows;
+    const hasProgram = cols.includes("program");
+    const filtered = hasProgram && program !== "__ALL__" ? base.filter((l: any) => (l.program ?? "") === program) : base;
+    setLeads(filtered);
 
     setLoading(false);
   };
@@ -103,6 +113,25 @@ export default function PipelinePage() {
   useEffect(() => {
     fetchAll();
   }, [program]);
+
+  useEffect(() => {
+    if (!debugVisible) return;
+    let mounted = true;
+    (async () => {
+      const { count, error } = await supabase.from("leads").select("*", { count: "exact", head: true });
+      if (!mounted) return;
+      if (error) {
+        setDebugError(error.message);
+        setDebugCount(null);
+      } else {
+        setDebugError(null);
+        setDebugCount(typeof count === "number" ? count : null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [debugVisible]);
 
   const byStage = useMemo(() => {
     const map: Record<string, Lead[]> = {};
@@ -165,7 +194,7 @@ export default function PipelinePage() {
   };
 
   const card = (l: Lead) => {
-    const name = l.full_name ?? l.name ?? "(no name)";
+    const name = leadName(l);
     return (
       <div key={l.id} style={cardStyle}>
         <div style={{ fontWeight: 700 }}>{name}</div>
@@ -199,6 +228,16 @@ export default function PipelinePage() {
       <div style={{ opacity: 0.85, marginTop: 6 }}>
         Board view only. All leads still live in the Leads master list.
       </div>
+      {debugVisible && (
+        <div style={{ ...panel, marginTop: 12, background: "rgba(255,255,255,0.06)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Debug</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Supabase URL: {maskSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)}</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Anon key present: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Yes" : "No"}</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>
+            Leads count: {debugError ? `Error: ${debugError}` : debugCount ?? "—"}
+          </div>
+        </div>
+      )}
 
       <div style={{ ...panel, marginTop: 12, display: "flex", gap: 10, alignItems: "center" }}>
         <span style={{ opacity: 0.85 }}>Program</span>

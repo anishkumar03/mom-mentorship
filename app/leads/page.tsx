@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { PROGRAMS } from "../../lib/constants";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,7 +29,6 @@ type Lead = {
   created_at?: string | null;
 };
 
-const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
 const STATUSES = ["New", "Contacted", "Follow Up", "Confirmed", "Lost"] as const;
 
 function stageKey(s: any) {
@@ -39,6 +39,23 @@ function stageKey(s: any) {
   if (v === "confirmed") return "Confirmed";
   if (v === "lost") return "Lost";
   return "New";
+}
+
+function leadName(l: Lead) {
+  const full = (l.full_name ?? "").toString().trim();
+  if (full) return full;
+  const name = (l.name ?? "").toString().trim();
+  return name || "(no name)";
+}
+
+function maskSupabaseUrl(raw?: string) {
+  if (!raw) return "(missing)";
+  try {
+    const u = new URL(raw);
+    return `${u.protocol}//${u.host}`;
+  } catch {
+    return raw.split("/")[0] || raw;
+  }
 }
 
 function toLocalInputValue(iso: string | null) {
@@ -153,6 +170,9 @@ END:VCALENDAR`;
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
+  const [leadColumns, setLeadColumns] = useState<string[]>([]);
+  const [debugCount, setDebugCount] = useState<number | null>(null);
+  const [debugError, setDebugError] = useState<string | null>(null);
 
   const [programFilter, setProgramFilter] = useState<string>("__ALL__");
   const [statusFilter, setStatusFilter] = useState<string>("__ALL__");
@@ -173,37 +193,33 @@ export default function LeadsPage() {
   const [followLead, setFollowLead] = useState<Lead | null>(null);
   const [followDate, setFollowDate] = useState("");
 
+  const debugVisible =
+    process.env.NODE_ENV === "development" ||
+    (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1");
+
   const fetchAll = async () => {
     setLoading(true);
 
-    let q = supabase
+    const { data, error } = await supabase
       .from("leads")
       .select("*")
-      .or("archived.is.null,archived.eq.false")
       .order("created_at", { ascending: false });
 
-    const { data, error } = await q;
-
     if (error) {
-      const msg = (error.message || "").toLowerCase();
-      if (msg.includes("archived") || msg.includes("column")) {
-        const fallback = await supabase
-          .from("leads")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (fallback.error) {
-          console.error(fallback.error);
-          setLeads([]);
-        } else {
-          setLeads(Array.isArray(fallback.data) ? (fallback.data as any) : []);
-        }
-      } else {
-        console.error(error);
-        setLeads([]);
-      }
-    } else {
-      setLeads(Array.isArray(data) ? (data as any) : []);
+      console.error(error);
+      setLeads([]);
+      setLeadColumns([]);
+      setLoading(false);
+      return;
     }
+
+    const rows = Array.isArray(data) ? (data as any) : [];
+    const cols = rows.length ? Object.keys(rows[0] ?? {}) : [];
+    setLeadColumns(cols);
+
+    const hasArchived = cols.includes("archived");
+    const filtered = hasArchived ? rows.filter((l: any) => !l.archived) : rows;
+    setLeads(filtered);
 
     setLoading(false);
   };
@@ -212,28 +228,54 @@ export default function LeadsPage() {
     fetchAll();
   }, []);
 
+  useEffect(() => {
+    if (!debugVisible) return;
+    let mounted = true;
+    (async () => {
+      const { count, error } = await supabase.from("leads").select("*", { count: "exact", head: true });
+      if (!mounted) return;
+      if (error) {
+        setDebugError(error.message);
+        setDebugCount(null);
+      } else {
+        setDebugError(null);
+        setDebugCount(typeof count === "number" ? count : null);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [debugVisible]);
+
   const filtered = useMemo(() => {
+    const hasProgram = leadColumns.includes("program");
+    const hasStatus = leadColumns.includes("status");
     return leads.filter((l) => {
-      if (programFilter !== "__ALL__" && (l.program ?? "") !== programFilter) return false;
-      if (statusFilter !== "__ALL__" && stageKey(l.status) !== statusFilter) return false;
+      if (hasProgram && programFilter !== "__ALL__" && (l.program ?? "") !== programFilter) return false;
+      if (hasStatus && statusFilter !== "__ALL__" && stageKey(l.status) !== statusFilter) return false;
       return true;
     });
-  }, [leads, programFilter, statusFilter]);
+  }, [leads, programFilter, statusFilter, leadColumns]);
 
   const upcomingFollowUps = useMemo(() => {
     const now = new Date();
     const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
+    const hasArchived = leadColumns.includes("archived");
+    const hasStatus = leadColumns.includes("status");
+    const hasFollowUp = leadColumns.includes("follow_up_at");
+    if (!hasFollowUp) return [];
+
     return leads
-      .filter((l) => !l.archived)
-      .filter((l) => stageKey(l.status) === "Follow Up")
+      .filter((l) => (hasArchived ? !l.archived : true))
+      .filter((l) => (hasStatus ? stageKey(l.status) === "Follow Up" : true))
       .filter((l) => !!l.follow_up_at)
       .filter((l) => {
         const d = new Date(l.follow_up_at as string);
         return !Number.isNaN(d.getTime()) && d >= now && d <= end;
       })
       .sort((a, b) => new Date(a.follow_up_at as string).getTime() - new Date(b.follow_up_at as string).getTime());
-  }, [leads]);
+  }, [leads, leadColumns]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -261,6 +303,7 @@ export default function LeadsPage() {
   };
 
   const saveLead = async () => {
+    const hasArchived = leadColumns.includes("archived");
     const payload: any = {
       full_name: fullName.trim() ? fullName.trim() : null,
       source: source || null,
@@ -269,9 +312,9 @@ export default function LeadsPage() {
       email: email.trim() ? email.trim() : null,
       notes: notes.trim() ? notes.trim() : null,
       program: program || null,
-      status: status,
-      archived: false
+      status: status
     };
+    if (hasArchived) payload.archived = false;
 
     if (!payload.full_name) {
       alert("Name is required");
@@ -339,6 +382,10 @@ export default function LeadsPage() {
   };
 
   const archiveLead = async (l: Lead) => {
+    if (!leadColumns.includes("archived")) {
+      alert("Archive is unavailable because this leads table has no archived column.");
+      return;
+    }
     const ok = confirm(`Archive ${l.full_name ?? l.name ?? "this lead"}?`);
     if (!ok) return;
 
@@ -359,7 +406,7 @@ export default function LeadsPage() {
   const followButtons = (l: Lead) => {
     if (!l.follow_up_at) return null;
     const r = buildReminder(l);
-    const fileSafe = (l.full_name ?? l.name ?? "lead").replace(/[^a-z0-9]+/gi, "_");
+    const fileSafe = leadName(l).replace(/[^a-z0-9]+/gi, "_");
     return (
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
         <button
@@ -376,7 +423,7 @@ export default function LeadsPage() {
   };
 
   const card = (l: Lead) => {
-    const name = l.full_name ?? l.name ?? "(no name)";
+    const name = leadName(l);
     return (
       <div key={l.id} style={{
         border: "1px solid rgba(255,255,255,0.08)",
@@ -428,6 +475,16 @@ export default function LeadsPage() {
       <div style={{ opacity: 0.85, marginTop: 6 }}>
         Add follow-up dates, then tap Add to Calendar to get phone notifications.
       </div>
+      {debugVisible && (
+        <div style={{ ...panel, marginTop: 12, background: "rgba(255,255,255,0.06)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 6 }}>Debug</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Supabase URL: {maskSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)}</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>Anon key present: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Yes" : "No"}</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>
+            Leads count: {debugError ? `Error: ${debugError}` : debugCount ?? "—"}
+          </div>
+        </div>
+      )}
 
       {/* Upcoming Follow Ups */}
       <div style={{ ...panel, marginTop: 16 }}>
@@ -441,7 +498,7 @@ export default function LeadsPage() {
         ) : (
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {upcomingFollowUps.map((l) => {
-              const name = l.full_name ?? l.name ?? "(no name)";
+              const name = leadName(l);
               const r = buildReminder(l);
               const fileSafe = name.replace(/[^a-z0-9]+/gi, "_");
               return (

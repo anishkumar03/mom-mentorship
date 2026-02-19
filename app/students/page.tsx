@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { PROGRAMS } from "../../lib/constants";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,7 +31,6 @@ type Payment = {
   created_at: string | null;
 };
 
-const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
 
 function toLocalInputValue(iso: string | null) {
   if (!iso) return "";
@@ -165,7 +165,7 @@ export default function StudentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [program, setProgram] = useState("");
+  const [program, setProgram] = useState<string>(PROGRAMS[0]);
   const [totalFee, setTotalFee] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [reminderAt, setReminderAt] = useState("");
@@ -263,7 +263,7 @@ export default function StudentsPage() {
     setEditingId(null);
     setFullName("");
     setEmail("");
-    setProgram("");
+    setProgram(PROGRAMS[0]);
     setTotalFee("");
     setDueDate("");
     setReminderAt("");
@@ -274,7 +274,7 @@ export default function StudentsPage() {
     setEditingId(s.id);
     setFullName(s.full_name ?? "");
     setEmail(s.email ?? "");
-    setProgram(s.program ?? "");
+    setProgram(s.program ?? PROGRAMS[0]);
     setTotalFee(s.total_fee ? String(s.total_fee) : "");
     setDueDate(toLocalInputValue(s.due_date));
     setReminderAt(toLocalInputValue(s.reminder_at));
@@ -515,17 +515,15 @@ export default function StudentsPage() {
 
           <div>
             <label style={label}>Program</label>
-            <input
-              list="programs"
+            <select
               value={program}
               onChange={(e) => setProgram(e.target.value)}
               style={input}
-            />
-            <datalist id="programs">
+            >
               {PROGRAMS.map((p) => (
-                <option key={p} value={p} />
+                <option key={p} value={p}>{p}</option>
               ))}
-            </datalist>
+            </select>
           </div>
 
           <div>
