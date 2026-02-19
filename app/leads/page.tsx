@@ -609,7 +609,6 @@ const label: React.CSSProperties = {
 };
 
 const input: React.CSSProperties = {
-  width: "100%",
   padding: "10px 10px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.10)",
@@ -682,5 +681,6 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+
 
 
