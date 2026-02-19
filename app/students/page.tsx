@@ -30,6 +30,8 @@ type Payment = {
   created_at: string | null;
 };
 
+const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
+
 function toLocalInputValue(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -513,7 +515,17 @@ export default function StudentsPage() {
 
           <div>
             <label style={label}>Program</label>
-            <input value={program} onChange={(e) => setProgram(e.target.value)} style={input} />
+            <input
+              list="programs"
+              value={program}
+              onChange={(e) => setProgram(e.target.value)}
+              style={input}
+            />
+            <datalist id="programs">
+              {PROGRAMS.map((p) => (
+                <option key={p} value={p} />
+              ))}
+            </datalist>
           </div>
 
           <div>

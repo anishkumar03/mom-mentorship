@@ -73,8 +73,26 @@ export default function PipelinePage() {
     const { data, error } = await q;
 
     if (error) {
-      console.error(error);
-      setLeads([]);
+      const msg = (error.message || "").toLowerCase();
+      if (msg.includes("archived") || msg.includes("column")) {
+        let fallback = supabase
+          .from("leads")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (program !== "__ALL__") {
+          fallback = fallback.eq("program", program);
+        }
+        const fallbackRes = await fallback;
+        if (fallbackRes.error) {
+          console.error(fallbackRes.error);
+          setLeads([]);
+        } else {
+          setLeads(Array.isArray(fallbackRes.data) ? (fallbackRes.data as any) : []);
+        }
+      } else {
+        console.error(error);
+        setLeads([]);
+      }
     } else {
       setLeads(Array.isArray(data) ? (data as any) : []);
     }

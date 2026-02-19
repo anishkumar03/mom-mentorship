@@ -185,8 +185,22 @@ export default function LeadsPage() {
     const { data, error } = await q;
 
     if (error) {
-      console.error(error);
-      setLeads([]);
+      const msg = (error.message || "").toLowerCase();
+      if (msg.includes("archived") || msg.includes("column")) {
+        const fallback = await supabase
+          .from("leads")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (fallback.error) {
+          console.error(fallback.error);
+          setLeads([]);
+        } else {
+          setLeads(Array.isArray(fallback.data) ? (fallback.data as any) : []);
+        }
+      } else {
+        console.error(error);
+        setLeads([]);
+      }
     } else {
       setLeads(Array.isArray(data) ? (data as any) : []);
     }
