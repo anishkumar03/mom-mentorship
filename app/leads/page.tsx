@@ -1,35 +1,7 @@
 ﻿"use client";
 
-
-
-  async function fetchReminders(selectedProgram: string) {
-    try {
-      const now = new Date();
-      const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-      let q = supabase
-        .from("leads")
-        .select("*")
-.or("archived.is.null,archived.eq.false")
-        .eq("reminder_done", false)
-        .not("reminder_at", "is", null)
-        .gte("reminder_at", now.toISOString())
-        .lte("reminder_at", end.toISOString())
-        .order("reminder_at", { ascending: true });
-
-      if (selectedProgram && selectedProgram !== "__ALL__") {
-        q = q.eq("program", selectedProgram);
-      }
-
-      const { data } = await q;
-      return Array.isArray(data) ? data : [];
-    } catch {
-      return [];
-    }
-  }
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { archiveLead, deleteLead } from "..\/lib\/leadsActions";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,6 +10,7 @@ const supabase = createClient(
 
 type Lead = {
   id: string;
+  full_name: string | null;
   name: string | null;
   source: string | null;
   handle: string | null;
@@ -51,402 +24,457 @@ type Lead = {
   call_scheduled_at: string | null;
   follow_up_at: string | null;
 
+  archived?: boolean | null;
   created_at?: string | null;
 };
 
 const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
+const STATUSES = ["New", "Contacted", "Follow Up", "Confirmed", "Lost"] as const;
 
-function toInputDateTimeValue(iso: string | null) {
+function stageKey(s: any) {
+  const v = (s ?? "New").toString().trim().toLowerCase().replace(/\s+/g, "");
+  if (v.startsWith("follow")) return "Follow Up";
+  if (v === "new") return "New";
+  if (v === "contacted") return "Contacted";
+  if (v === "confirmed") return "Confirmed";
+  if (v === "lost") return "Lost";
+  return "New";
+}
+
+function toLocalInputValue(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours()
-  )}:${pad(d.getMinutes())}`;
-}
-
-function toIsoFromInput(value: string) {
-  if (!value) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
-
-function prettyDate(iso: string | null) {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "-";
-  return d.toLocaleString();
-}
-
-function waLink(phone: string | null, msg?: string) {
-  if (!phone) return null;
-  const cleaned = phone.replace(/[^\d+]/g, "");
-  const text = msg ? `?text=${encodeURIComponent(msg)}` : "";
-  return `https://wa.me/${cleaned}${text}`;
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 export default function LeadsPage() {
-  const [statusText, setStatusText] = useState("Loading...");
   const [leads, setLeads] = useState<Lead[]>([]);
-  const [reminders, setReminders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const data = await fetchReminders(program);
-        setReminders(Array.isArray(data) ? data : []);
-      } catch {
-        setReminders([]);
-      }
-    })();
-  }, []);
+  const [programFilter, setProgramFilter] = useState<string>("__ALL__");
+  const [statusFilter, setStatusFilter] = useState<string>("__ALL__");
 
-  const [program, setProgram] = useState<string>(PROGRAMS[0]);
-  const [source, setSource] = useState<string>("instagram");
-
-  const [name, setName] = useState("");
+  // Form state (Add / Edit)
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [fullName, setFullName] = useState("");
+  const [source, setSource] = useState("Instagram");
   const [handle, setHandle] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
-  const [callScheduledAt, setCallScheduledAt] = useState("");
-  const [followUpAt, setFollowUpAt] = useState("");
+  const [program, setProgram] = useState<string>("April Group Mentorship");
+  const [status, setStatus] = useState<string>("New");
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  // Follow-up modal
+  const [followOpen, setFollowOpen] = useState(false);
+  const [followLead, setFollowLead] = useState<Lead | null>(null);
+  const [followDate, setFollowDate] = useState("");
 
-  const activeLeads = useMemo(() => {
-    return leads.filter((l) => (l.status ?? "new") !== "won" && (l.status ?? "new") !== "lost");
-  }, [leads]);
+  const fetchAll = async () => {
+    setLoading(true);
 
-  const overdueCount = useMemo(() => {
-    const now = Date.now();
-    return activeLeads.filter((l) => l.follow_up_at && new Date(l.follow_up_at).getTime() < now).length;
-  }, [activeLeads]);
-
-  const todayCount = useMemo(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const end = start + 24 * 60 * 60 * 1000;
-    return leads.filter((l) => {
-      const t = l.created_at ? new Date(l.created_at).getTime() : 0;
-      return t >= start && t < end;
-    }).length;
-  }, [leads]);
-
-  const load = async () => {
-    setStatusText("Loading...");
-    const { data: auth } = await supabase.auth.getUser();
-    const userEmail = auth.user?.email ?? "";
-    if (!userEmail) {
-      window.location.href = "/login";
-      return;
-    }
-
-    const { data, error } = await supabase
+    let q = supabase
       .from("leads")
       .select("*")
+      .or("archived.is.null,archived.eq.false")
       .order("created_at", { ascending: false });
 
+    const { data, error } = await q;
+
     if (error) {
-      setStatusText(error.message);
-      return;
+      console.error(error);
+      setLeads([]);
+    } else {
+      setLeads(Array.isArray(data) ? (data as any) : []);
     }
 
-    setLeads((data as Lead[]) ?? []);
-    setStatusText("Ready");
+    setLoading(false);
   };
 
   useEffect(() => {
-    load();
+    fetchAll();
   }, []);
+
+  const filtered = useMemo(() => {
+    return leads.filter((l) => {
+      if (programFilter !== "__ALL__" && (l.program ?? "") !== programFilter) return false;
+      if (statusFilter !== "__ALL__" && stageKey(l.status) !== statusFilter) return false;
+      return true;
+    });
+  }, [leads, programFilter, statusFilter]);
 
   const resetForm = () => {
     setEditingId(null);
-    setProgram(PROGRAMS[0]);
-    setSource("instagram");
-    setName("");
+    setFullName("");
+    setSource("Instagram");
     setHandle("");
     setPhone("");
     setEmail("");
     setNotes("");
-    setCallScheduledAt("");
-    setFollowUpAt("");
+    setProgram("April Group Mentorship");
+    setStatus("New");
   };
 
-  const saveOrUpdate = async () => {
-    setStatusText(editingId ? "Updating..." : "Saving...");
-
-    const payload = {
-      program,
-      source,
-      name: name.trim() || null,
-      handle: handle.trim() || null,
-      phone: phone.trim() || null,
-      email: email.trim() || null,
-      notes: notes.trim() || null,
-      call_scheduled_at: toIsoFromInput(callScheduledAt),
-      follow_up_at: toIsoFromInput(followUpAt),
-    };
-
-    if (!editingId) {
-      const { error } = await supabase.from("leads").insert({
-        ...payload,
-        status: "new",
-      });
-
-      if (error) {
-        setStatusText(error.message);
-        return;
-      }
-    } else {
-      const { error } = await supabase.from("leads").update(payload).eq("id", editingId);
-      if (error) {
-        setStatusText(error.message);
-        return;
-      }
-    }
-
-    await load();
-    resetForm();
-  };
-
-  const setLeadStatus = async (id: string, newStatus: string) => {
-    setStatusText("Updating...");
-    const { error } = await supabase.from("leads").update({ status: newStatus }).eq("id", id);
-    if (error) {
-      setStatusText(error.message);
-      return;
-    }
-    await load();
-  };
-
-  const setFollowPlusWeek = async (id: string) => {
-    const lead = leads.find((l) => l.id === id);
-    const base = lead?.follow_up_at ? new Date(lead.follow_up_at) : new Date();
-    base.setDate(base.getDate() + 7);
-    setStatusText("Updating...");
-    const { error } = await supabase
-      .from("leads")
-      .update({ follow_up_at: base.toISOString(), status: "follow_up" })
-      .eq("id", id);
-
-    if (error) {
-      setStatusText(error.message);
-      return;
-    }
-    await load();
-  };
-
-  const editLead = (l: Lead) => {
+  const loadEdit = (l: Lead) => {
     setEditingId(l.id);
-    setProgram(l.program ?? PROGRAMS[0]);
-    setSource(l.source ?? "instagram");
-    setName(l.name ?? "");
+    setFullName((l.full_name ?? l.name ?? "") as string);
+    setSource(l.source ?? "Instagram");
     setHandle(l.handle ?? "");
     setPhone(l.phone ?? "");
     setEmail(l.email ?? "");
     setNotes(l.notes ?? "");
-    setCallScheduledAt(toInputDateTimeValue(l.call_scheduled_at));
-    setFollowUpAt(toInputDateTimeValue(l.follow_up_at));
+    setProgram(l.program ?? "April Group Mentorship");
+    setStatus(stageKey(l.status));
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  const filteredActive = useMemo(() => {
-    return activeLeads.filter((l) => (l.program ?? PROGRAMS[0]) === program);
-  }, [activeLeads, program]);
+  const saveLead = async () => {
+    const payload: any = {
+      full_name: fullName.trim() ? fullName.trim() : null,
+      source: source || null,
+      handle: handle.trim() ? handle.trim() : null,
+      phone: phone.trim() ? phone.trim() : null,
+      email: email.trim() ? email.trim() : null,
+      notes: notes.trim() ? notes.trim() : null,
+      program: program || null,
+      status: status,
+      archived: false
+    };
+
+    if (!payload.full_name) {
+      alert("Name is required");
+      return;
+    }
+
+    let res;
+    if (editingId) {
+      res = await supabase.from("leads").update(payload).eq("id", editingId);
+    } else {
+      res = await supabase.from("leads").insert(payload);
+    }
+
+    if (res.error) {
+      alert(res.error.message);
+      return;
+    }
+
+    resetForm();
+    fetchAll();
+  };
+
+  const setStatusOnly = async (l: Lead, newStatus: string) => {
+    const { error } = await supabase
+      .from("leads")
+      .update({ status: newStatus })
+      .eq("id", l.id);
+
+    if (error) alert(error.message);
+    else fetchAll();
+  };
+
+  const openFollow = (l: Lead) => {
+    const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    def.setSeconds(0, 0);
+
+    setFollowLead(l);
+    setFollowDate(l.follow_up_at ? toLocalInputValue(l.follow_up_at) : toLocalInputValue(def.toISOString()));
+    setFollowOpen(true);
+  };
+
+  const saveFollow = async () => {
+    if (!followLead) return;
+    if (!followDate) {
+      alert("Pick a follow-up date/time");
+      return;
+    }
+
+    const iso = new Date(followDate).toISOString();
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ status: "Follow Up", follow_up_at: iso })
+      .eq("id", followLead.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setFollowOpen(false);
+    setFollowLead(null);
+    setFollowDate("");
+    fetchAll();
+  };
+
+  const archiveLead = async (l: Lead) => {
+    const ok = confirm(`Archive ${l.full_name ?? l.name ?? "this lead"}?`);
+    if (!ok) return;
+
+    const { error } = await supabase.from("leads").update({ archived: true }).eq("id", l.id);
+    if (error) alert(error.message);
+    else fetchAll();
+  };
+
+  const deleteLead = async (l: Lead) => {
+    const ok = confirm(`DELETE ${l.full_name ?? l.name ?? "this lead"}? This cannot be undone.`);
+    if (!ok) return;
+
+    const { error } = await supabase.from("leads").delete().eq("id", l.id);
+    if (error) alert(error.message);
+    else fetchAll();
+  };
+
+  const card = (l: Lead) => {
+    const name = l.full_name ?? l.name ?? "(no name)";
+    return (
+      <div key={l.id} style={{
+        border: "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 12,
+        padding: 12,
+        background: "rgba(255,255,255,0.03)"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div>
+            <div style={{ fontWeight: 700 }}>{name}</div>
+            <div style={{ opacity: 0.8, fontSize: 13 }}>
+              {l.program ?? "—"} • {stageKey(l.status)}
+            </div>
+            <div style={{ opacity: 0.8, fontSize: 13 }}>
+              {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
+            </div>
+            {l.follow_up_at ? (
+              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                Follow-up: {new Date(l.follow_up_at).toLocaleString()}
+              </div>
+            ) : null}
+          </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
+            <button onClick={() => loadEdit(l)} style={btnSecondary}>Edit</button>
+            <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
+            <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
+            <button onClick={() => setStatusOnly(l, "Confirmed")} style={btnSecondary}>Confirmed</button>
+            <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
+            <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
+            <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>
+          </div>
+        </div>
+
+        {l.notes ? (
+          <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
+            {l.notes}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
 
   return (
-    <div style={{ maxWidth: 1100, margin: "26px auto", padding: "0 14px" }}>
-      <h1 style={{ fontSize: 34, fontWeight: 800, marginBottom: 6 }}>Leads</h1>
-      <div style={{ opacity: 0.9, marginBottom: 14 }}>{statusText}</div>
-
-      <div style={{ display: "flex", gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
-        <span style={{ padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}>
-          Overdue: {overdueCount}
-        </span>
-        <span style={{ padding: "8px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)" }}>
-          Today: {todayCount}
-        </span>
+    <div style={page}>
+      <h2 style={{ margin: 0 }}>Leads (Master List)</h2>
+      <div style={{ opacity: 0.85, marginTop: 6 }}>
+        This page always shows all unarchived leads, regardless of pipeline status.
       </div>
 
-      <div style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, padding: 16, marginBottom: 18 }}>
-        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 12 }}>Add lead</div>
+      <div style={{ ...panel, marginTop: 16 }}>
+        <h3 style={{ marginTop: 0 }}>{editingId ? "Edit Lead" : "Add Lead"}</h3>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={grid2}>
           <div>
-            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>Program</div>
-            <select value={program} onChange={(e) => setProgram(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10 }}>
-  <option value="__ALL__">All programs</option>
-              {PROGRAMS.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
+            <label style={label}>Full name</label>
+            <input value={fullName} onChange={(e) => setFullName(e.target.value)} style={input} />
+          </div>
+
+          <div>
+            <label style={label}>Program</label>
+            <select value={program} onChange={(e) => setProgram(e.target.value)} style={input}>
+              {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
 
           <div>
-            <div style={{ fontSize: 13, opacity: 0.9, marginBottom: 6 }}>Source</div>
-            <select value={source} onChange={(e) => setSource(e.target.value)} style={{ width: "100%", padding: 10, borderRadius: 10 }}>
-  <option value="__ALL__">All sources</option>
-              <option value="instagram">instagram</option>
-              <option value="whatsapp">whatsapp</option>
-              <option value="referral">referral</option>
-              <option value="other">other</option>
+            <label style={label}>Source</label>
+            <input value={source} onChange={(e) => setSource(e.target.value)} style={input} />
+          </div>
+
+          <div>
+            <label style={label}>Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value)} style={input}>
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
 
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" style={{ padding: 10, borderRadius: 10 }} />
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone (WhatsApp)" style={{ padding: 10, borderRadius: 10 }} />
-
-          <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="Instagram handle" style={{ padding: 10, borderRadius: 10 }} />
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={{ padding: 10, borderRadius: 10 }} />
-
-          <input
-            value={callScheduledAt}
-            onChange={(e) => setCallScheduledAt(e.target.value)}
-            type="datetime-local"
-            placeholder="Call scheduled at"
-            style={{ padding: 10, borderRadius: 10 }}
-          />
-
-          <input
-            value={followUpAt}
-            onChange={(e) => setFollowUpAt(e.target.value)}
-            type="datetime-local"
-            placeholder="Follow up at"
-            style={{ padding: 10, borderRadius: 10 }}
-          />
-
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" style={{ padding: 10, borderRadius: 10, gridColumn: "1 / -1", minHeight: 90 }} />
-        </div>
-
-        <div style={{ display: "flex", gap: 10, marginTop: 12, flexWrap: "wrap" }}>
-          <button onClick={saveOrUpdate} style={{ padding: "10px 14px", borderRadius: 10, fontWeight: 700 }}>
-            {editingId ? "Update lead" : "Save lead"}
-          </button>
-          {editingId && (
-            <button onClick={resetForm} style={{ padding: "10px 14px", borderRadius: 10 }}>
-              Cancel
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 10 }}>Active leads for: {program}</div>
-
-      <div style={{ display: "grid", gap: 12 }}>
-        {filteredActive.length === 0 ? (
-          <div style={{ opacity: 0.85 }}>No active leads for this program yet.</div>
-        ) : (
-          filteredActive.map((l) => {
-            const msg = `Hi, this is Anish from Mind Over Markets. Just following up about the mentorship. What day and time works best for you?`;
-            const link = waLink(l.phone, msg);
-
-            return (
-              <div key={l.id} style={{ border: "1px solid rgba(255,255,255,0.10)", borderRadius: 14, padding: 14 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 16, fontWeight: 800 }}>{l.name || "Lead"}</div>
-                  <div style={{ opacity: 0.9, fontSize: 13 }}>Status: {l.status ?? "new"}</div>
-                </div>
-
-                <div style={{ opacity: 0.92, marginTop: 6, fontSize: 13 }}>
-                  {(l.source ?? "-")}{" "}
-                  {l.handle ? `| ${l.handle}` : ""}{" "}
-                  {l.phone ? `| ${l.phone}` : ""}{" "}
-                  {l.email ? `| ${l.email}` : ""}
-                </div>
-
-                <div style={{ opacity: 0.9, marginTop: 6, fontSize: 13 }}>
-                  Call: {prettyDate(l.call_scheduled_at)}{" "}
-                  <span style={{ marginLeft: 10 }}>Follow up: {prettyDate(l.follow_up_at)}</span>
-                </div>
-
-                {l.notes ? <div style={{ marginTop: 8, opacity: 0.95 }}>{l.notes}</div> : null}
-
-                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-                  <button onClick={() => setLeadStatus(l.id, "contacted")} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    Contacted
-                  </button>
-                  <button onClick={() => setLeadStatus(l.id, "call_scheduled")} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    Call scheduled
-                  </button>
-                  <button onClick={() => setLeadStatus(l.id, "follow_up")} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    Follow up
-                  </button>
-                  <button onClick={() => setFollowPlusWeek(l.id)} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    +1 week
-                  </button>
-                  <button onClick={() => setLeadStatus(l.id, "won")} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    Convert
-                  </button>
-                  <button onClick={() => setLeadStatus(l.id, "lost")} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    Lost
-                  </button>
-
-                  {link ? (
-                    <a href={link} target="_blank" rel="noreferrer" style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.2)" }}>
-                      WhatsApp
-                    </a>
-                  ) : null}
-
-                  <button onClick={() => editLead(l)} style={{ padding: "8px 10px", borderRadius: 10 }}>
-                    Edit
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      <div style={{ height: 40 }} />
-<div style={{ marginTop: 28 }}>
-  <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 10 }}>Upcoming reminders</div>
-  {reminders.length === 0 ? (
-    <div style={{ opacity: 0.8 }}>No reminders in the next 14 days.</div>
-  ) : (
-    <div style={{ display: "grid", gap: 10 }}>
-      {reminders.map((r) => (
-        <div key={r.id} style={{ padding: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
-          <div style={{ fontWeight: 700 }}>{r.name || "Lead"}</div>
-          <div style={{ fontSize: 13, opacity: 0.9, marginTop: 6 }}>
-            {r.reminder_at ? new Date(r.reminder_at).toLocaleString() : ""} {r.reminder_type ? "(" + r.reminder_type + ")" : ""}
+          <div>
+            <label style={label}>Instagram handle (without @)</label>
+            <input value={handle} onChange={(e) => setHandle(e.target.value)} style={input} />
           </div>
-          {r.reminder_note ? (
-            <div style={{ fontSize: 13, opacity: 0.85, marginTop: 6 }}>{r.reminder_note}</div>
-          ) : null}
-          <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
-  {r.program ? `Program: ${r.program}` : ""}{r.phone ? ` | Phone: ${r.phone}` : ""}{r.email ? ` | Email: ${r.email}` : ""}
-</div>
-        </div>
-      ))}
-    </div>
-  )}
-</div>
 
+          <div>
+            <label style={label}>Phone</label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+          </div>
+
+          <div>
+            <label style={label}>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
+          </div>
+
+          <div>
+            <label style={label}>Notes</label>
+            <input value={notes} onChange={(e) => setNotes(e.target.value)} style={input} />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+          <button onClick={saveLead} style={btnPrimary}>{editingId ? "Update Lead" : "Add Lead"}</button>
+          <button onClick={resetForm} style={btnSecondary}>Clear</button>
+        </div>
+      </div>
+
+      <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.85 }}>Program</span>
+            <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={inputSmall}>
+              <option value="__ALL__">All</option>
+              {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.85 }}>Status</span>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputSmall}>
+              <option value="__ALL__">All</option>
+              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+
+          <div style={{ marginLeft: "auto", opacity: 0.85 }}>
+            {loading ? "Loading..." : `${filtered.length} leads`}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+          {filtered.map(card)}
+        </div>
+      </div>
+
+      {followOpen && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Set Follow-up</div>
+            <div style={{ opacity: 0.85, marginTop: 6 }}>
+              {(followLead?.full_name ?? followLead?.name) ?? ""}
+            </div>
+
+            <input
+              type="datetime-local"
+              value={followDate}
+              onChange={(e) => setFollowDate(e.target.value)}
+              style={{ ...input, marginTop: 12 }}
+            />
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setFollowOpen(false)} style={btnSecondary}>Cancel</button>
+              <button onClick={saveFollow} style={btnPrimary}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+const page: React.CSSProperties = {
+  maxWidth: 1100,
+  margin: "20px auto",
+  padding: 16,
+  color: "white",
+  fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
+  background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
+  minHeight: "100vh"
+};
 
+const panel: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.03)"
+};
 
+const grid2: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "1fr 1fr",
+  gap: 10
+};
 
+const label: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  opacity: 0.85,
+  marginBottom: 6
+};
 
+const input: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(0,0,0,0.25)",
+  color: "white"
+};
 
+const inputSmall: React.CSSProperties = {
+  padding: "8px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "rgba(0,0,0,0.25)",
+  color: "white"
+};
 
+const btnPrimary: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "#1f4fff",
+  color: "white",
+  cursor: "pointer"
+};
 
+const btnSecondary: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  cursor: "pointer"
+};
 
+const btnDanger: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "#ff3b30",
+  color: "white",
+  cursor: "pointer"
+};
 
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.65)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999
+};
 
-
-
-
-
-
-
-
-
-
+const modalCard: React.CSSProperties = {
+  width: 360,
+  borderRadius: 14,
+  padding: 14,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "#0b1b33"
+};
