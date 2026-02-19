@@ -49,6 +49,107 @@ function toLocalInputValue(iso: string | null) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toICSDateUTC(d: Date) {
+  return (
+    d.getUTCFullYear().toString() +
+    pad2(d.getUTCMonth() + 1) +
+    pad2(d.getUTCDate()) +
+    "T" +
+    pad2(d.getUTCHours()) +
+    pad2(d.getUTCMinutes()) +
+    pad2(d.getUTCSeconds()) +
+    "Z"
+  );
+}
+
+function downloadICS(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function googleCalendarTemplateUrl(params: {
+  title: string;
+  details?: string;
+  startISO: string;
+  endISO: string;
+}) {
+  const start = new Date(params.startISO);
+  const end = new Date(params.endISO);
+
+  const fmt = (d: Date) =>
+    d.getUTCFullYear().toString() +
+    pad2(d.getUTCMonth() + 1) +
+    pad2(d.getUTCDate()) +
+    "T" +
+    pad2(d.getUTCHours()) +
+    pad2(d.getUTCMinutes()) +
+    pad2(d.getUTCSeconds()) +
+    "Z";
+
+  const dates = `${fmt(start)}/${fmt(end)}`;
+  const sp = new URLSearchParams();
+  sp.set("action", "TEMPLATE");
+  sp.set("text", params.title);
+  sp.set("dates", dates);
+  if (params.details) sp.set("details", params.details);
+  return `https://calendar.google.com/calendar/render?${sp.toString()}`;
+}
+
+function buildReminder(lead: Lead) {
+  const name = (lead.full_name ?? lead.name ?? "Lead").trim();
+  const whenISO = lead.follow_up_at ?? "";
+  const start = new Date(whenISO);
+  const end = new Date(start.getTime() + 15 * 60 * 1000); // 15 minutes
+
+  const title = `Call: ${name} (Mind Over Markets)`;
+  const detailsParts = [
+    lead.program ? `Program: ${lead.program}` : "",
+    lead.phone ? `Phone: ${lead.phone}` : "",
+    lead.email ? `Email: ${lead.email}` : "",
+    lead.handle ? `IG: @${lead.handle}` : "",
+    lead.notes ? `Notes: ${lead.notes}` : ""
+  ].filter(Boolean);
+
+  const details = detailsParts.join("\n");
+
+  const uid = `${lead.id}-${Date.now()}@mindovermarkets`;
+  const ics =
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Mind Over Markets//Lead Reminder//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${toICSDateUTC(new Date())}
+DTSTART:${toICSDateUTC(start)}
+DTEND:${toICSDateUTC(end)}
+SUMMARY:${title.replace(/\n/g, " ")}
+DESCRIPTION:${details.replace(/\n/g, "\\n")}
+END:VEVENT
+END:VCALENDAR`;
+
+  const googleUrl = googleCalendarTemplateUrl({
+    title,
+    details,
+    startISO: start.toISOString(),
+    endISO: end.toISOString()
+  });
+
+  return { title, details, ics, googleUrl, start, end };
+}
+
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -104,6 +205,21 @@ export default function LeadsPage() {
       return true;
     });
   }, [leads, programFilter, statusFilter]);
+
+  const upcomingFollowUps = useMemo(() => {
+    const now = new Date();
+    const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+    return leads
+      .filter((l) => !l.archived)
+      .filter((l) => stageKey(l.status) === "Follow Up")
+      .filter((l) => !!l.follow_up_at)
+      .filter((l) => {
+        const d = new Date(l.follow_up_at as string);
+        return !Number.isNaN(d.getTime()) && d >= now && d <= end;
+      })
+      .sort((a, b) => new Date(a.follow_up_at as string).getTime() - new Date(b.follow_up_at as string).getTime());
+  }, [leads]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -226,6 +342,25 @@ export default function LeadsPage() {
     else fetchAll();
   };
 
+  const followButtons = (l: Lead) => {
+    if (!l.follow_up_at) return null;
+    const r = buildReminder(l);
+    const fileSafe = (l.full_name ?? l.name ?? "lead").replace(/[^a-z0-9]+/gi, "_");
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+        <button
+          onClick={() => downloadICS(`MOM_FollowUp_${fileSafe}.ics`, r.ics)}
+          style={btnPrimary}
+        >
+          Add to Calendar (ICS)
+        </button>
+        <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
+          Google Calendar
+        </a>
+      </div>
+    );
+  };
+
   const card = (l: Lead) => {
     const name = l.full_name ?? l.name ?? "(no name)";
     return (
@@ -249,6 +384,8 @@ export default function LeadsPage() {
                 Follow-up: {new Date(l.follow_up_at).toLocaleString()}
               </div>
             ) : null}
+
+            {followButtons(l)}
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
@@ -275,7 +412,61 @@ export default function LeadsPage() {
     <div style={page}>
       <h2 style={{ margin: 0 }}>Leads (Master List)</h2>
       <div style={{ opacity: 0.85, marginTop: 6 }}>
-        This page always shows all unarchived leads, regardless of pipeline status.
+        Add follow-up dates, then tap Add to Calendar to get phone notifications.
+      </div>
+
+      {/* Upcoming Follow Ups */}
+      <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+          <h3 style={{ margin: 0 }}>Upcoming Follow-ups (next 14 days)</h3>
+          <div style={{ opacity: 0.85 }}>{upcomingFollowUps.length} reminders</div>
+        </div>
+
+        {upcomingFollowUps.length === 0 ? (
+          <div style={{ marginTop: 10, opacity: 0.85 }}>No follow-ups scheduled in the next 14 days.</div>
+        ) : (
+          <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+            {upcomingFollowUps.map((l) => {
+              const name = l.full_name ?? l.name ?? "(no name)";
+              const r = buildReminder(l);
+              const fileSafe = name.replace(/[^a-z0-9]+/gi, "_");
+              return (
+                <div key={l.id} style={{
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 12,
+                  padding: 12,
+                  background: "rgba(255,255,255,0.03)"
+                }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 800 }}>{name}</div>
+                      <div style={{ opacity: 0.85, fontSize: 13 }}>
+                        {l.program ?? "—"} • {new Date(l.follow_up_at as string).toLocaleString()}
+                      </div>
+                      <div style={{ opacity: 0.85, fontSize: 13 }}>
+                        {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <button
+                        onClick={() => downloadICS(`MOM_FollowUp_${fileSafe}.ics`, r.ics)}
+                        style={btnPrimary}
+                      >
+                        Add to Calendar (ICS)
+                      </button>
+                      <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
+                        Google Calendar
+                      </a>
+                      <button onClick={() => loadEdit(l)} style={btnSecondary}>Edit</button>
+                      <button onClick={() => openFollow(l)} style={btnSecondary}>Change date</button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div style={{ ...panel, marginTop: 16 }}>
@@ -440,7 +631,8 @@ const btnPrimary: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.12)",
   background: "#1f4fff",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  textDecoration: "none"
 };
 
 const btnSecondary: React.CSSProperties = {
@@ -459,6 +651,18 @@ const btnDanger: React.CSSProperties = {
   background: "#ff3b30",
   color: "white",
   cursor: "pointer"
+};
+
+const linkBtn: React.CSSProperties = {
+  padding: "10px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
 };
 
 const modalOverlay: React.CSSProperties = {
