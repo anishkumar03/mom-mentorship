@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -17,6 +17,7 @@ type Student = {
   total_fee: number;
   due_date: string | null;
   reminder_at: string | null;
+  paid_in_full: boolean | null;
   notes: string | null;
   created_at: string | null;
 };
@@ -169,6 +170,7 @@ export default function StudentsPage() {
   const [totalFee, setTotalFee] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [reminderAt, setReminderAt] = useState("");
+  const [paidInFull, setPaidInFull] = useState(false);
   const [notes, setNotes] = useState("");
 
   const [paymentOpen, setPaymentOpen] = useState(false);
@@ -196,7 +198,8 @@ export default function StudentsPage() {
     } else {
       const rows = (studentsRes.data ?? []).map((s: any) => ({
         ...s,
-        total_fee: toNumber(s.total_fee)
+        total_fee: toNumber(s.total_fee),
+        paid_in_full: Boolean(s.paid_in_full)
       })) as Student[];
       setStudents(rows);
     }
@@ -245,6 +248,7 @@ export default function StudentsPage() {
       .filter((s) => {
         const totalPaid = totalsByStudent.get(s.id) ?? 0;
         const balance = s.total_fee - totalPaid;
+        if (s.paid_in_full) return false;
         if (balance <= 0) return false;
         const due = s.due_date ? new Date(s.due_date) : null;
         const rem = s.reminder_at ? new Date(s.reminder_at) : null;
@@ -267,6 +271,7 @@ export default function StudentsPage() {
     setTotalFee("");
     setDueDate("");
     setReminderAt("");
+    setPaidInFull(false);
     setNotes("");
   };
 
@@ -278,6 +283,7 @@ export default function StudentsPage() {
     setTotalFee(s.total_fee ? String(s.total_fee) : "");
     setDueDate(toLocalInputValue(s.due_date));
     setReminderAt(toLocalInputValue(s.reminder_at));
+    setPaidInFull(Boolean(s.paid_in_full));
     setNotes(s.notes ?? "");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -290,6 +296,7 @@ export default function StudentsPage() {
       total_fee: Number(totalFee),
       due_date: dueDate ? new Date(dueDate).toISOString() : null,
       reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
+      paid_in_full: paidInFull,
       notes: notes.trim() ? notes.trim() : null
     };
 
@@ -404,13 +411,14 @@ export default function StudentsPage() {
       "Status",
       "Due Date",
       "Reminder At",
+      "Paid In Full",
       "Notes"
     ];
 
     const rows = students.map((s) => {
       const totalPaid = totalsByStudent.get(s.id) ?? 0;
       const balance = s.total_fee - totalPaid;
-      const status = balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
+      const status = s.paid_in_full || balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
       return [
         s.full_name ?? "",
         s.email ?? "",
@@ -421,6 +429,7 @@ export default function StudentsPage() {
         status,
         s.due_date ? new Date(s.due_date).toLocaleString() : "",
         s.reminder_at ? new Date(s.reminder_at).toLocaleString() : "",
+        s.paid_in_full ? "Yes" : "No",
         s.notes ?? ""
       ];
     });
@@ -468,10 +477,10 @@ export default function StudentsPage() {
                     <div>
                       <div style={{ fontWeight: 800 }}>{s.full_name}</div>
                       <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {s.program ?? "—"} • Balance: {money(balance)}
+                        {s.program ?? "â€”"} â€¢ Balance: {money(balance)}
                       </div>
                       <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {s.due_date ? `Due: ${new Date(s.due_date).toLocaleString()}` : "No due date"}{s.reminder_at ? ` • Reminder: ${new Date(s.reminder_at).toLocaleString()}` : ""}
+                        {s.due_date ? `Due: ${new Date(s.due_date).toLocaleString()}` : "No due date"}{s.reminder_at ? ` â€¢ Reminder: ${new Date(s.reminder_at).toLocaleString()}` : ""}
                       </div>
                     </div>
 
@@ -557,6 +566,16 @@ export default function StudentsPage() {
             />
           </div>
 
+          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 6 }}>
+            <input
+              type="checkbox"
+              checked={paidInFull}
+              onChange={(e) => setPaidInFull(e.target.checked)}
+              style={{ width: 16, height: 16 }}
+            />
+            <label style={{ ...label, marginBottom: 0 }}>Paid in full</label>
+          </div>
+
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={label}>Notes</label>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} style={input} />
@@ -581,17 +600,17 @@ export default function StudentsPage() {
           {students.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
             const balance = s.total_fee - totalPaid;
-            const status = balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
+            const status = s.paid_in_full || balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
             return (
               <div key={s.id} style={cardStyle}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontWeight: 700 }}>{s.full_name}</div>
                     <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      {s.program ?? "—"} • {status}
+                      {s.program ?? "â€”"} â€¢ {status}{s.paid_in_full ? " (Paid in full)" : ""}
                     </div>
                     <div style={{ opacity: 0.85, fontSize: 13 }}>
-                      Total fee: {money(s.total_fee)} • Paid: {money(totalPaid)} • Balance: {money(balance)}
+                      Total fee: {money(s.total_fee)} â€¢ Paid: {money(totalPaid)} â€¢ Balance: {money(balance)}
                     </div>
                     {s.due_date ? (
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
@@ -673,8 +692,8 @@ export default function StudentsPage() {
                     <div>
                       <div style={{ fontWeight: 700 }}>{money(p.amount)}</div>
                       <div style={{ fontSize: 12, opacity: 0.85 }}>
-                        {p.paid_at ? new Date(p.paid_at).toLocaleString() : "—"}
-                        {p.method ? ` • ${p.method}` : ""}
+                        {p.paid_at ? new Date(p.paid_at).toLocaleString() : "â€”"}
+                        {p.method ? ` â€¢ ${p.method}` : ""}
                       </div>
                       {p.note ? (
                         <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{p.note}</div>
@@ -822,3 +841,4 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+
