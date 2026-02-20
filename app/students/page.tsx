@@ -387,7 +387,8 @@ export default function StudentsPage() {
     setPaymentAmount("");
     setPaymentMethod("");
     setPaymentNote("");
-    fetchAll();
+    fetchPayments();
+    fetchStudents();
   };
 
   const deletePayment = async (p: Payment) => {
@@ -395,7 +396,10 @@ export default function StudentsPage() {
     if (!ok) return;
     const { error } = await supabase.from("payments").delete().eq("id", p.id);
     if (error) alert(error.message);
-    else fetchAll();
+    else {
+      fetchPayments();
+      fetchStudents();
+    }
   };
 
   const openReminder = (s: Student) => {
@@ -424,7 +428,7 @@ export default function StudentsPage() {
     setReminderOpen(false);
     setReminderStudent(null);
     setReminderDate("");
-    fetchAll();
+    fetchStudents();
   };
 
   const exportCsv = () => {
