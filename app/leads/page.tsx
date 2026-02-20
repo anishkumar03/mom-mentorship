@@ -21,6 +21,7 @@ type Lead = {
 
   program: string | null;
   status: string | null;
+  student_id?: string | null;
 
   call_scheduled_at: string | null;
   follow_up_at: string | null;
@@ -403,6 +404,42 @@ export default function LeadsPage() {
     else fetchAll();
   };
 
+  const convertToStudent = async (l: Lead) => {
+    if (l.student_id) return;
+    const payload = {
+      name: (l.full_name ?? l.name ?? "").trim(),
+      email: l.email ?? null,
+      phone: l.phone ?? null,
+      program: l.program ?? null,
+      notes: l.notes ?? null,
+      total_fee: 0,
+      paid_in_full: false
+    };
+
+    const inserted = await supabase
+      .from("students")
+      .insert(payload)
+      .select("id")
+      .single();
+
+    if (inserted.error) {
+      alert(inserted.error.message);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ student_id: inserted.data?.id ?? null })
+      .eq("id", l.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    fetchAll();
+  };
+
   const followButtons = (l: Lead) => {
     if (!l.follow_up_at) return null;
     const r = buildReminder(l);
@@ -454,6 +491,15 @@ export default function LeadsPage() {
             <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
             <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
             <button onClick={() => setStatusOnly(l, "Confirmed")} style={btnSecondary}>Confirmed</button>
+            {stageKey(l.status) === "Confirmed" && (
+              <button
+                onClick={() => convertToStudent(l)}
+                style={btnSecondary}
+                disabled={!!l.student_id}
+              >
+                {l.student_id ? "Converted" : "Convert to Student"}
+              </button>
+            )}
             <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
             <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
             <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>

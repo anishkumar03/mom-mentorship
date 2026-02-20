@@ -11,8 +11,10 @@ const supabase = createClient(
 
 type Student = {
   id: string;
-  full_name: string;
+  name: string | null;
+  full_name: string | null;
   email: string | null;
+  phone: string | null;
   program: string | null;
   total_fee: number;
   due_date: string | null;
@@ -99,7 +101,7 @@ function googleCalendarTemplateUrl(params: {
 }
 
 function buildReminder(student: Student) {
-  const name = student.full_name.trim();
+  const name = displayName(student);
   const whenISO = student.reminder_at ?? "";
   const start = new Date(whenISO);
   const end = new Date(start.getTime() + 15 * 60 * 1000);
@@ -150,7 +152,11 @@ function toNumber(value: unknown) {
 }
 
 function money(value: number) {
-  return value.toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return new Intl.NumberFormat("en-CA", { style: "currency", currency: "CAD" }).format(value || 0);
+}
+
+function displayName(s: Student) {
+  return (s.name ?? s.full_name ?? "").trim() || "(No name)";
 }
 
 function csvEscape(value: string) {
@@ -188,7 +194,10 @@ export default function StudentsPage() {
     setLoading(true);
 
     const [studentsRes, paymentsRes] = await Promise.all([
-      supabase.from("students").select("*").order("created_at", { ascending: false }),
+      supabase
+        .from("students")
+        .select("id,name,full_name,email,phone,program,total_fee,paid_in_full,due_date,reminder_at,notes,created_at")
+        .order("created_at", { ascending: false }),
       supabase.from("payments").select("*").order("paid_at", { ascending: false })
     ]);
 
@@ -277,7 +286,7 @@ export default function StudentsPage() {
 
   const loadEdit = (s: Student) => {
     setEditingId(s.id);
-    setFullName(s.full_name ?? "");
+    setFullName(s.name ?? s.full_name ?? "");
     setEmail(s.email ?? "");
     setProgram(s.program ?? PROGRAMS[0]);
     setTotalFee(s.total_fee ? String(s.total_fee) : "");
@@ -290,7 +299,7 @@ export default function StudentsPage() {
 
   const saveStudent = async () => {
     const payload: any = {
-      full_name: fullName.trim(),
+      name: fullName.trim() ? fullName.trim() : null,
       email: email.trim() ? email.trim() : null,
       program: program.trim() ? program.trim() : null,
       total_fee: Number(totalFee),
@@ -300,7 +309,7 @@ export default function StudentsPage() {
       notes: notes.trim() ? notes.trim() : null
     };
 
-    if (!payload.full_name) {
+    if (!payload.name) {
       alert("Full name is required");
       return;
     }
@@ -420,7 +429,7 @@ export default function StudentsPage() {
       const balance = s.total_fee - totalPaid;
       const status = s.paid_in_full || balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
       return [
-        s.full_name ?? "",
+        displayName(s),
         s.email ?? "",
         s.program ?? "",
         s.total_fee.toFixed(2),
@@ -470,12 +479,12 @@ export default function StudentsPage() {
               const totalPaid = totalsByStudent.get(s.id) ?? 0;
               const balance = s.total_fee - totalPaid;
               const r = s.reminder_at ? buildReminder(s) : null;
-              const fileSafe = s.full_name.replace(/[^a-z0-9]+/gi, "_");
+              const fileSafe = displayName(s).replace(/[^a-z0-9]+/gi, "_");
               return (
                 <div key={s.id} style={cardStyle}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontWeight: 800 }}>{s.full_name}</div>
+                      <div style={{ fontWeight: 800 }}>{displayName(s)}</div>
                       <div style={{ opacity: 0.85, fontSize: 13 }}>
                         {s.program ?? "â€”"} â€¢ Balance: {money(balance)}
                       </div>
@@ -605,7 +614,7 @@ export default function StudentsPage() {
               <div key={s.id} style={cardStyle}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <div>
-                    <div style={{ fontWeight: 700 }}>{s.full_name}</div>
+                    <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
                     <div style={{ opacity: 0.8, fontSize: 13 }}>
                       {s.program ?? "â€”"} â€¢ {status}{s.paid_in_full ? " (Paid in full)" : ""}
                     </div>
@@ -647,7 +656,7 @@ export default function StudentsPage() {
           <div style={modalCard}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Payments</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
-              {paymentStudent.full_name}
+              {displayName(paymentStudent)}
             </div>
 
             <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
@@ -716,7 +725,7 @@ export default function StudentsPage() {
           <div style={modalCard}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Set Reminder</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
-              {reminderStudent.full_name}
+              {displayName(reminderStudent)}
             </div>
 
             <input
