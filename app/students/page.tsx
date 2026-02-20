@@ -157,7 +157,8 @@ function money(value: number) {
 }
 
 function displayName(s: Student) {
-  return s.full_name || s.name || s.email || "Unnamed";
+  const raw = s.full_name || s.name || s.email || "Unnamed";
+  return raw.replace(/[^\x20-\x7E]+/g, "").trim() || "Unnamed";
 }
 
 function csvEscape(value: string) {
@@ -175,6 +176,7 @@ export default function StudentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [program, setProgram] = useState<string>(PROGRAMS[0]);
   const [totalFee, setTotalFee] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -199,7 +201,7 @@ export default function StudentsPage() {
 
     const studentsRes = await supabase
       .from("students")
-      .select("id,full_name,name,email,program,total_fee,paid_in_full,reminder_at,due_date,created_at")
+      .select("id,full_name,name,email,phone,program,total_fee,paid_in_full,reminder_at,due_date,notes,created_at")
       .order("created_at", { ascending: false });
 
     if (studentsRes.error) {
@@ -215,7 +217,14 @@ export default function StudentsPage() {
       total_fee: toNumber(s.total_fee),
       paid_in_full: Boolean(s.paid_in_full)
     })) as Student[];
-    setStudents(rows);
+    const filtered = rows.filter((s) => {
+      const hasIdentity = Boolean(s.full_name || s.name || s.email);
+      if (!hasIdentity) return false;
+      if (s.email && s.email.endsWith("@placeholder")) return false;
+      if (s.total_fee === 0 && !s.paid_in_full) return false;
+      return true;
+    });
+    setStudents(filtered);
     setLoading(false);
   };
 
@@ -283,6 +292,7 @@ export default function StudentsPage() {
     setEditingId(null);
     setFullName("");
     setEmail("");
+    setPhone("");
     setProgram(PROGRAMS[0]);
     setTotalFee("");
     setDueDate("");
@@ -295,9 +305,10 @@ export default function StudentsPage() {
     setEditingId(s.id);
     setFullName(s.name ?? s.full_name ?? "");
     setEmail(s.email ?? "");
+    setPhone(s.phone ?? "");
     setProgram(s.program ?? PROGRAMS[0]);
     setTotalFee(s.total_fee ? String(s.total_fee) : "");
-    setDueDate(toLocalInputValue(s.due_date));
+    setDueDate(s.due_date ?? "");
     setReminderAt(toLocalInputValue(s.reminder_at));
     setPaidInFull(Boolean(s.paid_in_full));
     setNotes(s.notes ?? "");
@@ -308,9 +319,10 @@ export default function StudentsPage() {
     const payload: any = {
       name: fullName.trim() ? fullName.trim() : null,
       email: email.trim() ? email.trim() : null,
+      phone: phone.trim() ? phone.trim() : null,
       program: program.trim() ? program.trim() : null,
       total_fee: Number(totalFee),
-      due_date: dueDate ? new Date(dueDate).toISOString() : null,
+      due_date: dueDate ? dueDate : null,
       reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
       paid_in_full: paidInFull,
       notes: notes.trim() ? notes.trim() : null
@@ -560,6 +572,11 @@ export default function StudentsPage() {
           </div>
 
           <div>
+            <label style={label}>Phone</label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+          </div>
+
+          <div>
             <label style={label}>Program</label>
             <select
               value={program}
@@ -586,7 +603,7 @@ export default function StudentsPage() {
           <div>
             <label style={label}>Due date</label>
             <input
-              type="datetime-local"
+              type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               style={input}

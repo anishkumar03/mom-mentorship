@@ -406,13 +406,26 @@ export default function LeadsPage() {
 
   const convertToStudent = async (l: Lead) => {
     if (l.student_id) return;
+    const email = (l.email ?? "").trim();
+    if (email) {
+      const existing = await supabase
+        .from("students")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (existing.data?.id) {
+        alert("A student already exists with this email.");
+        return;
+      }
+    }
+
     const payload = {
-      name: (l.full_name ?? l.name ?? "").trim(),
-      email: l.email ?? null,
+      full_name: (l.full_name ?? l.name ?? "").trim() || null,
+      email: email || null,
       phone: l.phone ?? null,
       program: l.program ?? null,
       notes: l.notes ?? null,
-      total_fee: 0,
+      total_fee: null,
       paid_in_full: false
     };
 
@@ -429,7 +442,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data?.id ?? null })
+      .update({ student_id: inserted.data?.id ?? null, archived: true })
       .eq("id", l.id);
 
     if (error) {
