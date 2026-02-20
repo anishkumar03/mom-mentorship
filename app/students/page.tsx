@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { PROGRAMS } from "../../lib/constants";
 
@@ -156,7 +157,7 @@ function money(value: number) {
 }
 
 function displayName(s: Student) {
-  return (s.name ?? s.full_name ?? "").trim() || "(No name)";
+  return s.full_name || s.name || s.email || "Unnamed";
 }
 
 function csvEscape(value: string) {
@@ -165,9 +166,11 @@ function csvEscape(value: string) {
 }
 
 export default function StudentsPage() {
+  const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
@@ -190,29 +193,34 @@ export default function StudentsPage() {
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
   const [reminderDate, setReminderDate] = useState("");
 
-  const fetchAll = async () => {
+  const fetchStudents = async () => {
     setLoading(true);
+    setFetchError(null);
 
-    const [studentsRes, paymentsRes] = await Promise.all([
-      supabase
-        .from("students")
-        .select("id,name,full_name,email,phone,program,total_fee,paid_in_full,due_date,reminder_at,notes,created_at")
-        .order("created_at", { ascending: false }),
-      supabase.from("payments").select("*").order("paid_at", { ascending: false })
-    ]);
+    const studentsRes = await supabase
+      .from("students")
+      .select("id,full_name,name,email,program,total_fee,paid_in_full,reminder_at,due_date,created_at")
+      .order("created_at", { ascending: false });
 
     if (studentsRes.error) {
       console.error(studentsRes.error);
       setStudents([]);
-    } else {
-      const rows = (studentsRes.data ?? []).map((s: any) => ({
-        ...s,
-        total_fee: toNumber(s.total_fee),
-        paid_in_full: Boolean(s.paid_in_full)
-      })) as Student[];
-      setStudents(rows);
+      setFetchError(studentsRes.error.message);
+      setLoading(false);
+      return;
     }
 
+    const rows = (studentsRes.data ?? []).map((s: any) => ({
+      ...s,
+      total_fee: toNumber(s.total_fee),
+      paid_in_full: Boolean(s.paid_in_full)
+    })) as Student[];
+    setStudents(rows);
+    setLoading(false);
+  };
+
+  const fetchPayments = async () => {
+    const paymentsRes = await supabase.from("payments").select("*").order("paid_at", { ascending: false });
     if (paymentsRes.error) {
       console.error(paymentsRes.error);
       setPayments([]);
@@ -223,12 +231,11 @@ export default function StudentsPage() {
       })) as Payment[];
       setPayments(rows);
     }
-
-    setLoading(false);
   };
 
   useEffect(() => {
-    fetchAll();
+    fetchStudents();
+    fetchPayments();
   }, []);
 
   const paymentsByStudent = useMemo(() => {
@@ -321,9 +328,18 @@ export default function StudentsPage() {
 
     let res;
     if (editingId) {
-      res = await supabase.from("students").update(payload).eq("id", editingId);
+      res = await supabase
+        .from("students")
+        .update(payload)
+        .eq("id", editingId)
+        .select("id,name,full_name,email,phone,program,total_fee,paid_in_full,due_date,reminder_at,notes,created_at")
+        .single();
     } else {
-      res = await supabase.from("students").insert(payload);
+      res = await supabase
+        .from("students")
+        .insert(payload)
+        .select("id,name,full_name,email,phone,program,total_fee,paid_in_full,due_date,reminder_at,notes,created_at")
+        .single();
     }
 
     if (res.error) {
@@ -332,7 +348,8 @@ export default function StudentsPage() {
     }
 
     resetForm();
-    fetchAll();
+    await fetchStudents();
+    router.refresh();
   };
 
   const openPayments = (s: Student) => {
@@ -342,6 +359,7 @@ export default function StudentsPage() {
     setPaymentMethod("");
     setPaymentNote("");
     setPaymentOpen(true);
+    fetchPayments();
   };
 
   const savePayment = async () => {
@@ -464,6 +482,12 @@ export default function StudentsPage() {
       <div style={{ opacity: 0.85, marginTop: 6 }}>
         Track total fees (after discounts) and split payments per student.
       </div>
+      {fetchError && (
+        <div style={{ ...panel, marginTop: 12, background: "rgba(255,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Failed to load students</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>{fetchError}</div>
+        </div>
+      )}
 
       <div style={{ ...panel, marginTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -616,7 +640,7 @@ export default function StudentsPage() {
                   <div>
                     <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
                     <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      {s.program ?? "â€”"} â€¢ {status}{s.paid_in_full ? " (Paid in full)" : ""}
+                      {s.program ?? "â€”"} â€¢ {status}{s.paid_in_full ? " (Paid in full)" : ""}{s.paid_in_full ? " (Paid in full)" : ""}
                     </div>
                     <div style={{ opacity: 0.85, fontSize: 13 }}>
                       Total fee: {money(s.total_fee)} â€¢ Paid: {money(totalPaid)} â€¢ Balance: {money(balance)}
@@ -850,4 +874,5 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+
 
