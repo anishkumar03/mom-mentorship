@@ -172,6 +172,7 @@ export default function StudentsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [studentColumns, setStudentColumns] = useState<string[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
@@ -194,6 +195,7 @@ export default function StudentsPage() {
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
   const [reminderDate, setReminderDate] = useState("");
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -201,7 +203,7 @@ export default function StudentsPage() {
 
     const studentsRes = await supabase
       .from("students")
-      .select("id,full_name,name,email,phone,program,total_fee,paid_in_full,reminder_at,due_date,notes,created_at")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (studentsRes.error) {
@@ -212,7 +214,11 @@ export default function StudentsPage() {
       return;
     }
 
-    const rows = (studentsRes.data ?? []).map((s: any) => ({
+    const rawRows = (studentsRes.data ?? []) as any[];
+    const cols = rawRows.length ? Object.keys(rawRows[0] ?? {}) : [];
+    setStudentColumns(cols);
+
+    const rows = rawRows.map((s: any) => ({
       ...s,
       total_fee: toNumber(s.total_fee),
       paid_in_full: Boolean(s.paid_in_full)
@@ -319,14 +325,21 @@ export default function StudentsPage() {
     const payload: any = {
       name: fullName.trim() ? fullName.trim() : null,
       email: email.trim() ? email.trim() : null,
-      phone: phone.trim() ? phone.trim() : null,
       program: program.trim() ? program.trim() : null,
       total_fee: Number(totalFee),
-      due_date: dueDate ? dueDate : null,
-      reminder_at: reminderAt ? new Date(reminderAt).toISOString() : null,
       paid_in_full: paidInFull,
       notes: notes.trim() ? notes.trim() : null
     };
+
+    if (studentColumns.includes("phone")) {
+      payload.phone = phone.trim() ? phone.trim() : null;
+    }
+    if (studentColumns.includes("due_date")) {
+      payload.due_date = dueDate ? dueDate : null;
+    }
+    if (studentColumns.includes("reminder_at")) {
+      payload.reminder_at = reminderAt ? new Date(reminderAt).toISOString() : null;
+    }
 
     if (!payload.name) {
       alert("Full name is required");
@@ -344,13 +357,13 @@ export default function StudentsPage() {
         .from("students")
         .update(payload)
         .eq("id", editingId)
-        .select("id,name,full_name,email,phone,program,total_fee,paid_in_full,due_date,reminder_at,notes,created_at")
+        .select("*")
         .single();
     } else {
       res = await supabase
         .from("students")
         .insert(payload)
-        .select("id,name,full_name,email,phone,program,total_fee,paid_in_full,due_date,reminder_at,notes,created_at")
+        .select("*")
         .single();
     }
 
@@ -443,6 +456,23 @@ export default function StudentsPage() {
     fetchStudents();
   };
 
+  const deleteStudent = async (student: Student) => {
+    const ok = confirm("Delete this student? This cannot be undone.");
+    if (!ok) return;
+
+    setDeletingStudentId(student.id);
+    const { error } = await supabase.from("students").delete().eq("id", student.id);
+    if (error) {
+      alert(error.message);
+      setDeletingStudentId(null);
+      return;
+    }
+
+    await fetchStudents();
+    router.refresh();
+    setDeletingStudentId(null);
+  };
+
   const exportCsv = () => {
     const header = [
       "Full Name",
@@ -526,10 +556,11 @@ export default function StudentsPage() {
                     <div>
                       <div style={{ fontWeight: 800 }}>{displayName(s)}</div>
                       <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {s.program ?? "â€”"} â€¢ Balance: {money(balance)}
+                        {(s.program ?? "-")} | Balance: {money(balance)}
                       </div>
                       <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {s.due_date ? `Due: ${new Date(s.due_date).toLocaleString()}` : "No due date"}{s.reminder_at ? ` â€¢ Reminder: ${new Date(s.reminder_at).toLocaleString()}` : ""}
+                        {s.due_date ? `Due: ${new Date(s.due_date).toLocaleString()}` : "No due date"}
+                        {s.reminder_at ? ` | Reminder: ${new Date(s.reminder_at).toLocaleString()}` : ""}
                       </div>
                     </div>
 
@@ -571,10 +602,12 @@ export default function StudentsPage() {
             <input value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
           </div>
 
-          <div>
-            <label style={label}>Phone</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
-          </div>
+          {studentColumns.includes("phone") && (
+            <div>
+              <label style={label}>Phone</label>
+              <input value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+            </div>
+          )}
 
           <div>
             <label style={label}>Program</label>
@@ -600,25 +633,29 @@ export default function StudentsPage() {
             />
           </div>
 
-          <div>
-            <label style={label}>Due date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              style={input}
-            />
-          </div>
+          {studentColumns.includes("due_date") && (
+            <div>
+              <label style={label}>Due date</label>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                style={input}
+              />
+            </div>
+          )}
 
-          <div>
-            <label style={label}>Reminder at</label>
-            <input
-              type="datetime-local"
-              value={reminderAt}
-              onChange={(e) => setReminderAt(e.target.value)}
-              style={input}
-            />
-          </div>
+          {studentColumns.includes("reminder_at") && (
+            <div>
+              <label style={label}>Reminder at</label>
+              <input
+                type="datetime-local"
+                value={reminderAt}
+                onChange={(e) => setReminderAt(e.target.value)}
+                style={input}
+              />
+            </div>
+          )}
 
           <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 6 }}>
             <input
@@ -661,10 +698,10 @@ export default function StudentsPage() {
                   <div>
                     <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
                     <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      {s.program ?? "â€”"} â€¢ {status}{s.paid_in_full ? " (Paid in full)" : ""}{s.paid_in_full ? " (Paid in full)" : ""}
+                      {(s.program ?? "-")} | {status}{s.paid_in_full ? " (Paid in full)" : ""}
                     </div>
                     <div style={{ opacity: 0.85, fontSize: 13 }}>
-                      Total fee: {money(s.total_fee)} â€¢ Paid: {money(totalPaid)} â€¢ Balance: {money(balance)}
+                      Total fee: {money(s.total_fee)} | Paid: {money(totalPaid)} | Balance: {money(balance)}
                     </div>
                     {s.due_date ? (
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
@@ -682,6 +719,13 @@ export default function StudentsPage() {
                     <button onClick={() => loadEdit(s)} style={btnSecondary}>Edit</button>
                     <button onClick={() => openPayments(s)} style={btnPrimary}>Add Payment</button>
                     <button onClick={() => openReminder(s)} style={btnSecondary}>Set Reminder</button>
+                    <button
+                      onClick={() => deleteStudent(s)}
+                      style={btnDanger}
+                      disabled={deletingStudentId === s.id}
+                    >
+                      {deletingStudentId === s.id ? "Deleting..." : "Delete"}
+                    </button>
                   </div>
                 </div>
 
@@ -746,8 +790,8 @@ export default function StudentsPage() {
                     <div>
                       <div style={{ fontWeight: 700 }}>{money(p.amount)}</div>
                       <div style={{ fontSize: 12, opacity: 0.85 }}>
-                        {p.paid_at ? new Date(p.paid_at).toLocaleString() : "â€”"}
-                        {p.method ? ` â€¢ ${p.method}` : ""}
+                        {p.paid_at ? new Date(p.paid_at).toLocaleString() : "-"}
+                        {p.method ? ` | ${p.method}` : ""}
                       </div>
                       {p.note ? (
                         <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{p.note}</div>
