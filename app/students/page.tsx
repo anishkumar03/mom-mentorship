@@ -482,6 +482,7 @@ export default function StudentsPage() {
       "Total Paid",
       "Balance Due",
       "Status",
+      "paid_status",
       "Due Date",
       "Reminder At",
       "Paid In Full",
@@ -490,8 +491,9 @@ export default function StudentsPage() {
 
     const rows = students.map((s) => {
       const totalPaid = totalsByStudent.get(s.id) ?? 0;
-      const balance = s.total_fee - totalPaid;
+      const balance = Math.max(0, s.total_fee - totalPaid);
       const status = s.paid_in_full || balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
+      const paidStatus = s.paid_in_full ? "PAID IN FULL" : balance > 0 ? "NOT PAID" : "PAID";
       return [
         displayName(s),
         s.email ?? "",
@@ -500,6 +502,7 @@ export default function StudentsPage() {
         totalPaid.toFixed(2),
         balance.toFixed(2),
         status,
+        paidStatus,
         s.due_date ? new Date(s.due_date).toLocaleString() : "",
         s.reminder_at ? new Date(s.reminder_at).toLocaleString() : "",
         s.paid_in_full ? "Yes" : "No",
@@ -690,19 +693,43 @@ export default function StudentsPage() {
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
           {students.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
-            const balance = s.total_fee - totalPaid;
+            const balance = Math.max(0, s.total_fee - totalPaid);
             const status = s.paid_in_full || balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
+            const isPaidFull = !!s.paid_in_full;
+            const paidDisplay = isPaidFull ? s.total_fee : totalPaid;
+            const balanceDisplay = isPaidFull ? 0 : Math.max(0, s.total_fee - totalPaid);
             return (
               <div key={s.id} style={cardStyle}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                   <div>
                     <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
                     <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      {(s.program ?? "-")} | {status}{s.paid_in_full ? " (Paid in full)" : ""}
+                      {(s.program ?? "-")} | {status}
+                      {isPaidFull ? (
+                        <span
+                          style={{
+                            marginLeft: 8,
+                            padding: "2px 8px",
+                            borderRadius: 999,
+                            background: "rgba(34,197,94,0.2)",
+                            color: "#86efac",
+                            fontWeight: 800,
+                            fontSize: 12
+                          }}
+                        >
+                          PAID IN FULL
+                        </span>
+                      ) : null}
                     </div>
-                    <div style={{ opacity: 0.85, fontSize: 13 }}>
-                      Total fee: {money(s.total_fee)} | Paid: {money(totalPaid)} | Balance: {money(balance)}
-                    </div>
+                    {isPaidFull ? (
+                      <div style={{ opacity: 0.85, fontSize: 13 }}>
+                        Total fee: {money(s.total_fee)}
+                      </div>
+                    ) : (
+                      <div style={{ opacity: 0.85, fontSize: 13 }}>
+                        Total fee: {money(s.total_fee)} | Paid: {money(paidDisplay)} | Balance: {money(balanceDisplay)}
+                      </div>
+                    )}
                     {s.due_date ? (
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
                         Due: {new Date(s.due_date).toLocaleString()}
