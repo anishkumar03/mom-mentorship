@@ -21,17 +21,20 @@ type Lead = {
   status: string | null;
 
   follow_up_at: string | null;
+  last_note?: string | null;
+  last_contacted_at?: string | null;
 
   archived?: boolean | null;
   created_at?: string | null;
 };
 
 const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
-const STAGES = ["New", "Contacted", "Follow Up", "Confirmed", "Lost"] as const;
+const STAGES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
 
 function stageKey(s: any) {
   const v = (s ?? "New").toString().trim().toLowerCase().replace(/\s+/g, "");
   if (v.startsWith("follow")) return "Follow Up";
+  if (v === "nurture" || v === "waiting" || v === "pending") return "Nurture";
   if (v === "new") return "New";
   if (v === "contacted") return "Contacted";
   if (v === "confirmed") return "Confirmed";
@@ -64,6 +67,12 @@ function toLocalInputValue(iso: string | null) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function truncatePreview(text: string, max = 100) {
+  const v = text.trim();
+  if (v.length <= max) return v;
+  return `${v.slice(0, max - 1).trimEnd()}…`;
+}
+
 export default function PipelinePage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [program, setProgram] = useState<string>("__ALL__");
@@ -80,6 +89,10 @@ export default function PipelinePage() {
   const [followOpen, setFollowOpen] = useState(false);
   const [followLead, setFollowLead] = useState<Lead | null>(null);
   const [followDate, setFollowDate] = useState("");
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteLead, setNoteLead] = useState<Lead | null>(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteContactedAt, setNoteContactedAt] = useState("");
 
   const fetchAll = async () => {
     setLoading(true);
@@ -145,6 +158,10 @@ export default function PipelinePage() {
   }, [leads]);
 
   const setStatusOnly = async (l: Lead, newStatus: string) => {
+    if (stageKey(newStatus) === "Follow Up") {
+      openFollow(l);
+      return;
+    }
     const { error } = await supabase.from("leads").update({ status: newStatus }).eq("id", l.id);
     if (error) alert(error.message);
     else fetchAll();
@@ -157,6 +174,15 @@ export default function PipelinePage() {
     setFollowLead(l);
     setFollowDate(l.follow_up_at ? toLocalInputValue(l.follow_up_at) : toLocalInputValue(def.toISOString()));
     setFollowOpen(true);
+  };
+
+  const openNote = (l: Lead) => {
+    setNoteLead(l);
+    setNoteText((l.last_note ?? "") as string);
+    setNoteContactedAt(
+      l.last_contacted_at ? toLocalInputValue(l.last_contacted_at) : toLocalInputValue(new Date().toISOString())
+    );
+    setNoteOpen(true);
   };
 
   const saveFollow = async () => {
@@ -184,6 +210,39 @@ export default function PipelinePage() {
     fetchAll();
   };
 
+  const closeNoteModal = () => {
+    setNoteOpen(false);
+    setNoteLead(null);
+    setNoteText("");
+    setNoteContactedAt("");
+  };
+
+  const saveNote = async () => {
+    if (!noteLead) return;
+
+    const contactedISO = noteContactedAt ? new Date(noteContactedAt).toISOString() : null;
+    if (noteContactedAt && Number.isNaN(new Date(noteContactedAt).getTime())) {
+      alert("Pick a valid last contacted date/time");
+      return;
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        last_note: noteText.trim() ? noteText.trim() : null,
+        last_contacted_at: contactedISO
+      })
+      .eq("id", noteLead.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    closeNoteModal();
+    fetchAll();
+  };
+
   const archiveLead = async (l: Lead) => {
     const ok = confirm(`Archive ${l.full_name ?? l.name ?? "this lead"}?`);
     if (!ok) return;
@@ -196,8 +255,18 @@ export default function PipelinePage() {
   const card = (l: Lead) => {
     const name = leadName(l);
     return (
-      <div key={l.id} style={cardStyle}>
+        <div key={l.id} style={cardStyle}>
         <div style={{ fontWeight: 700 }}>{name}</div>
+        {l.last_note ? (
+          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.92 }}>
+            Last note: {truncatePreview(l.last_note, 100)}
+          </div>
+        ) : null}
+        {l.last_contacted_at ? (
+          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85 }}>
+            Last contacted: {new Date(l.last_contacted_at).toLocaleString()}
+          </div>
+        ) : null}
         <div style={{ fontSize: 12, opacity: 0.85 }}>
           {l.program ?? "—"} • {stageKey(l.status)}
         </div>
@@ -212,8 +281,10 @@ export default function PipelinePage() {
         ) : null}
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+          <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
+          <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
           <button onClick={() => setStatusOnly(l, "Confirmed")} style={btnSecondary}>Confirmed</button>
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
@@ -279,6 +350,39 @@ export default function PipelinePage() {
             <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
               <button onClick={() => setFollowOpen(false)} style={btnSecondary}>Cancel</button>
               <button onClick={saveFollow} style={btnPrimary}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {noteOpen && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Add Note</div>
+            <div style={{ opacity: 0.85, marginTop: 6 }}>
+              {(noteLead?.full_name ?? noteLead?.name) ?? ""}
+            </div>
+
+            <textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              placeholder="What did they say?"
+              style={{ ...input, minHeight: 110, marginTop: 12, resize: "vertical" }}
+            />
+
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>Last contacted (optional)</div>
+              <input
+                type="datetime-local"
+                value={noteContactedAt}
+                onChange={(e) => setNoteContactedAt(e.target.value)}
+                style={input}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+              <button onClick={closeNoteModal} style={btnSecondary}>Cancel</button>
+              <button onClick={saveNote} style={btnPrimary}>Save</button>
             </div>
           </div>
         </div>

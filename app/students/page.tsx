@@ -694,8 +694,8 @@ export default function StudentsPage() {
           {students.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
             const balance = Math.max(0, s.total_fee - totalPaid);
-            const status = s.paid_in_full || balance <= 0 ? "Paid" : totalPaid > 0 ? "Partial" : "Not Paid";
             const isPaidFull = !!s.paid_in_full;
+            const cardPaidStatus = totalPaid > 0 ? "Partially Paid" : "Not Paid";
             const paidDisplay = isPaidFull ? s.total_fee : totalPaid;
             const balanceDisplay = isPaidFull ? 0 : Math.max(0, s.total_fee - totalPaid);
             return (
@@ -704,7 +704,8 @@ export default function StudentsPage() {
                   <div>
                     <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
                     <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      {(s.program ?? "-")} | {status}
+                      {(s.program ?? "-")}
+                      {!isPaidFull ? ` | ${cardPaidStatus}` : null}
                       {isPaidFull ? (
                         <span
                           style={{
