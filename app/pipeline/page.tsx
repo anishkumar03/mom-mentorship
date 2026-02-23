@@ -370,9 +370,10 @@ export default function PipelinePage() {
     }
 
     const safeName =
-      (l.full_name ?? l.name ?? "").trim() ||
-      (email ? email.split("@")[0] : "") ||
-      "Student";
+      (l.full_name ?? "").trim() ||
+      (l.name ?? "").trim() ||
+      email ||
+      "Unnamed";
     const safeFullName = (l.full_name ?? l.name ?? "").trim() || null;
 
     const inserted = await supabase
@@ -394,7 +395,7 @@ export default function PipelinePage() {
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data?.id ?? null })
+      .update({ student_id: inserted.data?.id ?? null, status: "Confirmed" })
       .eq("id", l.id);
 
     if (error) {
@@ -427,6 +428,14 @@ export default function PipelinePage() {
     );
   };
 
+  const followUpState = (l: Lead) => {
+    if (!l.follow_up_at) return { has: false, future: false, overdue: false };
+    const when = new Date(l.follow_up_at);
+    if (Number.isNaN(when.getTime())) return { has: false, future: false, overdue: false };
+    const future = when.getTime() > Date.now();
+    return { has: true, future, overdue: !future };
+  };
+
   const card = (l: Lead) => {
     const name = leadName(l);
     return (
@@ -435,22 +444,6 @@ export default function PipelinePage() {
         {l.last_note ? (
           <div style={{ marginTop: 6, fontSize: 12, opacity: 0.92 }}>
             Last note: {truncatePreview(l.last_note, 100)}
-          </div>
-        ) : null}
-        {l.notes ? (
-          <div
-            title={l.notes}
-            style={{
-              marginTop: 4,
-              fontSize: 12,
-              opacity: 0.9,
-              display: "-webkit-box",
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: "vertical",
-              overflow: "hidden"
-            }}
-          >
-            Notes: {l.notes}
           </div>
         ) : null}
         {l.last_contacted_at ? (
@@ -468,6 +461,27 @@ export default function PipelinePage() {
         {l.follow_up_at ? (
           <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
             Follow-up: {new Date(l.follow_up_at).toLocaleString()}
+          </div>
+        ) : null}
+        {followUpState(l).overdue ? (
+          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85, color: "#fca5a5" }}>
+            Overdue
+          </div>
+        ) : null}
+        {l.notes ? (
+          <div
+            title={l.notes}
+            style={{
+              marginTop: 4,
+              fontSize: 12,
+              opacity: 0.9,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden"
+            }}
+          >
+            Notes: {l.notes}
           </div>
         ) : null}
         {followButtons(l)}

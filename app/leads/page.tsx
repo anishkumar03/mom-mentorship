@@ -491,8 +491,16 @@ export default function LeadsPage() {
       }
     }
 
+    const safeName =
+      (l.full_name ?? "").trim() ||
+      (l.name ?? "").trim() ||
+      email ||
+      "Unnamed";
+    const safeFullName = (l.full_name ?? l.name ?? "").trim() || null;
+
     const payload = {
-      full_name: (l.full_name ?? l.name ?? "").trim() || null,
+      name: safeName,
+      full_name: safeFullName,
       email: email || null,
       phone: l.phone ?? null,
       program: l.program ?? null,
@@ -514,7 +522,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data?.id ?? null, archived: true })
+      .update({ student_id: inserted.data?.id ?? null, status: "Confirmed", archived: true })
       .eq("id", l.id);
 
     if (error) {
