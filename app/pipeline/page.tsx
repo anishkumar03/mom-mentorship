@@ -287,7 +287,7 @@ export default function PipelinePage() {
 
   const openNote = (l: Lead) => {
     setNoteLead(l);
-    setNoteText((l.last_note ?? "") as string);
+    setNoteText(((l.notes ?? l.last_note) ?? "") as string);
     setNoteContactedAt(
       l.last_contacted_at ? toLocalInputValue(l.last_contacted_at) : toLocalInputValue(new Date().toISOString())
     );
@@ -338,6 +338,7 @@ export default function PipelinePage() {
     const { error } = await supabase
       .from("leads")
       .update({
+        notes: noteText.trim() ? noteText.trim() : null,
         last_note: noteText.trim() ? noteText.trim() : null,
         last_contacted_at: contactedISO
       })

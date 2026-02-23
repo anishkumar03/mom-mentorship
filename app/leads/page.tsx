@@ -386,7 +386,7 @@ export default function LeadsPage() {
 
   const openNote = (l: Lead) => {
     setNoteLead(l);
-    setNoteText((l.last_note ?? "") as string);
+    setNoteText(((l.notes ?? l.last_note) ?? "") as string);
     setNoteContactedAt(
       l.last_contacted_at ? toLocalInputValue(l.last_contacted_at) : toLocalInputValue(new Date().toISOString())
     );
@@ -430,6 +430,7 @@ export default function LeadsPage() {
     const { error } = await supabase
       .from("leads")
       .update({
+        notes: noteText.trim() ? noteText.trim() : null,
         last_note: noteText.trim() ? noteText.trim() : null,
         last_contacted_at: contactedISO
       })
@@ -534,7 +535,9 @@ export default function LeadsPage() {
   };
 
   const followButtons = (l: Lead) => {
-    if (!l.follow_up_at) return null;
+    const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
+    const isFuture = Number.isFinite(followMs) && followMs > Date.now();
+    if (!isFuture) return null;
     const r = buildReminder(l);
     const fileSafe = leadName(l).replace(/[^a-z0-9]+/gi, "_");
     return (
