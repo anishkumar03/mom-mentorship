@@ -179,6 +179,7 @@ export default function PipelinePage() {
   const [program, setProgram] = useState<string>("__ALL__");
   const [loading, setLoading] = useState(true);
   const [leadColumns, setLeadColumns] = useState<string[]>([]);
+  const [fetchedUnarchivedCount, setFetchedUnarchivedCount] = useState(0);
   const [debugCount, setDebugCount] = useState<number | null>(null);
   const [debugError, setDebugError] = useState<string | null>(null);
 
@@ -200,7 +201,7 @@ export default function PipelinePage() {
 
     const { data, error } = await supabase
       .from("leads")
-      .select("id, full_name, name, handle, phone, email, notes, program, status, follow_up_at, last_note, last_contacted_at, archived, created_at, student_id")
+      .select("*")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -216,9 +217,16 @@ export default function PipelinePage() {
     setLeadColumns(cols);
 
     const hasArchived = cols.includes("archived");
-    const base = hasArchived ? rows.filter((l: any) => !l.archived) : rows;
+    const base = hasArchived
+      ? rows.filter((l: any) => l.archived === false || l.archived == null)
+      : rows;
+    setFetchedUnarchivedCount(base.length);
+
     const hasProgram = cols.includes("program");
-    const filtered = hasProgram && program !== "__ALL__" ? base.filter((l: any) => (l.program ?? "") === program) : base;
+    const filtered =
+      hasProgram && program !== "__ALL__"
+        ? base.filter((l: any) => (l.program ?? "") === program)
+        : base;
     setLeads(filtered);
 
     setLoading(false);
@@ -407,9 +415,9 @@ export default function PipelinePage() {
   };
 
   const followButtons = (l: Lead) => {
-    if (!l.follow_up_at) return null;
-    const when = new Date(l.follow_up_at);
-    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return null;
+    const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
+    const isFuture = Number.isFinite(followMs) && followMs > Date.now();
+    if (!isFuture) return null;
 
     const r = buildReminder(l);
     const fileSafe = leadName(l).replace(/[^a-z0-9]+/gi, "_");
@@ -428,16 +436,10 @@ export default function PipelinePage() {
     );
   };
 
-  const followUpState = (l: Lead) => {
-    if (!l.follow_up_at) return { has: false, future: false, overdue: false };
-    const when = new Date(l.follow_up_at);
-    if (Number.isNaN(when.getTime())) return { has: false, future: false, overdue: false };
-    const future = when.getTime() > Date.now();
-    return { has: true, future, overdue: !future };
-  };
-
   const card = (l: Lead) => {
     const name = leadName(l);
+    const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
+    const isFuture = Number.isFinite(followMs) && followMs > Date.now();
     return (
         <div key={l.id} style={cardStyle}>
         <div style={{ fontWeight: 700 }}>{name}</div>
@@ -463,7 +465,7 @@ export default function PipelinePage() {
             Follow-up: {new Date(l.follow_up_at).toLocaleString()}
           </div>
         ) : null}
-        {followUpState(l).overdue ? (
+        {l.follow_up_at && !isFuture ? (
           <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85, color: "#fca5a5" }}>
             Overdue
           </div>
@@ -528,6 +530,10 @@ export default function PipelinePage() {
         <div style={{ marginLeft: "auto", opacity: 0.85 }}>
           {loading ? "Loading..." : `${leads.length} leads`}
         </div>
+      </div>
+
+      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
+        Fetched {fetchedUnarchivedCount} leads (unarchived). Showing {leads.length} after filters.
       </div>
 
       <div style={board}>
