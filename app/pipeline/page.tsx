@@ -16,6 +16,7 @@ type Lead = {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  student_id?: string | null;
 
   program: string | null;
   status: string | null;
@@ -73,6 +74,106 @@ function truncatePreview(text: string, max = 100) {
   return `${v.slice(0, max - 1).trimEnd()}…`;
 }
 
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function toICSDateUTC(d: Date) {
+  return (
+    d.getUTCFullYear().toString() +
+    pad2(d.getUTCMonth() + 1) +
+    pad2(d.getUTCDate()) +
+    "T" +
+    pad2(d.getUTCHours()) +
+    pad2(d.getUTCMinutes()) +
+    pad2(d.getUTCSeconds()) +
+    "Z"
+  );
+}
+
+function downloadICS(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+function googleCalendarTemplateUrl(params: {
+  title: string;
+  details?: string;
+  startISO: string;
+  endISO: string;
+}) {
+  const start = new Date(params.startISO);
+  const end = new Date(params.endISO);
+
+  const fmt = (d: Date) =>
+    d.getUTCFullYear().toString() +
+    pad2(d.getUTCMonth() + 1) +
+    pad2(d.getUTCDate()) +
+    "T" +
+    pad2(d.getUTCHours()) +
+    pad2(d.getUTCMinutes()) +
+    pad2(d.getUTCSeconds()) +
+    "Z";
+
+  const dates = `${fmt(start)}/${fmt(end)}`;
+  const sp = new URLSearchParams();
+  sp.set("action", "TEMPLATE");
+  sp.set("text", params.title);
+  sp.set("dates", dates);
+  if (params.details) sp.set("details", params.details);
+  return `https://calendar.google.com/calendar/render?${sp.toString()}`;
+}
+
+function buildReminder(lead: Lead) {
+  const name = (lead.full_name ?? lead.name ?? "Lead").trim();
+  const whenISO = lead.follow_up_at ?? "";
+  const start = new Date(whenISO);
+  const end = new Date(start.getTime() + 15 * 60 * 1000);
+
+  const title = `Call: ${name} (Mind Over Markets)`;
+  const detailsParts = [
+    lead.program ? `Program: ${lead.program}` : "",
+    lead.phone ? `Phone: ${lead.phone}` : "",
+    lead.email ? `Email: ${lead.email}` : "",
+    lead.handle ? `IG: @${lead.handle}` : "",
+    lead.notes ? `Notes: ${lead.notes}` : ""
+  ].filter(Boolean);
+  const details = detailsParts.join("\n");
+
+  const uid = `${lead.id}-${Date.now()}@mindovermarkets`;
+  const ics =
+`BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Mind Over Markets//Lead Reminder//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:${uid}
+DTSTAMP:${toICSDateUTC(new Date())}
+DTSTART:${toICSDateUTC(start)}
+DTEND:${toICSDateUTC(end)}
+SUMMARY:${title.replace(/\n/g, " ")}
+DESCRIPTION:${details.replace(/\n/g, "\\n")}
+END:VEVENT
+END:VCALENDAR`;
+
+  const googleUrl = googleCalendarTemplateUrl({
+    title,
+    details,
+    startISO: start.toISOString(),
+    endISO: end.toISOString()
+  });
+
+  return { ics, googleUrl };
+}
+
 export default function PipelinePage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [program, setProgram] = useState<string>("__ALL__");
@@ -99,7 +200,7 @@ export default function PipelinePage() {
 
     const { data, error } = await supabase
       .from("leads")
-      .select("*")
+      .select("id, full_name, name, handle, phone, email, notes, program, status, follow_up_at, last_note, last_contacted_at, archived, created_at, student_id")
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -252,6 +353,80 @@ export default function PipelinePage() {
     else fetchAll();
   };
 
+  const convertToStudent = async (l: Lead) => {
+    if (l.student_id) return;
+
+    const email = (l.email ?? "").trim();
+    if (email) {
+      const existing = await supabase
+        .from("students")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+      if (existing.data?.id) {
+        alert("A student already exists with this email.");
+        return;
+      }
+    }
+
+    const safeName =
+      (l.full_name ?? l.name ?? "").trim() ||
+      (email ? email.split("@")[0] : "") ||
+      "Student";
+    const safeFullName = (l.full_name ?? l.name ?? "").trim() || null;
+
+    const inserted = await supabase
+      .from("students")
+      .insert({
+        name: safeName,
+        full_name: safeFullName,
+        email: email || null,
+        phone: l.phone ?? null,
+        program: l.program ?? "General Lead"
+      })
+      .select("id")
+      .single();
+
+    if (inserted.error) {
+      alert(inserted.error.message);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ student_id: inserted.data?.id ?? null })
+      .eq("id", l.id);
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    fetchAll();
+  };
+
+  const followButtons = (l: Lead) => {
+    if (!l.follow_up_at) return null;
+    const when = new Date(l.follow_up_at);
+    if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) return null;
+
+    const r = buildReminder(l);
+    const fileSafe = leadName(l).replace(/[^a-z0-9]+/gi, "_");
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+        <button
+          onClick={() => downloadICS(`MOM_FollowUp_${fileSafe}.ics`, r.ics)}
+          style={btnPrimary}
+        >
+          Add to Calendar (ICS)
+        </button>
+        <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
+          Google Calendar
+        </a>
+      </div>
+    );
+  };
+
   const card = (l: Lead) => {
     const name = leadName(l);
     return (
@@ -260,6 +435,22 @@ export default function PipelinePage() {
         {l.last_note ? (
           <div style={{ marginTop: 6, fontSize: 12, opacity: 0.92 }}>
             Last note: {truncatePreview(l.last_note, 100)}
+          </div>
+        ) : null}
+        {l.notes ? (
+          <div
+            title={l.notes}
+            style={{
+              marginTop: 4,
+              fontSize: 12,
+              opacity: 0.9,
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden"
+            }}
+          >
+            Notes: {l.notes}
           </div>
         ) : null}
         {l.last_contacted_at ? (
@@ -279,6 +470,7 @@ export default function PipelinePage() {
             Follow-up: {new Date(l.follow_up_at).toLocaleString()}
           </div>
         ) : null}
+        {followButtons(l)}
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
           <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
@@ -286,6 +478,9 @@ export default function PipelinePage() {
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
           <button onClick={() => setStatusOnly(l, "Confirmed")} style={btnSecondary}>Confirmed</button>
+          <button onClick={() => convertToStudent(l)} style={btnSecondary} disabled={!!l.student_id}>
+            {l.student_id ? "Converted" : "Convert to Student"}
+          </button>
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
         </div>
@@ -472,6 +667,18 @@ const btnDanger: React.CSSProperties = {
   background: "#ff3b30",
   color: "white",
   cursor: "pointer"
+};
+
+const linkBtn: React.CSSProperties = {
+  padding: "9px 10px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  textDecoration: "none",
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center"
 };
 
 const modalOverlay: React.CSSProperties = {
