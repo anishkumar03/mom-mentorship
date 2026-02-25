@@ -43,17 +43,17 @@ const EMOTIONS = [
 const DEFAULT_TRADE_DATE = "2026-02-25";
 const DEFAULT_MONTH = "2026-02";
 
-function toLocalInputValue(iso: string | null) {
+function toTimeInputValue(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-function toISOFromLocal(localValue: string) {
-  if (!localValue) return null;
-  const d = new Date(localValue);
+function toISOFromDateAndTime(dateValue: string, timeValue: string) {
+  if (!dateValue || !timeValue) return null;
+  const d = new Date(`${dateValue}T${timeValue}`);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
 }
@@ -291,8 +291,8 @@ export default function JournalPage() {
         setup: resolvedSetup,
         emotion: resolvedEmotion,
         entry_price: entryPrice.trim() ? Number(entryPrice) : null,
-        entry_time: toISOFromLocal(entryTime),
-        exit_time: toISOFromLocal(exitTime),
+        entry_time: toISOFromDateAndTime(tradeDate, entryTime),
+        exit_time: toISOFromDateAndTime(tradeDate, exitTime),
         pnl: pnl.trim() ? Number(pnl) : null,
         notes: notes.trim() ? notes.trim() : null
       };
@@ -354,8 +354,8 @@ export default function JournalPage() {
       setEmotionCustom("");
     }
     setEntryPrice(t.entry_price !== null && t.entry_price !== undefined ? String(t.entry_price) : "");
-    setEntryTime(toLocalInputValue(t.entry_time));
-    setExitTime(toLocalInputValue(t.exit_time));
+    setEntryTime(toTimeInputValue(t.entry_time));
+    setExitTime(toTimeInputValue(t.exit_time));
     setPnl(t.pnl !== null && t.pnl !== undefined ? String(t.pnl) : "");
     setNotes((t.notes ?? "") as string);
     setScreenshotFile(null);
@@ -504,7 +504,7 @@ export default function JournalPage() {
           <div>
             <label style={label}>Entry time</label>
             <input
-              type="datetime-local"
+              type="time"
               value={entryTime}
               onChange={(e) => setEntryTime(e.target.value)}
               style={input}
@@ -514,7 +514,7 @@ export default function JournalPage() {
           <div>
             <label style={label}>Exit time</label>
             <input
-              type="datetime-local"
+              type="time"
               value={exitTime}
               onChange={(e) => setExitTime(e.target.value)}
               style={input}
@@ -572,6 +572,11 @@ export default function JournalPage() {
       </div>
 
       <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>Month Snapshot</h3>
+          <div style={{ opacity: 0.8 }}>{month}</div>
+        </div>
+
         <div className="journal-filters">
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span style={{ opacity: 0.85 }}>Month</span>
@@ -604,16 +609,69 @@ export default function JournalPage() {
           </div>
 
           <div style={{ marginLeft: "auto", opacity: 0.85 }}>
-            {loading ? "Loading..." : `${filteredTrades.length} trades`}
+            {loading ? "Loading..." : `No. of trades: ${filteredTrades.length}`}
           </div>
         </div>
 
-        {selectedDay && (
-          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-            Day filter: {toDateLabel(selectedDay)}{" "}
-            <button onClick={() => setSelectedDay(null)} style={linkButton}>Clear</button>
-          </div>
-        )}
+        <div className="calendar-grid">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+            <div key={d} style={{ fontSize: 12, opacity: 0.7, textAlign: "center" }}>{d}</div>
+          ))}
+          {monthDays.map((d, idx) => {
+            if (!d.key || !d.day) {
+              return <div key={`empty-${idx}`} style={calendarCellEmpty} />;
+            }
+            const stats = dayStats.get(d.key);
+            const pnlTotal = stats?.total ?? 0;
+            const isSelected = selectedDay === d.key;
+            const isDefaultHighlight = month === "2026-02" && d.day === 25;
+            return (
+              <button
+                key={d.key}
+                onClick={() => setSelectedDay(d.key)}
+                style={{
+                  ...calendarCell,
+                  borderColor: isSelected ? "var(--accent)" : "rgba(255,255,255,0.08)",
+                  background: isSelected ? "rgba(79, 163, 255, 0.12)" : "rgba(255,255,255,0.03)"
+                }}
+              >
+                <div style={{ fontWeight: 700, fontSize: 12, color: isDefaultHighlight ? "#7CFF7C" : "white" }}>
+                  {d.day}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: pnlTotal >= 0 ? "#7CFF7C" : "#FF7A7A",
+                    marginTop: 6
+                  }}
+                >
+                  {stats ? pnlBadge(pnlTotal) : "—"}
+                </div>
+                {stats && (
+                  <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>
+                    {stats.count} trade{stats.count > 1 ? "s" : ""}
+                  </div>
+                )}
+                {stats?.symbols?.length ? (
+                  <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>
+                    {stats.symbols.slice(0, 3).join(", ")}
+                  </div>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>
+            {selectedDay ? `Trades on ${toDateLabel(selectedDay)}` : "Trades for Selected Month"}
+          </h3>
+          {selectedDay && (
+            <button onClick={() => setSelectedDay(null)} style={btnSecondary}>Clear day filter</button>
+          )}
+        </div>
 
         <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
           {filteredTrades.map((t) => (
@@ -676,62 +734,11 @@ export default function JournalPage() {
               </div>
             </div>
           ))}
-        </div>
-      </div>
-
-      <div style={{ ...panel, marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Month Snapshot</h3>
-          <div style={{ opacity: 0.8 }}>{month}</div>
-        </div>
-
-        <div className="calendar-grid">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-            <div key={d} style={{ fontSize: 12, opacity: 0.7, textAlign: "center" }}>{d}</div>
-          ))}
-          {monthDays.map((d, idx) => {
-            if (!d.key || !d.day) {
-              return <div key={`empty-${idx}`} style={calendarCellEmpty} />;
-            }
-            const stats = dayStats.get(d.key);
-            const pnlTotal = stats?.total ?? 0;
-            const isSelected = selectedDay === d.key;
-            const isDefaultHighlight = month === "2026-02" && d.day === 25;
-            return (
-              <button
-                key={d.key}
-                onClick={() => setSelectedDay(d.key)}
-                style={{
-                  ...calendarCell,
-                  borderColor: isSelected ? "var(--accent)" : "rgba(255,255,255,0.08)",
-                  background: isSelected ? "rgba(79, 163, 255, 0.12)" : "rgba(255,255,255,0.03)"
-                }}
-              >
-                <div style={{ fontWeight: 700, fontSize: 12, color: isDefaultHighlight ? "#7CFF7C" : "white" }}>
-                  {d.day}
-                </div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    color: pnlTotal >= 0 ? "#7CFF7C" : "#FF7A7A",
-                    marginTop: 6
-                  }}
-                >
-                  {stats ? pnlBadge(pnlTotal) : "—"}
-                </div>
-                {stats && (
-                  <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>
-                    {stats.count} trade{stats.count > 1 ? "s" : ""}
-                  </div>
-                )}
-                {stats?.symbols?.length ? (
-                  <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>
-                    {stats.symbols.slice(0, 3).join(", ")}
-                  </div>
-                ) : null}
-              </button>
-            );
-          })}
+          {filteredTrades.length === 0 && (
+            <div style={{ opacity: 0.8 }}>
+              {selectedDay ? "No trades logged for this day yet." : "No trades logged for this month yet."}
+            </div>
+          )}
         </div>
       </div>
 
