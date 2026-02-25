@@ -24,8 +24,21 @@ type Trade = {
   archived: boolean | null;
 };
 
-const SETUPS = ["ICT FVG", "Unicorn", "Breaker", "Liquidity Sweep", "Other"] as const;
-const EMOTIONS = ["Calm", "Confident", "Anxious", "FOMO", "Frustrated", "Neutral"] as const;
+const COMMON_SETUPS = ["ICT FVG", "Unicorn", "Breaker", "Liquidity Sweep"] as const;
+const EMOTIONS = [
+  "Calm",
+  "Confident",
+  "Anxious",
+  "Fear",
+  "FOMO",
+  "Revenge",
+  "Overconfident",
+  "Frustrated",
+  "Neutral",
+  "Focused",
+  "Distracted",
+  "Other"
+] as const;
 
 const DEFAULT_TRADE_DATE = "2026-02-25";
 const DEFAULT_MONTH = "2026-02";
@@ -114,9 +127,9 @@ export default function JournalPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tradeDate, setTradeDate] = useState(DEFAULT_TRADE_DATE);
   const [symbol, setSymbol] = useState("");
-  const [setupOption, setSetupOption] = useState<(typeof SETUPS)[number]>("ICT FVG");
-  const [setupCustom, setSetupCustom] = useState("");
-  const [emotion, setEmotion] = useState<(typeof EMOTIONS)[number]>("Neutral");
+  const [setupValue, setSetupValue] = useState("");
+  const [emotionOption, setEmotionOption] = useState<(typeof EMOTIONS)[number]>("Neutral");
+  const [emotionCustom, setEmotionCustom] = useState("");
   const [entryPrice, setEntryPrice] = useState("");
   const [entryTime, setEntryTime] = useState("");
   const [exitTime, setExitTime] = useState("");
@@ -186,7 +199,16 @@ export default function JournalPage() {
 
   const setupFilterOptions = useMemo(() => {
     const values = new Set<string>();
-    SETUPS.forEach((s) => values.add(s));
+    COMMON_SETUPS.forEach((s) => values.add(s));
+    trades.forEach((t) => {
+      if (t.setup) values.add(t.setup);
+    });
+    return Array.from(values);
+  }, [trades]);
+
+  const setupOptions = useMemo(() => {
+    const values = new Set<string>();
+    COMMON_SETUPS.forEach((s) => values.add(s));
     trades.forEach((t) => {
       if (t.setup) values.add(t.setup);
     });
@@ -211,9 +233,9 @@ export default function JournalPage() {
     setEditingId(null);
     setTradeDate(DEFAULT_TRADE_DATE);
     setSymbol("");
-    setSetupOption("ICT FVG");
-    setSetupCustom("");
-    setEmotion("Neutral");
+    setSetupValue("");
+    setEmotionOption("Neutral");
+    setEmotionCustom("");
     setEntryPrice("");
     setEntryTime("");
     setExitTime("");
@@ -260,12 +282,14 @@ export default function JournalPage() {
         return;
       }
 
-      const setupValue = setupOption === "Other" ? setupCustom.trim() : setupOption;
+      const resolvedSetup = setupValue.trim() ? setupValue.trim() : null;
+      const resolvedEmotion =
+        emotionOption === "Other" ? (emotionCustom.trim() ? emotionCustom.trim() : null) : emotionOption;
       const payload: any = {
         trade_date: tradeDate,
         symbol: symbol.trim() ? symbol.trim().toUpperCase() : null,
-        setup: setupValue ? setupValue : null,
-        emotion: emotion || null,
+        setup: resolvedSetup,
+        emotion: resolvedEmotion,
         entry_price: entryPrice.trim() ? Number(entryPrice) : null,
         entry_time: toISOFromLocal(entryTime),
         exit_time: toISOFromLocal(exitTime),
@@ -317,18 +341,18 @@ export default function JournalPage() {
     setEditingId(t.id);
     setTradeDate(t.trade_date || DEFAULT_TRADE_DATE);
     setSymbol((t.symbol ?? "") as string);
-    if (t.setup && SETUPS.includes(t.setup as any)) {
-      setSetupOption(t.setup as (typeof SETUPS)[number]);
-      setSetupCustom("");
-    } else if (t.setup) {
-      setSetupOption("Other");
-      setSetupCustom(t.setup ?? "");
+    setSetupValue((t.setup ?? "") as string);
+    const hasEmotion = t.emotion && EMOTIONS.includes(t.emotion as any);
+    if (hasEmotion) {
+      setEmotionOption(t.emotion as (typeof EMOTIONS)[number]);
+      setEmotionCustom("");
+    } else if (t.emotion) {
+      setEmotionOption("Other");
+      setEmotionCustom(t.emotion ?? "");
     } else {
-      setSetupOption("ICT FVG");
-      setSetupCustom("");
+      setEmotionOption("Neutral");
+      setEmotionCustom("");
     }
-    const resolvedEmotion = EMOTIONS.includes(t.emotion as any) ? (t.emotion as any) : "Neutral";
-    setEmotion(resolvedEmotion);
     setEntryPrice(t.entry_price !== null && t.entry_price !== undefined ? String(t.entry_price) : "");
     setEntryTime(toLocalInputValue(t.entry_time));
     setExitTime(toLocalInputValue(t.exit_time));
@@ -435,23 +459,37 @@ export default function JournalPage() {
 
           <div>
             <label style={label}>Setup</label>
-            <select value={setupOption} onChange={(e) => setSetupOption(e.target.value as any)} style={input}>
-              {SETUPS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
+            <input
+              list="setup-options"
+              value={setupValue}
+              onChange={(e) => setSetupValue(e.target.value)}
+              style={input}
+              placeholder="Start typing..."
+            />
+            <datalist id="setup-options">
+              {setupOptions.map((s) => (
+                <option key={s} value={s} />
+              ))}
+            </datalist>
           </div>
-
-          {setupOption === "Other" && (
-            <div>
-              <label style={label}>Custom setup</label>
-              <input value={setupCustom} onChange={(e) => setSetupCustom(e.target.value)} style={input} />
-            </div>
-          )}
 
           <div>
             <label style={label}>Emotion</label>
-            <select value={emotion} onChange={(e) => setEmotion(e.target.value as any)} style={input}>
+            <select
+              value={emotionOption}
+              onChange={(e) => setEmotionOption(e.target.value as any)}
+              style={input}
+            >
               {EMOTIONS.map((e) => <option key={e} value={e}>{e}</option>)}
             </select>
+          </div>
+
+          {emotionOption === "Other" && (
+            <div>
+              <label style={label}>Custom emotion</label>
+              <input value={emotionCustom} onChange={(e) => setEmotionCustom(e.target.value)} style={input} />
+            </div>
+          )}
           </div>
 
           <div>
