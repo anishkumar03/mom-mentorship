@@ -490,7 +490,6 @@ export default function JournalPage() {
               <input value={emotionCustom} onChange={(e) => setEmotionCustom(e.target.value)} style={input} />
             </div>
           )}
-          </div>
 
           <div>
             <label style={label}>Entry price</label>
