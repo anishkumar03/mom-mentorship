@@ -507,6 +507,19 @@ export default function JournalPage() {
     syncTestPlanHtml();
   };
 
+  const toolbarButtonStyle: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    border: "1px solid rgba(255,255,255,0.10)",
+    background: "rgba(255,255,255,0.05)",
+    color: "#E2E8F0",
+    cursor: "pointer"
+  };
+
   const pnlBadge = (value: number | null) => {
     if (value === null || Number.isNaN(value)) return "—";
     const sign = value > 0 ? "+" : value < 0 ? "" : "";
@@ -545,26 +558,75 @@ export default function JournalPage() {
               [&_svg]:text-slate-200 [&_svg]:stroke-current
               [&_svg]:opacity-100"
           >
-            <button onClick={() => exec("bold")} title="Bold" aria-label="Bold">
-              <Bold size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={() => exec("bold")}
+              title="Bold"
+              aria-label="Bold"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <Bold size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button onClick={() => exec("italic")} title="Italic" aria-label="Italic">
-              <Italic size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={() => exec("italic")}
+              title="Italic"
+              aria-label="Italic"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <Italic size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button onClick={wrapSelectionWithCode} title="Code" aria-label="Code">
-              <Code size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={wrapSelectionWithCode}
+              title="Code"
+              aria-label="Code"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <Code size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button onClick={() => exec("insertUnorderedList")} title="Bullet List" aria-label="Bullet List">
-              <List size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={() => exec("insertUnorderedList")}
+              title="Bullet List"
+              aria-label="Bullet List"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <List size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button onClick={() => exec("insertOrderedList")} title="Numbered List" aria-label="Numbered List">
-              <ListOrdered size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={() => exec("insertOrderedList")}
+              title="Numbered List"
+              aria-label="Numbered List"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <ListOrdered size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button onClick={insertChecklistItem} title="Checklist" aria-label="Checklist">
-              <CheckSquare size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={insertChecklistItem}
+              title="Checklist"
+              aria-label="Checklist"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <CheckSquare size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button onClick={insertDateStamp} title="Date" aria-label="Date">
-              <Calendar size={18} className="text-slate-200 opacity-100" />
+            <button
+              onClick={insertDateStamp}
+              title="Date"
+              aria-label="Date"
+              style={toolbarButtonStyle}
+              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
+              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            >
+              <Calendar size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
           </div>
           <div
