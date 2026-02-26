@@ -530,7 +530,7 @@ export default function JournalPage() {
 
       <div style={{ ...panel, marginTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Test Plan</h3>
+          <h3 style={{ margin: 0 }}>Trade Plan</h3>
         </div>
 
         <div style={{ marginTop: 10 }}>
