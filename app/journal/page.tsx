@@ -138,9 +138,8 @@ export default function JournalPage() {
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [testPlanRange, setTestPlanRange] = useState<"day" | "week" | "two_weeks">("day");
-  const [testPlanText, setTestPlanText] = useState("");
-  const testPlanRef = useRef<HTMLTextAreaElement | null>(null);
+  const [testPlanHtml, setTestPlanHtml] = useState("");
+  const testPlanRef = useRef<HTMLDivElement | null>(null);
 
   const fetchTrades = async (monthValue: string) => {
     setLoading(true);
@@ -189,17 +188,22 @@ export default function JournalPage() {
   }, [screenshotPreview]);
 
   useEffect(() => {
-    const key = `journal_test_plan_${testPlanRange}`;
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-    setTestPlanText(saved ?? "");
-  }, [testPlanRange]);
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem("journal_test_plan_html") : null;
+    setTestPlanHtml(saved ?? "");
+  }, []);
 
   useEffect(() => {
-    const key = `journal_test_plan_${testPlanRange}`;
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(key, testPlanText);
+    const el = testPlanRef.current;
+    if (el && el.innerHTML !== testPlanHtml) {
+      el.innerHTML = testPlanHtml;
     }
-  }, [testPlanText]);
+  }, [testPlanHtml]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("journal_test_plan_html", testPlanHtml);
+    }
+  }, [testPlanHtml]);
 
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
@@ -434,52 +438,72 @@ export default function JournalPage() {
 
   const monthDays = useMemo(() => buildMonthDays(month), [month]);
 
-  const applyWrap = (prefix: string, suffix = prefix) => {
+  const syncTestPlanHtml = () => {
     const el = testPlanRef.current;
     if (!el) return;
-    const { selectionStart, selectionEnd, value } = el;
-    const before = value.slice(0, selectionStart);
-    const selected = value.slice(selectionStart, selectionEnd);
-    const after = value.slice(selectionEnd);
-    const next = `${before}${prefix}${selected || "text"}${suffix}${after}`;
-    setTestPlanText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const cursorStart = selectionStart + prefix.length;
-      const cursorEnd = cursorStart + (selected || "text").length;
-      el.setSelectionRange(cursorStart, cursorEnd);
-    });
+    setTestPlanHtml(el.innerHTML);
   };
 
-  const applyLinePrefix = (linePrefix: string) => {
+  const exec = (command: string) => {
     const el = testPlanRef.current;
     if (!el) return;
-    const { selectionStart, selectionEnd, value } = el;
-    const start = value.lastIndexOf("\n", selectionStart - 1) + 1;
-    const end = value.indexOf("\n", selectionEnd);
-    const endIndex = end === -1 ? value.length : end;
-    const block = value.slice(start, endIndex);
-    const lines = block.split("\n").map((line) => (line.trim() ? `${linePrefix}${line}` : line));
-    const next = `${value.slice(0, start)}${lines.join("\n")}${value.slice(endIndex)}`;
-    setTestPlanText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(start, start + lines.join("\n").length);
-    });
+    el.focus();
+    document.execCommand(command);
+    syncTestPlanHtml();
+  };
+
+  const wrapSelectionWithCode = () => {
+    const el = testPlanRef.current;
+    if (!el) return;
+    el.focus();
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    const code = document.createElement("code");
+    if (selection.isCollapsed) {
+      code.textContent = "code";
+      range.insertNode(code);
+      range.setStart(code.firstChild || code, 0);
+      range.setEnd(code.firstChild || code, code.textContent?.length ?? 0);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } else {
+      const contents = range.extractContents();
+      code.appendChild(contents);
+      range.insertNode(code);
+      range.selectNodeContents(code);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    syncTestPlanHtml();
+  };
+
+  const insertChecklistItem = () => {
+    const el = testPlanRef.current;
+    if (!el) return;
+    el.focus();
+    document.execCommand("insertHTML", false, "<br>- [ ] ");
+    syncTestPlanHtml();
   };
 
   const insertDateStamp = () => {
     const el = testPlanRef.current;
     if (!el) return;
-    const stamp = new Date().toLocaleDateString();
-    const { selectionStart, selectionEnd, value } = el;
-    const next = `${value.slice(0, selectionStart)}${stamp}${value.slice(selectionEnd)}`;
-    setTestPlanText(next);
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = selectionStart + stamp.length;
-      el.setSelectionRange(pos, pos);
-    });
+    el.focus();
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    range.deleteContents();
+    const textNode = document.createTextNode(stamp);
+    range.insertNode(textNode);
+    range.setStart(textNode, textNode.length);
+    range.setEnd(textNode, textNode.length);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    syncTestPlanHtml();
   };
 
   const pnlBadge = (value: number | null) => {
@@ -505,47 +529,36 @@ export default function JournalPage() {
       <div style={{ ...panel, marginTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <h3 style={{ margin: 0 }}>Test Plan</h3>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button
-              onClick={() => setTestPlanRange("day")}
-              style={testPlanRange === "day" ? btnPrimary : btnSecondary}
-            >
-              Day
-            </button>
-            <button
-              onClick={() => setTestPlanRange("week")}
-              style={testPlanRange === "week" ? btnPrimary : btnSecondary}
-            >
-              Week
-            </button>
-            <button
-              onClick={() => setTestPlanRange("two_weeks")}
-              style={testPlanRange === "two_weeks" ? btnPrimary : btnSecondary}
-            >
-              2 Weeks
-            </button>
-          </div>
         </div>
 
         <div style={{ marginTop: 10 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            <button onClick={() => applyWrap("**")} style={btnSecondary}>Bold</button>
-            <button onClick={() => applyWrap("*")} style={btnSecondary}>Italic</button>
-            <button onClick={() => applyWrap("`")} style={btnSecondary}>Code</button>
-            <button onClick={() => applyLinePrefix("- ")} style={btnSecondary}>Bullet</button>
-            <button onClick={() => applyLinePrefix("1. ")} style={btnSecondary}>Numbered</button>
-            <button onClick={() => applyLinePrefix("- [ ] ")} style={btnSecondary}>Checklist</button>
+            <button onClick={() => exec("bold")} style={btnSecondary}>Bold</button>
+            <button onClick={() => exec("italic")} style={btnSecondary}>Italic</button>
+            <button onClick={wrapSelectionWithCode} style={btnSecondary}>Code</button>
+            <button onClick={() => exec("insertUnorderedList")} style={btnSecondary}>Bullet</button>
+            <button onClick={() => exec("insertOrderedList")} style={btnSecondary}>Numbered</button>
+            <button onClick={insertChecklistItem} style={btnSecondary}>Checklist</button>
             <button onClick={insertDateStamp} style={btnSecondary}>Date</button>
           </div>
-          <textarea
+          <div
             ref={testPlanRef}
-            value={testPlanText}
-            onChange={(e) => setTestPlanText(e.target.value)}
-            placeholder="Add your test plan here..."
-            style={{ ...input, width: "100%", minHeight: 140, resize: "vertical", fontFamily: "inherit" }}
+            contentEditable
+            suppressContentEditableWarning
+            onInput={syncTestPlanHtml}
+            style={{
+              ...input,
+              width: "100%",
+              minHeight: 140,
+              resize: "vertical",
+              fontFamily: "inherit",
+              outline: "none",
+              whiteSpace: "pre-wrap",
+              overflow: "auto"
+            }}
           />
           <div style={{ marginTop: 6, opacity: 0.7, fontSize: 12 }}>
-            Formatting uses Markdown-style shortcuts.
+            Formatting applies to the selected text.
           </div>
         </div>
       </div>
