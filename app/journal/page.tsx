@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Bold, Italic, Code, List, ListOrdered, CheckSquare, Calendar } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -532,14 +533,43 @@ export default function JournalPage() {
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
-            <button onClick={() => exec("bold")} style={btnSecondary}>Bold</button>
-            <button onClick={() => exec("italic")} style={btnSecondary}>Italic</button>
-            <button onClick={wrapSelectionWithCode} style={btnSecondary}>Code</button>
-            <button onClick={() => exec("insertUnorderedList")} style={btnSecondary}>Bullet</button>
-            <button onClick={() => exec("insertOrderedList")} style={btnSecondary}>Numbered</button>
-            <button onClick={insertChecklistItem} style={btnSecondary}>Checklist</button>
-            <button onClick={insertDateStamp} style={btnSecondary}>Date</button>
+          <div className="testplan-toolbar">
+            <button className="testplan-btn" onClick={() => exec("bold")} title="Bold" aria-label="Bold">
+              <Bold size={16} />
+            </button>
+            <button className="testplan-btn" onClick={() => exec("italic")} title="Italic" aria-label="Italic">
+              <Italic size={16} />
+            </button>
+            <button className="testplan-btn" onClick={wrapSelectionWithCode} title="Code" aria-label="Code">
+              <Code size={16} />
+            </button>
+            <button
+              className="testplan-btn"
+              onClick={() => exec("insertUnorderedList")}
+              title="Bullet List"
+              aria-label="Bullet List"
+            >
+              <List size={16} />
+            </button>
+            <button
+              className="testplan-btn"
+              onClick={() => exec("insertOrderedList")}
+              title="Numbered List"
+              aria-label="Numbered List"
+            >
+              <ListOrdered size={16} />
+            </button>
+            <button
+              className="testplan-btn"
+              onClick={insertChecklistItem}
+              title="Checklist"
+              aria-label="Checklist"
+            >
+              <CheckSquare size={16} />
+            </button>
+            <button className="testplan-btn" onClick={insertDateStamp} title="Date" aria-label="Date">
+              <Calendar size={16} />
+            </button>
           </div>
           <div
             ref={testPlanRef}
@@ -888,6 +918,32 @@ export default function JournalPage() {
           flex-wrap: wrap;
           gap: 10px;
           align-items: center;
+        }
+        .testplan-toolbar {
+          display: flex;
+          gap: 8px;
+          margin-bottom: 8px;
+          flex-wrap: wrap;
+        }
+        .testplan-btn {
+          width: 34px;
+          height: 34px;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(255,255,255,0.04);
+          color: white;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          transition: background 120ms ease, border-color 120ms ease;
+        }
+        .testplan-btn:hover {
+          background: rgba(255,255,255,0.12);
+        }
+        .testplan-btn:active {
+          background: rgba(79, 163, 255, 0.2);
+          border-color: rgba(79, 163, 255, 0.45);
         }
         .calendar-grid {
           display: grid;
