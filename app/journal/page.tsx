@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -138,6 +138,9 @@ export default function JournalPage() {
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [testPlanRange, setTestPlanRange] = useState<"day" | "week" | "two_weeks">("day");
+  const [testPlanText, setTestPlanText] = useState("");
+  const testPlanRef = useRef<HTMLTextAreaElement | null>(null);
 
   const fetchTrades = async (monthValue: string) => {
     setLoading(true);
@@ -184,6 +187,19 @@ export default function JournalPage() {
       }
     };
   }, [screenshotPreview]);
+
+  useEffect(() => {
+    const key = `journal_test_plan_${testPlanRange}`;
+    const saved = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
+    setTestPlanText(saved ?? "");
+  }, [testPlanRange]);
+
+  useEffect(() => {
+    const key = `journal_test_plan_${testPlanRange}`;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(key, testPlanText);
+    }
+  }, [testPlanText]);
 
   const filteredTrades = useMemo(() => {
     return trades.filter((t) => {
@@ -418,6 +434,54 @@ export default function JournalPage() {
 
   const monthDays = useMemo(() => buildMonthDays(month), [month]);
 
+  const applyWrap = (prefix: string, suffix = prefix) => {
+    const el = testPlanRef.current;
+    if (!el) return;
+    const { selectionStart, selectionEnd, value } = el;
+    const before = value.slice(0, selectionStart);
+    const selected = value.slice(selectionStart, selectionEnd);
+    const after = value.slice(selectionEnd);
+    const next = `${before}${prefix}${selected || "text"}${suffix}${after}`;
+    setTestPlanText(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const cursorStart = selectionStart + prefix.length;
+      const cursorEnd = cursorStart + (selected || "text").length;
+      el.setSelectionRange(cursorStart, cursorEnd);
+    });
+  };
+
+  const applyLinePrefix = (linePrefix: string) => {
+    const el = testPlanRef.current;
+    if (!el) return;
+    const { selectionStart, selectionEnd, value } = el;
+    const start = value.lastIndexOf("\n", selectionStart - 1) + 1;
+    const end = value.indexOf("\n", selectionEnd);
+    const endIndex = end === -1 ? value.length : end;
+    const block = value.slice(start, endIndex);
+    const lines = block.split("\n").map((line) => (line.trim() ? `${linePrefix}${line}` : line));
+    const next = `${value.slice(0, start)}${lines.join("\n")}${value.slice(endIndex)}`;
+    setTestPlanText(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start, start + lines.join("\n").length);
+    });
+  };
+
+  const insertDateStamp = () => {
+    const el = testPlanRef.current;
+    if (!el) return;
+    const stamp = new Date().toLocaleDateString();
+    const { selectionStart, selectionEnd, value } = el;
+    const next = `${value.slice(0, selectionStart)}${stamp}${value.slice(selectionEnd)}`;
+    setTestPlanText(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      const pos = selectionStart + stamp.length;
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
   const pnlBadge = (value: number | null) => {
     if (value === null || Number.isNaN(value)) return "—";
     const sign = value > 0 ? "+" : value < 0 ? "" : "";
@@ -437,6 +501,54 @@ export default function JournalPage() {
       {errorBanner && (
         <div style={errorBannerStyle}>{errorBanner}</div>
       )}
+
+      <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>Test Plan</h3>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button
+              onClick={() => setTestPlanRange("day")}
+              style={testPlanRange === "day" ? btnPrimary : btnSecondary}
+            >
+              Day
+            </button>
+            <button
+              onClick={() => setTestPlanRange("week")}
+              style={testPlanRange === "week" ? btnPrimary : btnSecondary}
+            >
+              Week
+            </button>
+            <button
+              onClick={() => setTestPlanRange("two_weeks")}
+              style={testPlanRange === "two_weeks" ? btnPrimary : btnSecondary}
+            >
+              2 Weeks
+            </button>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 8 }}>
+            <button onClick={() => applyWrap("**")} style={btnSecondary}>Bold</button>
+            <button onClick={() => applyWrap("*")} style={btnSecondary}>Italic</button>
+            <button onClick={() => applyWrap("`")} style={btnSecondary}>Code</button>
+            <button onClick={() => applyLinePrefix("- ")} style={btnSecondary}>Bullet</button>
+            <button onClick={() => applyLinePrefix("1. ")} style={btnSecondary}>Numbered</button>
+            <button onClick={() => applyLinePrefix("- [ ] ")} style={btnSecondary}>Checklist</button>
+            <button onClick={insertDateStamp} style={btnSecondary}>Date</button>
+          </div>
+          <textarea
+            ref={testPlanRef}
+            value={testPlanText}
+            onChange={(e) => setTestPlanText(e.target.value)}
+            placeholder="Add your test plan here..."
+            style={{ ...input, width: "100%", minHeight: 140, resize: "vertical", fontFamily: "inherit" }}
+          />
+          <div style={{ marginTop: 6, opacity: 0.7, fontSize: 12 }}>
+            Formatting uses Markdown-style shortcuts.
+          </div>
+        </div>
+      </div>
 
       <div style={{ ...panel, marginTop: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
