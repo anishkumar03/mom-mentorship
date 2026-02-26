@@ -507,18 +507,6 @@ export default function JournalPage() {
     syncTestPlanHtml();
   };
 
-  const toolbarButtonStyle: React.CSSProperties = {
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.05)",
-    color: "#E2E8F0",
-    cursor: "pointer"
-  };
 
   const pnlBadge = (value: number | null) => {
     if (value === null || Number.isNaN(value)) return "—";
@@ -546,86 +534,26 @@ export default function JournalPage() {
         </div>
 
         <div style={{ marginTop: 10 }}>
-          <div
-            className="flex gap-2 text-slate-200
-              [&_button]:inline-flex [&_button]:items-center [&_button]:justify-center
-              [&_button]:w-9 [&_button]:h-9 [&_button]:rounded-md
-              [&_button]:border [&_button]:border-white/10
-              [&_button]:bg-white/5 [&_button]:hover:bg-white/10
-              [&_button]:text-slate-200
-              [&_button]:focus:outline-none [&_button]:focus:ring-2 [&_button]:focus:ring-blue-500/40
-              [&_svg]:block [&_svg]:w-5 [&_svg]:h-5
-              [&_svg]:text-slate-200 [&_svg]:stroke-current
-              [&_svg]:opacity-100"
-          >
-            <button
-              onClick={() => exec("bold")}
-              title="Bold"
-              aria-label="Bold"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+          <div className="flex gap-2 text-slate-200 [&_button]:inline-flex [&_button]:items-center [&_button]:justify-center [&_button]:w-9 [&_button]:h-9 [&_button]:rounded-md [&_button]:border [&_button]:border-white/10 [&_button]:bg-white/5 [&_button]:hover:bg-white/10 [&_button]:text-slate-200 [&_button]:focus:outline-none [&_button]:focus:ring-2 [&_button]:focus:ring-blue-500/40 [&_svg]:block [&_svg]:w-5 [&_svg]:h-5 [&_svg]:text-slate-200 [&_svg]:stroke-current [&_svg]:opacity-100">
+            <button onClick={() => exec("bold")} title="Bold" aria-label="Bold">
               <Bold size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button
-              onClick={() => exec("italic")}
-              title="Italic"
-              aria-label="Italic"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+            <button onClick={() => exec("italic")} title="Italic" aria-label="Italic">
               <Italic size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button
-              onClick={wrapSelectionWithCode}
-              title="Code"
-              aria-label="Code"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+            <button onClick={wrapSelectionWithCode} title="Code" aria-label="Code">
               <Code size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button
-              onClick={() => exec("insertUnorderedList")}
-              title="Bullet List"
-              aria-label="Bullet List"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+            <button onClick={() => exec("insertUnorderedList")} title="Bullet List" aria-label="Bullet List">
               <List size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button
-              onClick={() => exec("insertOrderedList")}
-              title="Numbered List"
-              aria-label="Numbered List"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+            <button onClick={() => exec("insertOrderedList")} title="Numbered List" aria-label="Numbered List">
               <ListOrdered size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button
-              onClick={insertChecklistItem}
-              title="Checklist"
-              aria-label="Checklist"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+            <button onClick={insertChecklistItem} title="Checklist" aria-label="Checklist">
               <CheckSquare size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
-            <button
-              onClick={insertDateStamp}
-              title="Date"
-              aria-label="Date"
-              style={toolbarButtonStyle}
-              onMouseOver={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.10)")}
-              onMouseOut={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
-            >
+            <button onClick={insertDateStamp} title="Date" aria-label="Date">
               <Calendar size={18} color="#E2E8F0" className="block text-slate-200 opacity-100" />
             </button>
           </div>
@@ -976,32 +904,6 @@ export default function JournalPage() {
           flex-wrap: wrap;
           gap: 10px;
           align-items: center;
-        }
-        .testplan-toolbar {
-          display: flex;
-          gap: 8px;
-          margin-bottom: 8px;
-          flex-wrap: wrap;
-        }
-        .testplan-btn {
-          width: 34px;
-          height: 34px;
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.12);
-          background: rgba(255,255,255,0.04);
-          color: white;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: background 120ms ease, border-color 120ms ease;
-        }
-        .testplan-btn:hover {
-          background: rgba(255,255,255,0.12);
-        }
-        .testplan-btn:active {
-          background: rgba(79, 163, 255, 0.2);
-          border-color: rgba(79, 163, 255, 0.45);
         }
         .calendar-grid {
           display: grid;
