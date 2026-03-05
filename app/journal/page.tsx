@@ -387,8 +387,9 @@ export default function JournalPage() {
   const dayStats = useMemo(() => {
     const map = new Map<string, { total: number; count: number; symbols: string[] }>();
     for (const t of filteredBase) {
-      const key = t.trade_date;
-      const current = map.get(key) ?? { total: 0, count: 0, symbols: [] };
+      const key = t.trade_date ?? "";
+      if (!key) continue;
+      const current = map.get(key) ?? { total: 0, count: 0, symbols: [] as string[] };
       const pnlValue = typeof t.pnl === "number" ? t.pnl : 0;
       current.total += pnlValue;
       current.count += 1;
@@ -401,8 +402,9 @@ export default function JournalPage() {
   const groupedDays = useMemo(() => {
     const map = new Map<string, { date: string; trades: Trade[]; total: number }>();
     for (const t of filteredBase) {
-      const key = t.trade_date;
-      const current = map.get(key) ?? { date: key, trades: [], total: 0 };
+      const key = t.trade_date ?? "";
+      if (!key) continue;
+      const current = map.get(key) ?? { date: key, trades: [] as Trade[], total: 0 };
       current.trades.push(t);
       current.total += typeof t.pnl === "number" ? t.pnl : 0;
       map.set(key, current);
@@ -881,7 +883,7 @@ export default function JournalPage() {
               <option value="">Select firm</option>
               {firms.map((f) => (
                 <option key={f.id} value={f.id}>
-                  {f.name}{f.account_size ? ` · ${f.account_size}` : ""}
+                  {f.name}
                 </option>
               ))}
             </select>
@@ -1317,7 +1319,7 @@ export default function JournalPage() {
                 key={d.key}
                 onClick={() => {
                   setSelectedDay(d.key);
-                  setExpandedDays((prev) => new Set(prev).add(d.key));
+                  setExpandedDays((prev) => new Set(prev).add(d.key!));
                 }}
                 style={{
                   ...calendarCell,

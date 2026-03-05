@@ -697,38 +697,6 @@ export default function PipelinePage() {
           <button onClick={() => convertToStudent(l)} style={btnSecondary} disabled={!!l.student_id}>
             {l.student_id ? "Converted" : "Student"}
           </button>
-          <button
-            onClick={() => undoContacted(l)}
-            style={{
-              ...btnSecondary,
-              opacity: disableMarkContacted || stageKey(l.status) !== "Contacted" || markingId === l.id ? 0.5 : 1
-            }}
-            disabled={disableMarkContacted || stageKey(l.status) !== "Contacted" || markingId === l.id}
-            title={stageKey(l.status) !== "Contacted" ? "Only for contacted leads" : undefined}
-          >
-            Undo Contacted
-          </button>
-          <div style={{ width: "100%" }} />
-          <button onClick={() => openFollow(l)} style={primaryAction === "follow" ? btnPrimary : btnSecondary}>Follow</button>
-          <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button onClick={() => setStatusOnly(l, "Confirmed")} style={primaryAction === "confirm" ? btnPrimary : btnSecondary}>Confirm</button>
-          <button onClick={() => convertToStudent(l)} style={primaryAction === "convert" ? btnPrimary : btnSecondary} disabled={!!l.student_id}>
-            Convert to Student
-          </button>
-          {l.student_id ? (
-            <span
-              style={{
-                padding: "4px 8px",
-                borderRadius: 999,
-                border: "1px solid rgba(46, 204, 113, 0.5)",
-                color: "#b6f2cf",
-                fontSize: 11,
-                fontWeight: 700
-              }}
-            >
-              Converted
-            </span>
-          ) : null}
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
         </div>

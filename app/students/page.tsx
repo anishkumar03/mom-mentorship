@@ -30,6 +30,7 @@ type Payment = {
   student_id: string;
   amount: number;
   payment_date: string | null;
+  paid_at?: string | null;
   method?: string | null;
   note?: string | null;
   created_at: string | null;

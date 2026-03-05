@@ -288,6 +288,8 @@ export default function LeadsPage() {
   const [noteLead, setNoteLead] = useState<Lead | null>(null);
   const [noteText, setNoteText] = useState("");
   const [noteContactedAt, setNoteContactedAt] = useState("");
+  const [queryStatus, setQueryStatus] = useState<string | null>(null);
+  const [queryFollowup, setQueryFollowup] = useState<string | null>(null);
   const [contactedHint, setContactedHint] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [disableMarkContacted, setDisableMarkContacted] = useState(false);
@@ -1447,6 +1449,24 @@ const btnDanger: React.CSSProperties = {
   color: "#fca5a5",
   cursor: "pointer",
   fontSize: 13,
+};
+
+const btnSecondarySmall: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  cursor: "pointer",
+  fontSize: 11,
+  fontWeight: 600,
+};
+
+const btnDangerSmall: React.CSSProperties = {
+  ...btnSecondarySmall,
+  background: "rgba(255,59,48,0.15)",
+  borderColor: "rgba(255,59,48,0.3)",
+  color: "#fca5a5",
 };
 
 const btnSmall: React.CSSProperties = {
