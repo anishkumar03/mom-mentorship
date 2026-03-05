@@ -1,9 +1,9 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS } from "../../lib/constants";
+import { PROGRAMS, PAYMENT_METHODS } from "../../lib/constants";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -166,6 +166,11 @@ function csvEscape(value: string) {
   return `"${safe}"`;
 }
 
+function paymentPercentage(totalFee: number, totalPaid: number) {
+  if (totalFee <= 0) return 0;
+  return Math.min(100, Math.round((totalPaid / totalFee) * 100));
+}
+
 export default function StudentsPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
@@ -173,6 +178,7 @@ export default function StudentsPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [studentColumns, setStudentColumns] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
@@ -184,6 +190,7 @@ export default function StudentsPage() {
   const [reminderAt, setReminderAt] = useState("");
   const [paidInFull, setPaidInFull] = useState(false);
   const [notes, setNotes] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentStudent, setPaymentStudent] = useState<Student | null>(null);
@@ -271,6 +278,16 @@ export default function StudentsPage() {
     return map;
   }, [payments]);
 
+  const filteredStudents = useMemo(() => {
+    if (!searchQuery.trim()) return students;
+    const q = searchQuery.toLowerCase();
+    return students.filter((s) => {
+      const searchable = [s.full_name, s.name, s.email, s.phone, s.program, s.notes]
+        .filter(Boolean).join(" ").toLowerCase();
+      return searchable.includes(q);
+    });
+  }, [students, searchQuery]);
+
   const dueSoon = useMemo(() => {
     const now = new Date();
     const end = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
@@ -292,6 +309,25 @@ export default function StudentsPage() {
         const bTime = b.reminder_at ?? b.due_date ?? "";
         return new Date(aTime).getTime() - new Date(bTime).getTime();
       });
+  }, [students, totalsByStudent]);
+
+  const summaryStats = useMemo(() => {
+    let totalRevenue = 0;
+    let totalCollected = 0;
+    let paidCount = 0;
+    for (const s of students) {
+      totalRevenue += s.total_fee;
+      const paid = totalsByStudent.get(s.id) ?? 0;
+      totalCollected += paid;
+      if (s.paid_in_full || paid >= s.total_fee) paidCount++;
+    }
+    return {
+      totalRevenue,
+      totalCollected,
+      outstanding: totalRevenue - totalCollected,
+      paidCount,
+      totalStudents: students.length,
+    };
   }, [students, totalsByStudent]);
 
   const resetForm = () => {
@@ -318,6 +354,7 @@ export default function StudentsPage() {
     setReminderAt(toLocalInputValue(s.reminder_at));
     setPaidInFull(Boolean(s.paid_in_full));
     setNotes(s.notes ?? "");
+    setFormOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -373,6 +410,7 @@ export default function StudentsPage() {
     }
 
     resetForm();
+    setFormOpen(false);
     await fetchStudents();
     router.refresh();
   };
@@ -525,28 +563,95 @@ export default function StudentsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const ProgressBar = ({ totalFee, totalPaid, isPaidFull }: { totalFee: number; totalPaid: number; isPaidFull: boolean }) => {
+    const pct = isPaidFull ? 100 : paymentPercentage(totalFee, totalPaid);
+    const barColor = pct >= 100 ? "#22c55e" : pct > 50 ? "#f59e0b" : "#3b82f6";
+    return (
+      <div style={{ marginTop: 8 }}>
+        <div style={{
+          display: "flex", justifyContent: "space-between", fontSize: 11, opacity: 0.7, marginBottom: 4,
+        }}>
+          <span>{money(isPaidFull ? totalFee : totalPaid)} paid</span>
+          <span>{pct}%</span>
+        </div>
+        <div style={{
+          height: 6, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden",
+        }}>
+          <div style={{
+            height: "100%", borderRadius: 999, background: barColor,
+            width: `${pct}%`, transition: "width 0.3s ease",
+          }} />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={page}>
-      <h2 style={{ margin: 0 }}>Students</h2>
-      <div style={{ opacity: 0.85, marginTop: 6 }}>
-        Track total fees (after discounts) and split payments per student.
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Students</h2>
+          <div style={{ opacity: 0.6, marginTop: 4, fontSize: 13 }}>
+            Track total fees (after discounts) and split payments per student.
+          </div>
+        </div>
+        <button
+          onClick={() => { resetForm(); setFormOpen(!formOpen); }}
+          style={{ ...btnPrimary, padding: "10px 20px", fontSize: 14, fontWeight: 700 }}
+        >
+          {formOpen ? "Close Form" : "+ Add Student"}
+        </button>
       </div>
+
       {fetchError && (
-        <div style={{ ...panel, marginTop: 12, background: "rgba(255,0,0,0.08)" }}>
+        <div style={{ ...panel, marginTop: 12, background: "rgba(255,0,0,0.08)", borderColor: "rgba(255,0,0,0.2)" }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Failed to load students</div>
           <div style={{ fontSize: 12, opacity: 0.9 }}>{fetchError}</div>
         </div>
       )}
 
-      <div style={{ ...panel, marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Due Soon (next 14 days)</h3>
-          <div style={{ opacity: 0.85 }}>{dueSoon.length} reminders</div>
+      {/* Summary stats */}
+      {students.length > 0 && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+          gap: 10, marginTop: 12,
+        }}>
+          <div style={statCard}>
+            <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>Students</div>
+            <div style={{ fontSize: 22, fontWeight: 800, marginTop: 4 }}>{summaryStats.totalStudents}</div>
+          </div>
+          <div style={statCard}>
+            <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>Total Revenue</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4 }}>{money(summaryStats.totalRevenue)}</div>
+          </div>
+          <div style={statCard}>
+            <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>Collected</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4, color: "#86efac" }}>{money(summaryStats.totalCollected)}</div>
+          </div>
+          <div style={statCard}>
+            <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>Outstanding</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4, color: summaryStats.outstanding > 0 ? "#fca5a5" : "#86efac" }}>
+              {money(summaryStats.outstanding)}
+            </div>
+          </div>
         </div>
+      )}
 
-        {dueSoon.length === 0 ? (
-          <div style={{ marginTop: 10, opacity: 0.85 }}>No upcoming due dates or reminders in the next 14 days.</div>
-        ) : (
+      {/* Due Soon */}
+      {dueSoon.length > 0 && (
+        <div style={{ ...panel, marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Due Soon</h3>
+            <span style={{
+              padding: "4px 10px", borderRadius: 999,
+              background: "rgba(245,158,11,0.15)", color: "#fcd34d",
+              fontSize: 12, fontWeight: 700,
+            }}>
+              {dueSoon.length} in next 14 days
+            </span>
+          </div>
+
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {dueSoon.map((s) => {
               const totalPaid = totalsByStudent.get(s.id) ?? 0;
@@ -554,14 +659,18 @@ export default function StudentsPage() {
               const r = s.reminder_at ? buildReminder(s) : null;
               const fileSafe = displayName(s).replace(/[^a-z0-9]+/gi, "_");
               return (
-                <div key={s.id} style={cardStyle}>
+                <div key={s.id} style={{
+                  ...cardStyle,
+                  borderColor: "rgba(245,158,11,0.2)",
+                  background: "rgba(245,158,11,0.04)",
+                }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontWeight: 800 }}>{displayName(s)}</div>
-                      <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {(s.program ?? "-")} | Balance: {money(balance)}
+                      <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
+                      <div style={{ opacity: 0.8, fontSize: 13 }}>
+                        {s.program ?? "-"} | Balance: {money(balance)}
                       </div>
-                      <div style={{ opacity: 0.85, fontSize: 13 }}>
+                      <div style={{ opacity: 0.7, fontSize: 12 }}>
                         {s.due_date ? `Due: ${new Date(s.due_date).toLocaleString()}` : "No due date"}
                         {s.reminder_at ? ` | Reminder: ${new Date(s.reminder_at).toLocaleString()}` : ""}
                       </div>
@@ -572,181 +681,226 @@ export default function StudentsPage() {
                         <>
                           <button
                             onClick={() => downloadICS(`MOM_StudentReminder_${fileSafe}.ics`, r.ics)}
-                            style={btnPrimary}
+                            style={btnSmall}
                           >
-                            Add to Calendar (ICS)
+                            Calendar
                           </button>
-                          <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
-                            Google Calendar
+                          <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtnSmall}>
+                            Google
                           </a>
                         </>
                       )}
-                      <button onClick={() => openReminder(s)} style={btnSecondary}>Set Reminder</button>
+                      <button onClick={() => openReminder(s)} style={btnSecondary}>Reminder</button>
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div style={{ ...panel, marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>{editingId ? "Edit Student" : "Add Student"}</h3>
+      {/* Add/Edit Form */}
+      {formOpen && (
+        <div style={{ ...panel, marginTop: 12 }}>
+          <h3 style={{ marginTop: 0, fontSize: 15 }}>{editingId ? "Edit Student" : "Add Student"}</h3>
 
-        <div style={grid2}>
-          <div>
-            <label style={label}>Full name</label>
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} style={input} />
-          </div>
-
-          <div>
-            <label style={label}>Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
-          </div>
-
-          {studentColumns.includes("phone") && (
+          <div style={grid2}>
             <div>
-              <label style={label}>Phone</label>
-              <input value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
+              <label style={label}>Full name *</label>
+              <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Enter full name" style={input} />
             </div>
-          )}
 
-          <div>
-            <label style={label}>Program</label>
-            <select
-              value={program}
-              onChange={(e) => setProgram(e.target.value)}
-              style={input}
-            >
-              {PROGRAMS.map((p) => (
-                <option key={p} value={p}>{p}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label style={label}>Total fee (after discount)</label>
-            <input
-              type="number"
-              step="0.01"
-              value={totalFee}
-              onChange={(e) => setTotalFee(e.target.value)}
-              style={input}
-            />
-          </div>
-
-          {studentColumns.includes("due_date") && (
             <div>
-              <label style={label}>Due date</label>
+              <label style={label}>Email</label>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@example.com" style={input} />
+            </div>
+
+            {studentColumns.includes("phone") && (
+              <div>
+                <label style={label}>Phone</label>
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+1 (555) 000-0000" style={input} />
+              </div>
+            )}
+
+            <div>
+              <label style={label}>Program</label>
+              <select
+                value={program}
+                onChange={(e) => setProgram(e.target.value)}
+                style={input}
+              >
+                {PROGRAMS.map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={label}>Total fee (after discount) *</label>
               <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
+                type="number"
+                step="0.01"
+                value={totalFee}
+                onChange={(e) => setTotalFee(e.target.value)}
+                placeholder="0.00"
                 style={input}
               />
             </div>
-          )}
 
-          {studentColumns.includes("reminder_at") && (
-            <div>
-              <label style={label}>Reminder at</label>
-              <input
-                type="datetime-local"
-                value={reminderAt}
-                onChange={(e) => setReminderAt(e.target.value)}
-                style={input}
+            {studentColumns.includes("due_date") && (
+              <div>
+                <label style={label}>Due date</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  style={input}
+                />
+              </div>
+            )}
+
+            {studentColumns.includes("reminder_at") && (
+              <div>
+                <label style={label}>Reminder at</label>
+                <input
+                  type="datetime-local"
+                  value={reminderAt}
+                  onChange={(e) => setReminderAt(e.target.value)}
+                  style={input}
+                />
+              </div>
+            )}
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 6 }}>
+              <label style={{
+                display: "flex", alignItems: "center", gap: 8, cursor: "pointer",
+                padding: "8px 14px", borderRadius: 10,
+                background: paidInFull ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)",
+                border: `1px solid ${paidInFull ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"}`,
+              }}>
+                <input
+                  type="checkbox"
+                  checked={paidInFull}
+                  onChange={(e) => setPaidInFull(e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: "#22c55e" }}
+                />
+                <span style={{ fontSize: 13, fontWeight: 600, color: paidInFull ? "#86efac" : "white" }}>
+                  Paid in full
+                </span>
+              </label>
+            </div>
+
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={label}>Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Additional notes..."
+                style={{ ...input, minHeight: 60, resize: "vertical" }}
               />
             </div>
-          )}
-
-          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingTop: 6 }}>
-            <input
-              type="checkbox"
-              checked={paidInFull}
-              onChange={(e) => setPaidInFull(e.target.checked)}
-              style={{ width: 16, height: 16 }}
-            />
-            <label style={{ ...label, marginBottom: 0 }}>Paid in full</label>
           </div>
 
-          <div style={{ gridColumn: "1 / -1" }}>
-            <label style={label}>Notes</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} style={input} />
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button onClick={saveStudent} style={{ ...btnPrimary, padding: "12px 24px", fontWeight: 700 }}>
+              {editingId ? "Update Student" : "Save Student"}
+            </button>
+            <button onClick={() => { resetForm(); setFormOpen(false); }} style={btnSecondary}>Cancel</button>
           </div>
         </div>
+      )}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-          <button onClick={saveStudent} style={btnPrimary}>{editingId ? "Update Student" : "Save Student"}</button>
-          <button onClick={resetForm} style={btnSecondary}>Clear</button>
-        </div>
-      </div>
-
-      <div style={{ ...panel, marginTop: 16 }}>
+      {/* Student list */}
+      <div style={{ ...panel, marginTop: 12 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-          <div style={{ marginLeft: "auto", opacity: 0.85 }}>
-            {loading ? "Loading..." : `${students.length} students`}
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search students..."
+            style={{ ...inputSmall, minWidth: 180, flex: "1 1 180px" }}
+          />
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.6, fontSize: 13 }}>
+              {loading ? "Loading..." : `${filteredStudents.length} students`}
+            </span>
+            <button onClick={exportCsv} style={btnSecondary}>Export CSV</button>
           </div>
-          <button onClick={exportCsv} style={btnSecondary}>Export CSV</button>
         </div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          {students.map((s) => {
+          {filteredStudents.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
             const balance = Math.max(0, s.total_fee - totalPaid);
             const isPaidFull = !!s.paid_in_full;
-            const cardPaidStatus = totalPaid > 0 ? "Partially Paid" : "Not Paid";
             const paidDisplay = isPaidFull ? s.total_fee : totalPaid;
             const balanceDisplay = isPaidFull ? 0 : Math.max(0, s.total_fee - totalPaid);
             return (
-              <div key={s.id} style={cardStyle}>
+              <div key={s.id} style={{
+                ...cardStyle,
+                borderColor: isPaidFull ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.08)",
+              }}>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                  <div>
-                    <div style={{ fontWeight: 700 }}>{displayName(s)}</div>
-                    <div style={{ opacity: 0.8, fontSize: 13 }}>
-                      {(s.program ?? "-")}
-                      {!isPaidFull ? ` | ${cardPaidStatus}` : null}
-                      {isPaidFull ? (
-                        <span
-                          style={{
-                            marginLeft: 8,
-                            padding: "2px 8px",
-                            borderRadius: 999,
-                            background: "rgba(34,197,94,0.2)",
-                            color: "#86efac",
-                            fontWeight: 800,
-                            fontSize: 12
-                          }}
-                        >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{displayName(s)}</span>
+                      {isPaidFull && (
+                        <span style={{
+                          padding: "3px 10px", borderRadius: 999,
+                          background: "rgba(34,197,94,0.2)", color: "#86efac",
+                          fontWeight: 800, fontSize: 11,
+                        }}>
                           PAID IN FULL
                         </span>
-                      ) : null}
+                      )}
+                      {!isPaidFull && totalPaid > 0 && (
+                        <span style={{
+                          padding: "3px 10px", borderRadius: 999,
+                          background: "rgba(245,158,11,0.15)", color: "#fcd34d",
+                          fontWeight: 700, fontSize: 11,
+                        }}>
+                          Partial
+                        </span>
+                      )}
+                      {!isPaidFull && totalPaid === 0 && (
+                        <span style={{
+                          padding: "3px 10px", borderRadius: 999,
+                          background: "rgba(239,68,68,0.12)", color: "#fca5a5",
+                          fontWeight: 700, fontSize: 11,
+                        }}>
+                          Not Paid
+                        </span>
+                      )}
                     </div>
-                    {isPaidFull ? (
-                      <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        Total fee: {money(s.total_fee)}
-                      </div>
-                    ) : (
-                      <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        Total fee: {money(s.total_fee)} | Paid: {money(paidDisplay)} | Balance: {money(balanceDisplay)}
-                      </div>
-                    )}
-                    {s.due_date ? (
-                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                        Due: {new Date(s.due_date).toLocaleString()}
-                      </div>
-                    ) : null}
-                    {s.reminder_at ? (
-                      <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85 }}>
-                        Reminder: {new Date(s.reminder_at).toLocaleString()}
-                      </div>
-                    ) : null}
+
+                    <div style={{ opacity: 0.75, fontSize: 13, marginTop: 4 }}>
+                      {s.program ?? "-"}
+                      {s.email ? ` | ${s.email}` : ""}
+                      {s.phone ? ` | ${s.phone}` : ""}
+                    </div>
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, marginTop: 6, fontSize: 13 }}>
+                      <span>Fee: <strong>{money(s.total_fee)}</strong></span>
+                      <span>Paid: <strong style={{ color: "#86efac" }}>{money(paidDisplay)}</strong></span>
+                      {!isPaidFull && (
+                        <span>Balance: <strong style={{ color: balanceDisplay > 0 ? "#fca5a5" : "#86efac" }}>
+                          {money(balanceDisplay)}
+                        </strong></span>
+                      )}
+                    </div>
+
+                    <ProgressBar totalFee={s.total_fee} totalPaid={totalPaid} isPaidFull={isPaidFull} />
+
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 6, fontSize: 12, opacity: 0.65 }}>
+                      {s.due_date && <span>Due: {new Date(s.due_date).toLocaleDateString()}</span>}
+                      {s.reminder_at && <span>Reminder: {new Date(s.reminder_at).toLocaleString()}</span>}
+                    </div>
                   </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", alignContent: "flex-start" }}>
                     <button onClick={() => loadEdit(s)} style={btnSecondary}>Edit</button>
                     <button onClick={() => openPayments(s)} style={btnPrimary}>Add Payment</button>
-                    <button onClick={() => openReminder(s)} style={btnSecondary}>Set Reminder</button>
+                    <button onClick={() => openReminder(s)} style={btnSecondary}>Reminder</button>
                     <button
                       onClick={() => deleteStudent(s)}
                       style={btnDanger}
@@ -757,89 +911,127 @@ export default function StudentsPage() {
                   </div>
                 </div>
 
-                {s.notes ? (
-                  <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
+                {s.notes && (
+                  <div style={{
+                    marginTop: 10, fontSize: 13, opacity: 0.85,
+                    padding: "6px 10px", borderRadius: 8,
+                    background: "rgba(255,255,255,0.03)",
+                    borderLeft: "3px solid rgba(255,255,255,0.1)",
+                  }}>
                     {s.notes}
                   </div>
-                ) : null}
+                )}
               </div>
             );
           })}
         </div>
+
+        {!loading && filteredStudents.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, opacity: 0.5 }}>
+            {students.length > 0 ? "No students match your search." : "No students yet. Add your first student!"}
+          </div>
+        )}
       </div>
 
+      {/* Payment Modal */}
       {paymentOpen && paymentStudent && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} onClick={() => setPaymentOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Payments</div>
-            <div style={{ opacity: 0.85, marginTop: 6 }}>
+            <div style={{ opacity: 0.85, marginTop: 4, fontSize: 14 }}>
               {displayName(paymentStudent)}
             </div>
-
-            <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Amount"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                style={input}
-              />
-              <input
-                type="datetime-local"
-                value={paymentDate}
-                onChange={(e) => setPaymentDate(e.target.value)}
-                style={input}
-              />
-              <input
-                placeholder="Method (cash, Zelle, card)"
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value)}
-                style={input}
-              />
-              <input
-                placeholder="Note"
-                value={paymentNote}
-                onChange={(e) => setPaymentNote(e.target.value)}
-                style={input}
-              />
+            <div style={{ opacity: 0.6, fontSize: 12 }}>
+              Fee: {money(paymentStudent.total_fee)} | Paid: {money(totalsByStudent.get(paymentStudent.id) ?? 0)}
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+            <div style={{ display: "grid", gap: 10, marginTop: 14 }}>
+              <div>
+                <label style={label}>Amount *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(e.target.value)}
+                  style={input}
+                />
+              </div>
+              <div>
+                <label style={label}>Date</label>
+                <input
+                  type="datetime-local"
+                  value={paymentDate}
+                  onChange={(e) => setPaymentDate(e.target.value)}
+                  style={input}
+                />
+              </div>
+              <div>
+                <label style={label}>Payment Method</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => setPaymentMethod(e.target.value)}
+                  style={input}
+                >
+                  <option value="">Select method...</option>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={label}>Note</label>
+                <input
+                  placeholder="Payment note (optional)"
+                  value={paymentNote}
+                  onChange={(e) => setPaymentNote(e.target.value)}
+                  style={input}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={() => setPaymentOpen(false)} style={btnSecondary}>Close</button>
               <button onClick={savePayment} style={btnPrimary}>Add Payment</button>
             </div>
 
-            <div style={{ marginTop: 16, fontWeight: 700 }}>Previous payments</div>
+            {/* Previous payments */}
+            <div style={{ marginTop: 18, fontWeight: 700, fontSize: 13 }}>Previous payments</div>
             <div style={{ display: "grid", gap: 8, marginTop: 8, maxHeight: 240, overflow: "auto" }}>
               {(paymentsByStudent.get(paymentStudent.id) ?? []).map((p) => (
                 <div key={p.id} style={{ ...cardStyle, padding: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center" }}>
                     <div>
-                      <div style={{ fontWeight: 700 }}>{money(p.amount)}</div>
-                      <div style={{ fontSize: 12, opacity: 0.85 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{money(p.amount)}</div>
+                      <div style={{ fontSize: 12, opacity: 0.7 }}>
                         {p.paid_at ? new Date(p.paid_at).toLocaleString() : "-"}
-                        {p.method ? ` | ${p.method}` : ""}
+                        {p.method && (
+                          <span style={{
+                            marginLeft: 8, padding: "2px 6px", borderRadius: 4,
+                            background: "rgba(255,255,255,0.08)", fontSize: 11,
+                          }}>
+                            {p.method}
+                          </span>
+                        )}
                       </div>
-                      {p.note ? (
-                        <div style={{ fontSize: 12, opacity: 0.85, marginTop: 4 }}>{p.note}</div>
-                      ) : null}
+                      {p.note && <div style={{ fontSize: 12, opacity: 0.7, marginTop: 2 }}>{p.note}</div>}
                     </div>
-                    <button onClick={() => deletePayment(p)} style={btnDanger}>Delete</button>
+                    <button onClick={() => deletePayment(p)} style={btnDangerSmall}>Delete</button>
                   </div>
                 </div>
               ))}
               {(paymentsByStudent.get(paymentStudent.id) ?? []).length === 0 && (
-                <div style={{ opacity: 0.85 }}>No payments yet.</div>
+                <div style={{ opacity: 0.5, fontSize: 13 }}>No payments yet.</div>
               )}
             </div>
           </div>
         </div>
       )}
 
+      {/* Reminder Modal */}
       {reminderOpen && reminderStudent && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} onClick={() => setReminderOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Set Reminder</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
               {displayName(reminderStudent)}
@@ -852,7 +1044,7 @@ export default function StudentsPage() {
               style={{ ...input, marginTop: 12 }}
             />
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={() => setReminderOpen(false)} style={btnSecondary}>Cancel</button>
               <button onClick={saveReminder} style={btnPrimary}>Save</button>
             </div>
@@ -866,7 +1058,7 @@ export default function StudentsPage() {
 const page: React.CSSProperties = {
   maxWidth: 1100,
   margin: "20px auto",
-  padding: 12,
+  padding: 16,
   color: "white",
   fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
@@ -874,7 +1066,7 @@ const page: React.CSSProperties = {
 };
 
 const panel: React.CSSProperties = {
-  padding: 14,
+  padding: 16,
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.03)"
@@ -883,89 +1075,137 @@ const panel: React.CSSProperties = {
 const grid2: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 10
+  gap: 12
 };
 
 const label: React.CSSProperties = {
   display: "block",
   fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 6
+  opacity: 0.7,
+  marginBottom: 6,
+  fontWeight: 600,
 };
 
 const input: React.CSSProperties = {
-  padding: "10px 10px",
+  width: "100%",
+  padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white"
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: 14,
+  outline: "none",
+  boxSizing: "border-box",
+};
+
+const inputSmall: React.CSSProperties = {
+  padding: "8px 12px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: 13,
+  outline: "none",
+};
+
+const statCard: React.CSSProperties = {
+  padding: 14,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.03)",
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
+  padding: "9px 14px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid rgba(31,79,255,0.4)",
   background: "#1f4fff",
   color: "white",
   cursor: "pointer",
-  textDecoration: "none"
+  textDecoration: "none",
+  fontSize: 13,
+  fontWeight: 600,
 };
 
 const btnSecondary: React.CSSProperties = {
-  padding: "10px 12px",
+  padding: "9px 14px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 13,
 };
 
 const btnDanger: React.CSSProperties = {
-  padding: "10px 12px",
+  padding: "9px 14px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "#ff3b30",
-  color: "white",
-  cursor: "pointer"
+  border: "1px solid rgba(255,59,48,0.3)",
+  background: "rgba(255,59,48,0.15)",
+  color: "#fca5a5",
+  cursor: "pointer",
+  fontSize: 13,
 };
 
-const linkBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
+const btnDangerSmall: React.CSSProperties = {
+  padding: "5px 10px",
+  borderRadius: 6,
+  border: "1px solid rgba(255,59,48,0.3)",
+  background: "rgba(255,59,48,0.12)",
+  color: "#fca5a5",
+  cursor: "pointer",
+  fontSize: 11,
+  flexShrink: 0,
+};
+
+const btnSmall: React.CSSProperties = {
+  padding: "6px 12px",
+  borderRadius: 8,
+  border: "1px solid rgba(31,79,255,0.3)",
+  background: "rgba(31,79,255,0.15)",
+  color: "#93c5fd",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600,
+};
+
+const linkBtnSmall: React.CSSProperties = {
+  padding: "6px 12px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.05)",
+  color: "rgba(255,255,255,0.7)",
   textDecoration: "none",
   display: "inline-flex",
   alignItems: "center",
-  justifyContent: "center"
+  fontSize: 12,
 };
 
 const cardStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 12,
-  padding: 12,
+  borderRadius: 14,
+  padding: 16,
   background: "rgba(255,255,255,0.03)"
 };
 
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.65)",
+  background: "rgba(0,0,0,0.7)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   zIndex: 9999,
-  padding: 12
+  padding: 16,
 };
 
 const modalCard: React.CSSProperties = {
-  width: 420,
+  width: 440,
   maxWidth: "100%",
-  borderRadius: 14,
-  padding: 14,
+  borderRadius: 16,
+  padding: 20,
   border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33"
+  background: "#0b1b33",
+  maxHeight: "90vh",
+  overflow: "auto",
 };
-
-

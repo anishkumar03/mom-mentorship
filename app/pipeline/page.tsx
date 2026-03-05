@@ -1,7 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { CHANNELS } from "../../lib/constants";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +17,7 @@ type Lead = {
   phone: string | null;
   email: string | null;
   notes: string | null;
+  source: string | null;
   student_id?: string | null;
 
   program: string | null;
@@ -31,6 +33,21 @@ type Lead = {
 
 const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
 const STAGES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
+
+const STAGE_COLORS: Record<string, { header: string; border: string; count: string }> = {
+  "New": { header: "#3b82f6", border: "rgba(59,130,246,0.25)", count: "rgba(59,130,246,0.2)" },
+  "Contacted": { header: "#8b5cf6", border: "rgba(139,92,246,0.25)", count: "rgba(139,92,246,0.2)" },
+  "Nurture": { header: "#f59e0b", border: "rgba(245,158,11,0.25)", count: "rgba(245,158,11,0.2)" },
+  "Follow Up": { header: "#ec4899", border: "rgba(236,72,153,0.25)", count: "rgba(236,72,153,0.2)" },
+  "Confirmed": { header: "#22c55e", border: "rgba(34,197,94,0.25)", count: "rgba(34,197,94,0.2)" },
+  "Lost": { header: "#ef4444", border: "rgba(239,68,68,0.25)", count: "rgba(239,68,68,0.2)" },
+};
+
+const CHANNEL_ICONS: Record<string, string> = {
+  "Instagram": "IG", "Facebook": "FB", "Twitter/X": "X", "WhatsApp": "WA",
+  "TikTok": "TT", "YouTube": "YT", "LinkedIn": "LI", "Referral": "RF",
+  "Website": "WB", "Email": "EM", "Phone Call": "PH", "Walk-in": "WI",
+};
 
 function stageKey(s: any) {
   const v = (s ?? "New").toString().trim().toLowerCase().replace(/\s+/g, "");
@@ -72,6 +89,20 @@ function truncatePreview(text: string, max = 100) {
   const v = text.trim();
   if (v.length <= max) return v;
   return `${v.slice(0, max - 1).trimEnd()}…`;
+}
+
+function timeAgo(dateStr: string) {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = now - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
 }
 
 function pad2(n: number) {
@@ -423,15 +454,15 @@ export default function PipelinePage() {
     const r = buildReminder(l);
     const fileSafe = leadName(l).replace(/[^a-z0-9]+/gi, "_");
     return (
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
         <button
           onClick={() => downloadICS(`MOM_FollowUp_${fileSafe}.ics`, r.ics)}
-          style={btnPrimary}
+          style={btnSmall}
         >
-          Add to Calendar (ICS)
+          Calendar
         </button>
-        <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
-          Google Calendar
+        <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtnSmall}>
+          Google
         </a>
       </div>
     );
@@ -440,63 +471,94 @@ export default function PipelinePage() {
   const card = (l: Lead) => {
     const name = leadName(l);
     const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
-    const isFuture = Number.isFinite(followMs) && followMs > Date.now();
+    const isOverdue = Number.isFinite(followMs) && followMs < Date.now();
+    const src = l.source || "";
+    const channelAbbr = CHANNEL_ICONS[src] || "";
+
     return (
-        <div key={l.id} style={cardStyle}>
-        <div style={{ fontWeight: 700 }}>{name}</div>
-        {l.last_note ? (
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.92 }}>
-            Last note: {truncatePreview(l.last_note, 100)}
-          </div>
-        ) : null}
-        {l.last_contacted_at ? (
-          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85 }}>
-            Last contacted: {new Date(l.last_contacted_at).toLocaleString()}
-          </div>
-        ) : null}
-        <div style={{ fontSize: 12, opacity: 0.85 }}>
-          {l.program ?? "—"} • {stageKey(l.status)}
-        </div>
-        <div style={{ fontSize: 12, opacity: 0.85 }}>
-          {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
+      <div key={l.id} style={{
+        ...cardStyle,
+        borderColor: isOverdue ? "rgba(239,68,68,0.3)" : "rgba(255,255,255,0.08)",
+        background: isOverdue ? "rgba(239,68,68,0.04)" : "rgba(255,255,255,0.03)",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
+          <div style={{ fontWeight: 700, fontSize: 14 }}>{name}</div>
+          {channelAbbr && (
+            <span style={{
+              fontSize: 10, fontWeight: 800, padding: "2px 6px",
+              borderRadius: 999, background: "rgba(255,255,255,0.1)",
+              color: "rgba(255,255,255,0.7)", flexShrink: 0,
+            }}>
+              {channelAbbr}
+            </span>
+          )}
         </div>
 
-        {l.follow_up_at ? (
-          <div style={{ marginTop: 6, fontSize: 12, opacity: 0.9 }}>
-            Follow-up: {new Date(l.follow_up_at).toLocaleString()}
+        {/* Last note */}
+        {l.last_note && (
+          <div style={{
+            marginTop: 6, fontSize: 11, opacity: 0.9,
+            padding: "4px 8px", borderRadius: 6,
+            background: "rgba(255,255,255,0.04)",
+            borderLeft: "2px solid rgba(255,255,255,0.12)",
+          }}>
+            {truncatePreview(l.last_note, 80)}
           </div>
-        ) : null}
-        {l.follow_up_at && !isFuture ? (
-          <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85, color: "#fca5a5" }}>
-            Overdue
+        )}
+
+        {/* Contact info */}
+        {l.last_contacted_at && (
+          <div style={{ marginTop: 4, fontSize: 11, opacity: 0.7 }}>
+            Contacted {timeAgo(l.last_contacted_at)}
           </div>
-        ) : null}
-        {l.notes ? (
+        )}
+        <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>
+          {l.program ?? "—"}
+        </div>
+        <div style={{ fontSize: 11, opacity: 0.65 }}>
+          {l.handle ? `@${l.handle}` : ""}{l.email ? ` | ${l.email}` : ""}{l.phone ? ` | ${l.phone}` : ""}
+        </div>
+
+        {l.follow_up_at && (
+          <div style={{
+            marginTop: 6, fontSize: 11, fontWeight: 600,
+            color: isOverdue ? "#fca5a5" : "#fcd34d",
+          }}>
+            {isOverdue ? "OVERDUE: " : "Follow-up: "}
+            {new Date(l.follow_up_at).toLocaleString()}
+          </div>
+        )}
+
+        {l.notes && !l.last_note && (
           <div
             title={l.notes}
             style={{
-              marginTop: 4,
-              fontSize: 12,
-              opacity: 0.9,
+              marginTop: 4, fontSize: 11, opacity: 0.85,
               display: "-webkit-box",
               WebkitLineClamp: 2,
               WebkitBoxOrient: "vertical",
               overflow: "hidden"
             }}
           >
-            Notes: {l.notes}
+            {l.notes}
           </div>
-        ) : null}
+        )}
+
         {followButtons(l)}
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-          <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
+        {/* Actions */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 10 }}>
+          <button onClick={() => openNote(l)} style={btnSecondary}>Note</button>
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button onClick={() => setStatusOnly(l, "Confirmed")} style={btnSecondary}>Confirmed</button>
+          <button onClick={() => setStatusOnly(l, "Confirmed")} style={{
+            ...btnSecondary,
+            background: "rgba(34,197,94,0.1)", borderColor: "rgba(34,197,94,0.2)",
+          }}>Confirmed</button>
           <button onClick={() => convertToStudent(l)} style={btnSecondary} disabled={!!l.student_id}>
-            {l.student_id ? "Converted" : "Convert to Student"}
+            {l.student_id ? "Converted" : "Student"}
           </button>
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
@@ -507,10 +569,18 @@ export default function PipelinePage() {
 
   return (
     <div style={page}>
-      <h2 style={{ margin: 0 }}>Pipeline</h2>
-      <div style={{ opacity: 0.85, marginTop: 6 }}>
-        Board view only. All leads still live in the Leads master list.
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Pipeline</h2>
+          <div style={{ opacity: 0.6, marginTop: 4, fontSize: 13 }}>
+            Board view. All leads live in the Leads master list.
+          </div>
+        </div>
+        <div style={{ opacity: 0.7, fontSize: 13 }}>
+          {loading ? "Loading..." : `${leads.length} leads`}
+        </div>
       </div>
+
       {debugVisible && (
         <div style={{ ...panel, marginTop: 12, background: "rgba(255,255,255,0.06)" }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Debug</div>
@@ -522,35 +592,57 @@ export default function PipelinePage() {
         </div>
       )}
 
-      <div style={{ ...panel, marginTop: 12, display: "flex", gap: 10, alignItems: "center" }}>
-        <span style={{ opacity: 0.85 }}>Program</span>
+      <div style={{ ...panel, marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <span style={{ opacity: 0.7, fontSize: 13 }}>Program</span>
         <select value={program} onChange={(e) => setProgram(e.target.value)} style={inputSmall}>
           <option value="__ALL__">All</option>
           {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
-        <div style={{ marginLeft: "auto", opacity: 0.85 }}>
-          {loading ? "Loading..." : `${leads.length} leads`}
+        <div style={{ marginLeft: "auto", opacity: 0.6, fontSize: 12 }}>
+          {fetchedUnarchivedCount} total | {leads.length} showing
         </div>
       </div>
 
-      <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
-        Fetched {fetchedUnarchivedCount} leads (unarchived). Showing {leads.length} after filters.
-      </div>
-
       <div style={board}>
-        {STAGES.map((stage) => (
-          <div key={stage} style={col}>
-            <div style={{ fontWeight: 800, marginBottom: 10 }}>{stage}</div>
-            <div style={{ display: "grid", gap: 10 }}>
-              {(byStage[stage] ?? []).map(card)}
+        {STAGES.map((stage) => {
+          const stageColor = STAGE_COLORS[stage];
+          const stageLeads = byStage[stage] ?? [];
+          return (
+            <div key={stage} style={{
+              ...col,
+              borderColor: stageColor.border,
+            }}>
+              {/* Column header */}
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "center",
+                marginBottom: 12, paddingBottom: 10,
+                borderBottom: `2px solid ${stageColor.header}`,
+              }}>
+                <span style={{ fontWeight: 800, fontSize: 13 }}>{stage}</span>
+                <span style={{
+                  padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+                  background: stageColor.count, color: "rgba(255,255,255,0.85)",
+                }}>
+                  {stageLeads.length}
+                </span>
+              </div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {stageLeads.map(card)}
+              </div>
+              {stageLeads.length === 0 && (
+                <div style={{ textAlign: "center", padding: 20, opacity: 0.3, fontSize: 12 }}>
+                  No leads
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
+      {/* Follow-up Modal */}
       {followOpen && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} onClick={() => setFollowOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Set Follow-up</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
               {(followLead?.full_name ?? followLead?.name) ?? ""}
@@ -563,7 +655,7 @@ export default function PipelinePage() {
               style={{ ...input, marginTop: 12 }}
             />
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={() => setFollowOpen(false)} style={btnSecondary}>Cancel</button>
               <button onClick={saveFollow} style={btnPrimary}>Save</button>
             </div>
@@ -571,9 +663,10 @@ export default function PipelinePage() {
         </div>
       )}
 
+      {/* Note Modal */}
       {noteOpen && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} onClick={closeNoteModal}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Add Note</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
               {(noteLead?.full_name ?? noteLead?.name) ?? ""}
@@ -596,7 +689,7 @@ export default function PipelinePage() {
               />
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={closeNoteModal} style={btnSecondary}>Cancel</button>
               <button onClick={saveNote} style={btnPrimary}>Save</button>
             </div>
@@ -608,9 +701,9 @@ export default function PipelinePage() {
 }
 
 const page: React.CSSProperties = {
-  maxWidth: 1200,
+  maxWidth: 1400,
   margin: "20px auto",
-  padding: 12,
+  padding: 16,
   color: "white",
   fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
@@ -618,7 +711,7 @@ const page: React.CSSProperties = {
 };
 
 const panel: React.CSSProperties = {
-  padding: 12,
+  padding: 14,
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.03)"
@@ -626,13 +719,13 @@ const panel: React.CSSProperties = {
 
 const board: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
   gap: 12,
   marginTop: 12
 };
 
 const col: React.CSSProperties = {
-  padding: 10,
+  padding: 12,
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.02)",
@@ -648,75 +741,96 @@ const cardStyle: React.CSSProperties = {
 
 const input: React.CSSProperties = {
   width: "100%",
-  padding: "10px 10px",
+  padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white"
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: 14,
+  outline: "none",
+  boxSizing: "border-box",
 };
 
 const inputSmall: React.CSSProperties = {
-  padding: "8px 10px",
+  padding: "8px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white"
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: 13,
+  outline: "none",
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "9px 10px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
+  padding: "7px 10px",
+  borderRadius: 8,
+  border: "1px solid rgba(31,79,255,0.4)",
   background: "#1f4fff",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 11,
+  fontWeight: 600,
 };
 
 const btnSecondary: React.CSSProperties = {
-  padding: "9px 10px",
-  borderRadius: 10,
+  padding: "7px 10px",
+  borderRadius: 8,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 11,
 };
 
 const btnDanger: React.CSSProperties = {
-  padding: "9px 10px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "#ff3b30",
-  color: "white",
-  cursor: "pointer"
+  padding: "7px 10px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,59,48,0.3)",
+  background: "rgba(255,59,48,0.15)",
+  color: "#fca5a5",
+  cursor: "pointer",
+  fontSize: 11,
 };
 
-const linkBtn: React.CSSProperties = {
-  padding: "9px 10px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
+const btnSmall: React.CSSProperties = {
+  padding: "4px 8px",
+  borderRadius: 6,
+  border: "1px solid rgba(31,79,255,0.3)",
+  background: "rgba(31,79,255,0.15)",
+  color: "#93c5fd",
+  cursor: "pointer",
+  fontSize: 10,
+  fontWeight: 600,
+};
+
+const linkBtnSmall: React.CSSProperties = {
+  padding: "4px 8px",
+  borderRadius: 6,
+  border: "1px solid rgba(255,255,255,0.1)",
+  background: "rgba(255,255,255,0.05)",
+  color: "rgba(255,255,255,0.7)",
   textDecoration: "none",
   display: "inline-flex",
   alignItems: "center",
-  justifyContent: "center"
+  fontSize: 10,
 };
 
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.65)",
+  background: "rgba(0,0,0,0.7)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  zIndex: 9999
+  zIndex: 9999,
+  padding: 16,
 };
 
 const modalCard: React.CSSProperties = {
-  width: 360,
-  borderRadius: 14,
-  padding: 14,
+  width: 400,
+  maxWidth: "100%",
+  borderRadius: 16,
+  padding: 20,
   border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33"
+  background: "#0b1b33",
 };
-
