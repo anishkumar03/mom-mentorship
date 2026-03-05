@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node node_modules/typescript/bin/tsc --noEmit && node scripts/next-build-no-spawn.js",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "backfill:payments": "node scripts/backfill_paid_in_full_payments.js",
+    "seed:roi": "node scripts/seed_roi.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",

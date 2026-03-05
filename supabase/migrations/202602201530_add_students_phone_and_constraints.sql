@@ -2,7 +2,6 @@ alter table public.students
   add column if not exists phone text,
   add column if not exists due_date date,
   add column if not exists reminder_at timestamptz;
-
 do $$
 begin
   if not exists (

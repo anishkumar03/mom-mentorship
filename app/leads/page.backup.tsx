@@ -1,4 +1,7 @@
 ﻿"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/immutability */
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -363,6 +366,7 @@ const [filterProgram, setFilterProgram] = useState("april_group");
     </div>
   );
 }
+
 
 
 

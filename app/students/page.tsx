@@ -1,4 +1,5 @@
 ﻿"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -29,9 +30,9 @@ type Payment = {
   id: string;
   student_id: string;
   amount: number;
-  paid_at: string | null;
-  method: string | null;
-  note: string | null;
+  payment_date: string | null;
+  method?: string | null;
+  note?: string | null;
   created_at: string | null;
 };
 
@@ -166,12 +167,21 @@ function csvEscape(value: string) {
   return `"${safe}"`;
 }
 
+function getMonthRange(now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  next.setHours(0, 0, 0, 0);
+  return { start, next, startISO: start.toISOString(), nextISO: next.toISOString() };
+}
+
 export default function StudentsPage() {
   const router = useRouter();
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
   const [studentColumns, setStudentColumns] = useState<string[]>([]);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -191,6 +201,9 @@ export default function StudentsPage() {
   const [paymentDate, setPaymentDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
+  const [balanceFilter, setBalanceFilter] = useState<string | null>(null);
+  const [paymentsTab, setPaymentsTab] = useState<string | null>(null);
+  const [paymentsRange, setPaymentsRange] = useState<string | null>(null);
 
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
@@ -227,7 +240,6 @@ export default function StudentsPage() {
       const hasIdentity = Boolean(s.full_name || s.name || s.email);
       if (!hasIdentity) return false;
       if (s.email && s.email.endsWith("@placeholder")) return false;
-      if (s.total_fee === 0 && !s.paid_in_full) return false;
       return true;
     });
     setStudents(filtered);
@@ -235,22 +247,36 @@ export default function StudentsPage() {
   };
 
   const fetchPayments = async () => {
-    const paymentsRes = await supabase.from("payments").select("*").order("paid_at", { ascending: false });
+    const paymentsRes = await supabase
+      .from("payments")
+      .select("id,student_id,amount,payment_date,created_at")
+      .order("payment_date", { ascending: false })
+      .order("created_at", { ascending: false });
     if (paymentsRes.error) {
       console.error(paymentsRes.error);
       setPayments([]);
+      setPaymentsError(paymentsRes.error.message);
     } else {
       const rows = (paymentsRes.data ?? []).map((p: any) => ({
         ...p,
         amount: toNumber(p.amount)
       })) as Payment[];
       setPayments(rows);
+      setPaymentsError(null);
     }
   };
 
   useEffect(() => {
     fetchStudents();
     fetchPayments();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sp = new URLSearchParams(window.location.search);
+    setBalanceFilter(sp.get("balance"));
+    setPaymentsTab(sp.get("tab"));
+    setPaymentsRange(sp.get("range"));
   }, []);
 
   const paymentsByStudent = useMemo(() => {
@@ -270,6 +296,33 @@ export default function StudentsPage() {
     }
     return map;
   }, [payments]);
+
+  const visibleStudents = useMemo(() => {
+    let list = students;
+
+    if (balanceFilter === "gt0") {
+      list = list.filter((s) => {
+        const totalPaid = totalsByStudent.get(s.id) ?? 0;
+        const balance = s.total_fee - totalPaid;
+        return balance > 0;
+      });
+    }
+
+    if (paymentsTab === "payments" && paymentsRange === "this_month") {
+      const { start: monthStart, next: monthNext } = getMonthRange(new Date());
+      list = list.filter((s) => {
+        const rows = paymentsByStudent.get(s.id) ?? [];
+        return rows.some((p) => {
+          const iso = p.payment_date ?? p.created_at ?? "";
+          if (!iso) return false;
+          const d = new Date(iso);
+          return !Number.isNaN(d.getTime()) && d >= monthStart && d < monthNext;
+        });
+      });
+    }
+
+    return list;
+  }, [students, balanceFilter, paymentsTab, paymentsRange, paymentsByStudent, totalsByStudent]);
 
   const dueSoon = useMemo(() => {
     const now = new Date();
@@ -322,6 +375,8 @@ export default function StudentsPage() {
   };
 
   const saveStudent = async () => {
+    const current = editingId ? students.find((s) => s.id === editingId) ?? null : null;
+    const wasPaidInFull = Boolean(current?.paid_in_full);
     const payload: any = {
       name: fullName.trim() ? fullName.trim() : null,
       email: email.trim() ? email.trim() : null,
@@ -372,8 +427,39 @@ export default function StudentsPage() {
       return;
     }
 
+    const savedStudent = res.data as Student;
+    const shouldInsertPayment =
+      savedStudent &&
+      paidInFull &&
+      !wasPaidInFull &&
+      Number.isFinite(payload.total_fee) &&
+      payload.total_fee > 0;
+
+    if (shouldInsertPayment) {
+      const amount = Number(payload.total_fee);
+      const existing = await supabase
+        .from("payments")
+        .select("id")
+        .eq("student_id", savedStudent.id)
+        .eq("amount", amount)
+        .limit(1);
+      if (existing.error) {
+        setPaymentsError(existing.error.message);
+      } else if (!existing.data || existing.data.length === 0) {
+        const insertRes = await supabase.from("payments").insert({
+          student_id: savedStudent.id,
+          amount,
+          payment_date: new Date().toISOString()
+        });
+        if (insertRes.error) {
+          setPaymentsError(insertRes.error.message);
+        }
+      }
+    }
+
     resetForm();
     await fetchStudents();
+    await fetchPayments();
     router.refresh();
   };
 
@@ -398,7 +484,7 @@ export default function StudentsPage() {
     const payload = {
       student_id: paymentStudent.id,
       amount,
-      paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
+      payment_date: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
       method: paymentMethod.trim() ? paymentMethod.trim() : null,
       note: paymentNote.trim() ? paymentNote.trim() : null
     };
@@ -428,6 +514,7 @@ export default function StudentsPage() {
   };
 
   const openReminder = (s: Student) => {
+    // eslint-disable-next-line react-hooks/purity
     const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     def.setSeconds(0, 0);
     setReminderStudent(s);
@@ -535,6 +622,12 @@ export default function StudentsPage() {
         <div style={{ ...panel, marginTop: 12, background: "rgba(255,0,0,0.08)" }}>
           <div style={{ fontWeight: 700, marginBottom: 4 }}>Failed to load students</div>
           <div style={{ fontSize: 12, opacity: 0.9 }}>{fetchError}</div>
+        </div>
+      )}
+      {paymentsError && (
+        <div style={{ ...panel, marginTop: 12, background: "rgba(255,159,64,0.12)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Payments warning</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>{paymentsError}</div>
         </div>
       )}
 
@@ -685,13 +778,13 @@ export default function StudentsPage() {
       <div style={{ ...panel, marginTop: 16 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <div style={{ marginLeft: "auto", opacity: 0.85 }}>
-            {loading ? "Loading..." : `${students.length} students`}
+            {loading ? "Loading..." : `${visibleStudents.length} students`}
           </div>
           <button onClick={exportCsv} style={btnSecondary}>Export CSV</button>
         </div>
 
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
-          {students.map((s) => {
+          {visibleStudents.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
             const balance = Math.max(0, s.total_fee - totalPaid);
             const isPaidFull = !!s.paid_in_full;
@@ -818,7 +911,9 @@ export default function StudentsPage() {
                     <div>
                       <div style={{ fontWeight: 700 }}>{money(p.amount)}</div>
                       <div style={{ fontSize: 12, opacity: 0.85 }}>
-                        {p.paid_at ? new Date(p.paid_at).toLocaleString() : "-"}
+                        {p.payment_date || p.created_at
+                          ? new Date(p.payment_date ?? p.created_at ?? "").toLocaleString()
+                          : "-"}
                         {p.method ? ` | ${p.method}` : ""}
                       </div>
                       {p.note ? (
@@ -967,5 +1062,6 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+
 
 

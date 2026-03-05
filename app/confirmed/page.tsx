@@ -1,4 +1,6 @@
 ﻿"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/set-state-in-effect */
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
@@ -63,7 +65,7 @@ export default function ConfirmedPage() {
   const fetchAll = async () => {
     setLoading(true);
 
-    let q = supabase
+    const q = supabase
       .from("leads")
       .select("*")
       .or("archived.is.null,archived.eq.false")
@@ -196,3 +198,4 @@ const btnPrimary: React.CSSProperties = {
   color: "white",
   cursor: "pointer"
 };
+

@@ -1,6 +1,5 @@
 alter table public.leads
   add column if not exists student_id uuid;
-
 do $$
 begin
   if not exists (

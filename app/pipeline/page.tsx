@@ -1,6 +1,8 @@
 ﻿"use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -175,6 +177,7 @@ END:VCALENDAR`;
 }
 
 export default function PipelinePage() {
+  const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [program, setProgram] = useState<string>("__ALL__");
   const [loading, setLoading] = useState(true);
@@ -195,6 +198,13 @@ export default function PipelinePage() {
   const [noteLead, setNoteLead] = useState<Lead | null>(null);
   const [noteText, setNoteText] = useState("");
   const [noteContactedAt, setNoteContactedAt] = useState("");
+  const [contactedHint, setContactedHint] = useState<string | null>(null);
+  const [markingId, setMarkingId] = useState<string | null>(null);
+  const [disableMarkContacted, setDisableMarkContacted] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkStage, setBulkStage] = useState<string>("__NONE__");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -202,6 +212,7 @@ export default function PipelinePage() {
     const { data, error } = await supabase
       .from("leads")
       .select("*")
+      .is("student_id", null)
       .order("created_at", { ascending: false });
 
     if (error) {
@@ -215,11 +226,22 @@ export default function PipelinePage() {
     const rows = Array.isArray(data) ? (data as any) : [];
     const cols = rows.length ? Object.keys(rows[0] ?? {}) : [];
     setLeadColumns(cols);
+    if (cols.length && !cols.includes("last_contacted_at")) {
+      setDisableMarkContacted(true);
+      setContactedHint("Mark contacted needs last_contacted_at column.");
+    } else if (cols.length) {
+      setDisableMarkContacted(false);
+      setContactedHint(null);
+    }
 
     const hasArchived = cols.includes("archived");
-    const base = hasArchived
+    const hasStudentId = cols.includes("student_id");
+    const hasConvertedAt = cols.includes("converted_at");
+    const base = (hasArchived
       ? rows.filter((l: any) => l.archived === false || l.archived == null)
-      : rows;
+      : rows)
+      .filter((l: any) => (hasStudentId ? !l.student_id : true))
+      .filter((l: any) => (hasConvertedAt ? !l.converted_at : true));
     setFetchedUnarchivedCount(base.length);
 
     const hasProgram = cols.includes("program");
@@ -228,12 +250,14 @@ export default function PipelinePage() {
         ? base.filter((l: any) => (l.program ?? "") === program)
         : base;
     setLeads(filtered);
+    setSelectedIds(new Set());
 
     setLoading(false);
   };
 
   useEffect(() => {
     fetchAll();
+    router.refresh();
   }, [program]);
 
   useEffect(() => {
@@ -335,22 +359,66 @@ export default function PipelinePage() {
       return;
     }
 
-    const { error } = await supabase
+    const payload: any = {
+      notes: noteText.trim() ? noteText.trim() : null,
+      last_note: noteText.trim() ? noteText.trim() : null,
+      last_contacted_at: contactedISO
+    };
+
+    if (disableMarkContacted) {
+      delete payload.last_contacted_at;
+    }
+
+    const res = await supabase
       .from("leads")
-      .update({
-        notes: noteText.trim() ? noteText.trim() : null,
-        last_note: noteText.trim() ? noteText.trim() : null,
-        last_contacted_at: contactedISO
-      })
+      .update(payload)
       .eq("id", noteLead.id);
 
-    if (error) {
-      alert(error.message);
+    if (res.error) {
+      alert(res.error.message);
       return;
     }
 
     closeNoteModal();
     fetchAll();
+  };
+
+  const markContacted = async (l: Lead) => {
+    if (disableMarkContacted || markingId) return;
+    setMarkingId(l.id);
+    const payload: any = {
+      status: "Contacted",
+      last_contacted_at: new Date().toISOString()
+    };
+    try {
+      const res = await supabase.from("leads").update(payload).eq("id", l.id);
+      if (res.error) {
+        alert(res.error.message);
+      } else {
+        fetchAll();
+      }
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const undoContacted = async (l: Lead) => {
+    if (disableMarkContacted || markingId) return;
+    setMarkingId(l.id);
+    const payload: any = {
+      status: "New",
+      last_contacted_at: null
+    };
+    try {
+      const res = await supabase.from("leads").update(payload).eq("id", l.id);
+      if (res.error) {
+        alert(res.error.message);
+      } else {
+        fetchAll();
+      }
+    } finally {
+      setMarkingId(null);
+    }
   };
 
   const archiveLead = async (l: Lead) => {
@@ -364,6 +432,7 @@ export default function PipelinePage() {
 
   const convertToStudent = async (l: Lead) => {
     if (l.student_id) return;
+    setConvertError(null);
 
     const email = (l.email ?? "").trim();
     if (email) {
@@ -398,21 +467,90 @@ export default function PipelinePage() {
       .single();
 
     if (inserted.error) {
-      alert(inserted.error.message);
+      setConvertError(inserted.error.message);
       return;
     }
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data?.id ?? null, status: "Confirmed" })
+      .delete()
       .eq("id", l.id);
 
+    if (error) {
+      setConvertError(error.message);
+      return;
+    }
+
+    setLeads((prev) => prev.filter((lead) => lead.id !== l.id));
+    fetchAll();
+    router.refresh();
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(leads.map((l) => l.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedIds(new Set());
+  };
+
+  const bulkUpdate = async (payload: Record<string, any>) => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    const { error } = await supabase
+      .from("leads")
+      .update(payload)
+      .in("id", ids);
     if (error) {
       alert(error.message);
       return;
     }
+    await fetchAll();
+  };
 
-    fetchAll();
+  const bulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    const ok = confirm(`Delete ${ids.length} lead(s)? This cannot be undone.`);
+    if (!ok) return;
+    const { error } = await supabase
+      .from("leads")
+      .delete()
+      .in("id", ids);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    await fetchAll();
+  };
+
+  const runBulkMarkContacted = async () => {
+    const payload: any = { status: "Contacted" };
+    if (leadColumns.includes("last_contacted_at")) {
+      payload.last_contacted_at = new Date().toISOString();
+    }
+    await bulkUpdate(payload);
+  };
+
+  const runBulkArchive = async () => {
+    if (leadColumns.includes("archived")) {
+      await bulkUpdate({ archived: true });
+      return;
+    }
+    await bulkUpdate({ status: "Archived" });
+  };
+
+  const runBulkMoveStage = async (nextStage: string) => {
+    await bulkUpdate({ status: nextStage });
   };
 
   const followButtons = (l: Lead) => {
@@ -441,9 +579,31 @@ export default function PipelinePage() {
     const name = leadName(l);
     const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
     const isFuture = Number.isFinite(followMs) && followMs > Date.now();
+    const stage = stageKey(l.status);
+    const primaryAction =
+      stage === "Confirmed" ? "convert" : stage === "Follow Up" ? "follow" : "confirm";
     return (
-        <div key={l.id} style={cardStyle}>
+        <div
+          key={l.id}
+          style={{
+            ...cardStyle,
+            ...(hoveredId === l.id ? cardHoverStyle : null)
+          }}
+          onMouseEnter={() => setHoveredId(l.id)}
+          onMouseLeave={() => setHoveredId(null)}
+        >
         <div style={{ fontWeight: 700 }}>{name}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+          <input
+            type="checkbox"
+            checked={selectedIds.has(l.id)}
+            onChange={() => toggleSelected(l.id)}
+            style={{ width: 16, height: 16 }}
+          />
+          <div style={{ fontSize: 12, opacity: 0.85 }}>
+            {l.program ?? "—"} • {stageKey(l.status)}
+          </div>
+        </div>
         {l.last_note ? (
           <div style={{ marginTop: 6, fontSize: 12, opacity: 0.92 }}>
             Last note: {truncatePreview(l.last_note, 100)}
@@ -454,9 +614,6 @@ export default function PipelinePage() {
             Last contacted: {new Date(l.last_contacted_at).toLocaleString()}
           </div>
         ) : null}
-        <div style={{ fontSize: 12, opacity: 0.85 }}>
-          {l.program ?? "—"} • {stageKey(l.status)}
-        </div>
         <div style={{ fontSize: 12, opacity: 0.85 }}>
           {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
         </div>
@@ -491,16 +648,56 @@ export default function PipelinePage() {
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
           <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
-          <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
-          <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
-          <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button onClick={() => setStatusOnly(l, "Confirmed")} style={btnSecondary}>Confirmed</button>
-          <button onClick={() => convertToStudent(l)} style={btnSecondary} disabled={!!l.student_id}>
-            {l.student_id ? "Converted" : "Convert to Student"}
+          <button
+            onClick={() => markContacted(l)}
+            style={{
+              ...btnSecondary,
+              opacity: disableMarkContacted || stageKey(l.status) === "Contacted" || markingId === l.id ? 0.6 : 1
+            }}
+            disabled={disableMarkContacted || stageKey(l.status) === "Contacted" || markingId === l.id}
+          >
+            {markingId === l.id ? "Marking..." : "Mark Contacted"}
           </button>
+          <button
+            onClick={() => undoContacted(l)}
+            style={{
+              ...btnSecondary,
+              opacity: disableMarkContacted || stageKey(l.status) !== "Contacted" || markingId === l.id ? 0.5 : 1
+            }}
+            disabled={disableMarkContacted || stageKey(l.status) !== "Contacted" || markingId === l.id}
+            title={stageKey(l.status) !== "Contacted" ? "Only for contacted leads" : undefined}
+          >
+            Undo Contacted
+          </button>
+          <div style={{ width: "100%" }} />
+          <button onClick={() => openFollow(l)} style={primaryAction === "follow" ? btnPrimary : btnSecondary}>Follow</button>
+          <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
+          <button onClick={() => setStatusOnly(l, "Confirmed")} style={primaryAction === "confirm" ? btnPrimary : btnSecondary}>Confirm</button>
+          <button onClick={() => convertToStudent(l)} style={primaryAction === "convert" ? btnPrimary : btnSecondary} disabled={!!l.student_id}>
+            Convert to Student
+          </button>
+          {l.student_id ? (
+            <span
+              style={{
+                padding: "4px 8px",
+                borderRadius: 999,
+                border: "1px solid rgba(46, 204, 113, 0.5)",
+                color: "#b6f2cf",
+                fontSize: 11,
+                fontWeight: 700
+              }}
+            >
+              Converted
+            </span>
+          ) : null}
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
         </div>
+        {disableMarkContacted && contactedHint ? (
+          <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
+            {contactedHint}
+          </div>
+        ) : null}
       </div>
     );
   };
@@ -511,6 +708,12 @@ export default function PipelinePage() {
       <div style={{ opacity: 0.85, marginTop: 6 }}>
         Board view only. All leads still live in the Leads master list.
       </div>
+      {convertError ? (
+        <div style={{ ...panel, marginTop: 12, background: "rgba(255,0,0,0.08)" }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Convert to student failed</div>
+          <div style={{ fontSize: 12, opacity: 0.9 }}>{convertError}</div>
+        </div>
+      ) : null}
       {debugVisible && (
         <div style={{ ...panel, marginTop: 12, background: "rgba(255,255,255,0.06)" }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Debug</div>
@@ -528,10 +731,40 @@ export default function PipelinePage() {
           <option value="__ALL__">All</option>
           {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={selectAllVisible} style={btnSecondarySmall}>Select all</button>
+          <button onClick={clearSelection} style={btnSecondarySmall}>Clear</button>
+        </div>
         <div style={{ marginLeft: "auto", opacity: 0.85 }}>
           {loading ? "Loading..." : `${leads.length} leads`}
         </div>
       </div>
+
+      {selectedIds.size > 0 && (
+        <div style={{ ...panel, marginTop: 12, padding: 10, background: "rgba(255,255,255,0.04)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+            <div style={{ fontWeight: 700 }}>{selectedIds.size} selected</div>
+            <button onClick={runBulkMarkContacted} style={btnSecondarySmall}>Mark contacted</button>
+            <button onClick={() => runBulkMoveStage("Lost")} style={btnDangerSmall}>Move to Lost</button>
+            <button onClick={runBulkArchive} style={btnSecondarySmall}>Archive</button>
+            <button onClick={bulkDelete} style={btnDangerSmall}>Delete</button>
+            <select
+              value={bulkStage}
+              onChange={(e) => {
+                const next = e.target.value;
+                setBulkStage(next);
+                if (next !== "__NONE__") runBulkMoveStage(next);
+              }}
+              style={inputSmall}
+            >
+              <option value="__NONE__">Move to stage…</option>
+              {STAGES.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
 
       <div style={{ marginTop: 8, fontSize: 12, opacity: 0.85 }}>
         Fetched {fetchedUnarchivedCount} leads (unarchived). Showing {leads.length} after filters.
@@ -540,7 +773,10 @@ export default function PipelinePage() {
       <div style={board}>
         {STAGES.map((stage) => (
           <div key={stage} style={col}>
-            <div style={{ fontWeight: 800, marginBottom: 10 }}>{stage}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <div style={{ fontWeight: 800 }}>{stage}</div>
+              <span style={stageCountBadge}>{(byStage[stage] ?? []).length}</span>
+            </div>
             <div style={{ display: "grid", gap: 10 }}>
               {(byStage[stage] ?? []).map(card)}
             </div>
@@ -639,11 +875,27 @@ const col: React.CSSProperties = {
   minHeight: 300
 };
 
+const stageCountBadge: React.CSSProperties = {
+  padding: "2px 8px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  fontSize: 11,
+  fontWeight: 700
+};
+
 const cardStyle: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.08)",
   borderRadius: 12,
   padding: 12,
-  background: "rgba(255,255,255,0.03)"
+  background: "rgba(255,255,255,0.03)",
+  transition: "transform 120ms ease, box-shadow 120ms ease",
+  boxShadow: "0 0 0 rgba(0,0,0,0)"
+};
+
+const cardHoverStyle: React.CSSProperties = {
+  transform: "translateY(-2px)",
+  boxShadow: "0 12px 24px rgba(0,0,0,0.18)"
 };
 
 const input: React.CSSProperties = {
@@ -664,30 +916,49 @@ const inputSmall: React.CSSProperties = {
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "9px 10px",
+  padding: "7px 10px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "#1f4fff",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 12
 };
 
 const btnSecondary: React.CSSProperties = {
-  padding: "9px 10px",
+  padding: "7px 10px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 12
 };
 
 const btnDanger: React.CSSProperties = {
-  padding: "9px 10px",
+  padding: "7px 10px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "#ff3b30",
   color: "white",
-  cursor: "pointer"
+  cursor: "pointer",
+  fontSize: 12
+};
+
+const btnSecondarySmall: React.CSSProperties = {
+  padding: "6px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  cursor: "pointer",
+  fontSize: 11,
+  fontWeight: 600
+};
+
+const btnDangerSmall: React.CSSProperties = {
+  ...btnSecondarySmall,
+  background: "#ff3b30"
 };
 
 const linkBtn: React.CSSProperties = {
@@ -719,4 +990,5 @@ const modalCard: React.CSSProperties = {
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33"
 };
+
 

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bold, Italic, Code, List, ListOrdered, CheckSquare, Calendar } from "lucide-react";
@@ -12,17 +13,38 @@ const supabase = createClient(
 type Trade = {
   id: string;
   created_at: string | null;
-  trade_date: string;
+  trade_date: string | null;
+  firm_id: string | null;
+  account_id: string | null;
   symbol: string | null;
+  direction: string | null;
+  contracts: number | null;
   setup: string | null;
   emotion: string | null;
   entry_price: number | null;
+  exit_price: number | null;
   entry_time: string | null;
   exit_time: string | null;
   pnl: number | null;
   notes: string | null;
   screenshot_url: string | null;
+  screenshot_path: string | null;
   archived: boolean | null;
+};
+
+type Firm = {
+  id: string;
+  name: string;
+  platform: string | null;
+  firm_type: "prop" | "personal";
+};
+
+type Account = {
+  id: string;
+  firm_id: string;
+  name: string;
+  account_size: string | null;
+  account_type: string | null;
 };
 
 const COMMON_SETUPS = ["ICT FVG", "Unicorn", "Breaker", "Liquidity Sweep"] as const;
@@ -117,6 +139,8 @@ function buildMonthDays(monthValue: string) {
 
 export default function JournalPage() {
   const [trades, setTrades] = useState<Trade[]>([]);
+  const [firms, setFirms] = useState<Firm[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
@@ -124,14 +148,26 @@ export default function JournalPage() {
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [symbolFilter, setSymbolFilter] = useState("");
   const [setupFilter, setSetupFilter] = useState("__ALL__");
+  const [firmFilter, setFirmFilter] = useState("all");
+  const [accountFilter, setAccountFilter] = useState("all");
+  const [firmTypeFilter, setFirmTypeFilter] = useState<"all" | "prop" | "personal">("all");
+  const [winLossFilter, setWinLossFilter] = useState<"all" | "win" | "loss">("all");
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tradeDate, setTradeDate] = useState(DEFAULT_TRADE_DATE);
+  const [firmId, setFirmId] = useState("");
+  const [accountId, setAccountId] = useState("");
   const [symbol, setSymbol] = useState("");
+  const [direction, setDirection] = useState<"Long" | "Short">("Long");
+  const [contracts, setContracts] = useState("");
   const [setupValue, setSetupValue] = useState("");
+  const [newSetupValue, setNewSetupValue] = useState("");
+  const [customSetups, setCustomSetups] = useState<string[]>([]);
   const [emotionOption, setEmotionOption] = useState<(typeof EMOTIONS)[number]>("Neutral");
   const [emotionCustom, setEmotionCustom] = useState("");
   const [entryPrice, setEntryPrice] = useState("");
+  const [exitPrice, setExitPrice] = useState("");
   const [entryTime, setEntryTime] = useState("");
   const [exitTime, setExitTime] = useState("");
   const [pnl, setPnl] = useState("");
@@ -139,6 +175,16 @@ export default function JournalPage() {
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [firmModalOpen, setFirmModalOpen] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [newFirmName, setNewFirmName] = useState("");
+  const [newFirmPlatform, setNewFirmPlatform] = useState("");
+  const [newFirmType, setNewFirmType] = useState<"prop" | "personal">("prop");
+  const [newAccountFirmId, setNewAccountFirmId] = useState("");
+  const [newAccountName, setNewAccountName] = useState("");
+  const [newAccountSize, setNewAccountSize] = useState("");
+  const [newAccountType, setNewAccountType] = useState("eval");
+  const [customAccountSizes, setCustomAccountSizes] = useState<string[]>([]);
   const [testPlanHtml, setTestPlanHtml] = useState("");
   const testPlanRef = useRef<HTMLDivElement | null>(null);
 
@@ -146,27 +192,60 @@ export default function JournalPage() {
     setLoading(true);
     setErrorBanner(null);
     const range = monthRange(monthValue);
-    const { data, error } = await supabase
-      .from("trade_journal")
-      .select("*")
-      .gte("trade_date", range.start)
-      .lte("trade_date", range.end)
-      .order("trade_date", { ascending: false })
-      .order("created_at", { ascending: false });
+    const [tradeRes, firmRes, accountRes] = await Promise.all([
+      supabase
+        .from("trade_journal")
+        .select("*")
+        .gte("trade_date", range.start)
+        .lte("trade_date", range.end)
+        .order("trade_date", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("prop_firms")
+        .select("id,name,platform,firm_type")
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("prop_accounts")
+        .select("id,firm_id,name,account_size,account_type")
+        .order("created_at", { ascending: true })
+    ]);
 
-    if (error) {
-      console.error(error);
+    if (tradeRes.error) {
+      console.error(tradeRes.error);
       setTrades([]);
       setErrorBanner(
-        error.message.includes("trade_journal")
+        tradeRes.error.message.includes("trade_journal")
           ? "Trade journal table is unavailable. Run the migration for trade_journal."
-          : error.message
+          : tradeRes.error.message
       );
       setLoading(false);
       return;
     }
+    if (firmRes.error) {
+      setErrorBanner(firmRes.error.message);
+      setLoading(false);
+      return;
+    }
+    if (accountRes.error) {
+      setErrorBanner(accountRes.error.message);
+      setLoading(false);
+      return;
+    }
 
-    setTrades((data ?? []) as Trade[]);
+    setTrades((tradeRes.data ?? []) as Trade[]);
+    setFirms((firmRes.data ?? []) as Firm[]);
+    setAccounts((accountRes.data ?? []) as Account[]);
+
+    if (!firmId && (firmRes.data ?? []).length > 0) {
+      setFirmId((firmRes.data ?? [])[0].id);
+    }
+    if (!newAccountFirmId && (firmRes.data ?? []).length > 0) {
+      setNewAccountFirmId((firmRes.data ?? [])[0].id);
+    }
+    if (!accountId && (accountRes.data ?? []).length > 0) {
+      setAccountId((accountRes.data ?? [])[0].id);
+    }
+
     setLoading(false);
   };
 
@@ -179,6 +258,7 @@ export default function JournalPage() {
       setSelectedDay(null);
     }
   }, [month, selectedDay]);
+
 
   useEffect(() => {
     return () => {
@@ -206,39 +286,107 @@ export default function JournalPage() {
     }
   }, [testPlanHtml]);
 
-  const filteredTrades = useMemo(() => {
+  const setupFilterOptions = useMemo(() => {
+    const values = new Set<string>();
+    COMMON_SETUPS.forEach((s) => values.add(s));
+    customSetups.forEach((s) => values.add(s));
+    trades.forEach((t) => {
+      if (t.setup) values.add(t.setup);
+    });
+    return Array.from(values);
+  }, [trades, customSetups]);
+
+  const setupOptions = useMemo(() => {
+    const values = new Set<string>();
+    COMMON_SETUPS.forEach((s) => values.add(s));
+    customSetups.forEach((s) => values.add(s));
+    trades.forEach((t) => {
+      if (t.setup) values.add(t.setup);
+    });
+    return Array.from(values);
+  }, [trades, customSetups]);
+
+  const accountSizeOptions = useMemo(() => {
+    const values = new Set<string>();
+    customAccountSizes.forEach((s) => values.add(s));
+    accounts.forEach((a) => {
+      if (a.account_size) values.add(a.account_size);
+    });
+    return Array.from(values);
+  }, [accounts, customAccountSizes]);
+
+  const firmById = useMemo(() => {
+    const map = new Map<string, Firm>();
+    firms.forEach((f) => map.set(f.id, f));
+    return map;
+  }, [firms]);
+
+  const accountById = useMemo(() => {
+    const map = new Map<string, Account>();
+    accounts.forEach((a) => map.set(a.id, a));
+    return map;
+  }, [accounts]);
+
+  const accountsForFirm = useMemo(() => {
+    if (!firmId) return accounts;
+    return accounts.filter((a) => a.firm_id === firmId);
+  }, [accounts, firmId]);
+
+  const filterAccounts = useMemo(() => {
+    if (firmFilter === "all") return accounts;
+    return accounts.filter((a) => a.firm_id === firmFilter);
+  }, [accounts, firmFilter]);
+
+  const filteredBase = useMemo(() => {
     return trades.filter((t) => {
-      if (selectedDay && t.trade_date !== selectedDay) return false;
+      if (!t.trade_date) return false;
+      if (firmFilter !== "all" && t.firm_id !== firmFilter) return false;
+      if (accountFilter !== "all" && t.account_id !== accountFilter) return false;
+      if (firmTypeFilter !== "all") {
+        const firm = t.firm_id ? firmById.get(t.firm_id) : null;
+        if (!firm || firm.firm_type !== firmTypeFilter) return false;
+      }
       if (symbolFilter.trim()) {
         const sym = (t.symbol ?? "").toLowerCase();
         if (!sym.includes(symbolFilter.trim().toLowerCase())) return false;
       }
       if (setupFilter !== "__ALL__" && (t.setup ?? "") !== setupFilter) return false;
+      if (winLossFilter !== "all") {
+        const pnlValue = typeof t.pnl === "number" ? t.pnl : 0;
+        if (winLossFilter === "win" && pnlValue <= 0) return false;
+        if (winLossFilter === "loss" && pnlValue >= 0) return false;
+      }
       return true;
     });
-  }, [trades, selectedDay, symbolFilter, setupFilter]);
+  }, [trades, firmFilter, accountFilter, firmTypeFilter, symbolFilter, setupFilter, winLossFilter, firmById]);
 
-  const setupFilterOptions = useMemo(() => {
-    const values = new Set<string>();
-    COMMON_SETUPS.forEach((s) => values.add(s));
-    trades.forEach((t) => {
-      if (t.setup) values.add(t.setup);
-    });
-    return Array.from(values);
-  }, [trades]);
+  const filteredTrades = useMemo(() => {
+    if (!selectedDay) return filteredBase;
+    return filteredBase.filter((t) => t.trade_date === selectedDay);
+  }, [filteredBase, selectedDay]);
 
-  const setupOptions = useMemo(() => {
-    const values = new Set<string>();
-    COMMON_SETUPS.forEach((s) => values.add(s));
-    trades.forEach((t) => {
-      if (t.setup) values.add(t.setup);
-    });
-    return Array.from(values);
-  }, [trades]);
+
+  useEffect(() => {
+    if (!firmId) return;
+    if (accountsForFirm.length === 0) {
+      setAccountId("");
+      return;
+    }
+    if (!accountsForFirm.some((a) => a.id === accountId)) {
+      setAccountId(accountsForFirm[0].id);
+    }
+  }, [firmId, accountsForFirm, accountId]);
+
+  useEffect(() => {
+    if (accountFilter === "all") return;
+    if (!filterAccounts.some((a) => a.id === accountFilter)) {
+      setAccountFilter("all");
+    }
+  }, [filterAccounts, accountFilter]);
 
   const dayStats = useMemo(() => {
     const map = new Map<string, { total: number; count: number; symbols: string[] }>();
-    for (const t of trades) {
+    for (const t of filteredBase) {
       const key = t.trade_date;
       const current = map.get(key) ?? { total: 0, count: 0, symbols: [] };
       const pnlValue = typeof t.pnl === "number" ? t.pnl : 0;
@@ -248,16 +396,39 @@ export default function JournalPage() {
       map.set(key, current);
     }
     return map;
-  }, [trades]);
+  }, [filteredBase]);
+
+  const groupedDays = useMemo(() => {
+    const map = new Map<string, { date: string; trades: Trade[]; total: number }>();
+    for (const t of filteredBase) {
+      const key = t.trade_date;
+      const current = map.get(key) ?? { date: key, trades: [], total: 0 };
+      current.trades.push(t);
+      current.total += typeof t.pnl === "number" ? t.pnl : 0;
+      map.set(key, current);
+    }
+    return Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
+  }, [filteredBase]);
+
+  const resolveScreenshotUrl = (t: Trade) => {
+    if (t.screenshot_url) return t.screenshot_url;
+    if (t.screenshot_path) {
+      return supabase.storage.from("journal_screenshots").getPublicUrl(t.screenshot_path).data.publicUrl;
+    }
+    return null;
+  };
 
   const resetForm = () => {
     setEditingId(null);
     setTradeDate(DEFAULT_TRADE_DATE);
     setSymbol("");
+    setDirection("Long");
+    setContracts("");
     setSetupValue("");
     setEmotionOption("Neutral");
     setEmotionCustom("");
     setEntryPrice("");
+    setExitPrice("");
     setEntryTime("");
     setExitTime("");
     setPnl("");
@@ -279,6 +450,24 @@ export default function JournalPage() {
     }
   };
 
+  const addCustomSetup = () => {
+    const value = newSetupValue.trim();
+    if (!value) return;
+    if (!customSetups.includes(value)) {
+      setCustomSetups((prev) => [...prev, value]);
+    }
+    setSetupValue(value);
+    setNewSetupValue("");
+  };
+
+  const addCustomAccountSize = () => {
+    const value = newAccountSize.trim();
+    if (!value) return;
+    if (!customAccountSizes.includes(value)) {
+      setCustomAccountSizes((prev) => [...prev, value]);
+    }
+  };
+
   const uploadScreenshot = async (file: File, dateValue: string) => {
     const safeName = file.name.replace(/[^a-z0-9.\-_]+/gi, "_");
     const path = `${dateValue}/${Date.now()}_${safeName}`;
@@ -290,10 +479,10 @@ export default function JournalPage() {
       throw new Error(error.message);
     }
     const { data } = supabase.storage.from("journal_screenshots").getPublicUrl(path);
-    return data.publicUrl;
+    return { path, url: data.publicUrl };
   };
 
-  const saveTrade = async () => {
+  const saveTrade = async (keepAnother = false) => {
     setIsSaving(true);
     setErrorBanner(null);
     try {
@@ -308,10 +497,15 @@ export default function JournalPage() {
         emotionOption === "Other" ? (emotionCustom.trim() ? emotionCustom.trim() : null) : emotionOption;
       const payload: any = {
         trade_date: tradeDate,
+        firm_id: firmId || null,
+        account_id: accountId || null,
         symbol: symbol.trim() ? symbol.trim().toUpperCase() : null,
+        direction: direction,
+        contracts: contracts.trim() ? Number(contracts) : null,
         setup: resolvedSetup,
         emotion: resolvedEmotion,
         entry_price: entryPrice.trim() ? Number(entryPrice) : null,
+        exit_price: exitPrice.trim() ? Number(exitPrice) : null,
         entry_time: toISOFromDateAndTime(tradeDate, entryTime),
         exit_time: toISOFromDateAndTime(tradeDate, exitTime),
         pnl: pnl.trim() ? Number(pnl) : null,
@@ -319,12 +513,15 @@ export default function JournalPage() {
       };
 
       if (payload.entry_price !== null && Number.isNaN(payload.entry_price)) payload.entry_price = null;
+      if (payload.exit_price !== null && Number.isNaN(payload.exit_price)) payload.exit_price = null;
+      if (payload.contracts !== null && Number.isNaN(payload.contracts)) payload.contracts = null;
       if (payload.pnl !== null && Number.isNaN(payload.pnl)) payload.pnl = null;
 
       if (screenshotFile) {
         try {
-          const url = await uploadScreenshot(screenshotFile, tradeDate);
-          payload.screenshot_url = url;
+          const uploaded = await uploadScreenshot(screenshotFile, tradeDate);
+          payload.screenshot_path = uploaded.path;
+          payload.screenshot_url = uploaded.url;
         } catch (err: any) {
           setErrorBanner(
             err?.message?.includes("bucket")
@@ -351,17 +548,83 @@ export default function JournalPage() {
         return;
       }
 
-      resetForm();
+      if (keepAnother) {
+        setSymbol("");
+        setSetupValue("");
+        setEntryPrice("");
+        setExitPrice("");
+        setEntryTime("");
+        setExitTime("");
+        setPnl("");
+        setNotes("");
+        setScreenshotFile(null);
+        setScreenshotPreview(null);
+      } else {
+        resetForm();
+      }
       fetchTrades(month);
     } finally {
       setIsSaving(false);
     }
   };
 
+  const saveFirm = async () => {
+    if (!newFirmName.trim()) {
+      setErrorBanner("Firm name is required.");
+      return;
+    }
+    const payload = {
+      name: newFirmName.trim(),
+      platform: newFirmPlatform.trim() ? newFirmPlatform.trim() : null,
+      firm_type: newFirmType
+    };
+    const { error } = await supabase.from("prop_firms").insert(payload);
+    if (error) {
+      setErrorBanner(error.message);
+      return;
+    }
+    setFirmModalOpen(false);
+    setNewFirmName("");
+    setNewFirmPlatform("");
+    setNewFirmType("prop");
+    fetchTrades(month);
+  };
+
+  const saveAccount = async () => {
+    if (!newAccountFirmId) {
+      setErrorBanner("Select a firm for the account.");
+      return;
+    }
+    if (!newAccountName.trim()) {
+      setErrorBanner("Account name is required.");
+      return;
+    }
+    const payload = {
+      firm_id: newAccountFirmId,
+      name: newAccountName.trim(),
+      account_size: newAccountSize.trim() ? newAccountSize.trim() : null,
+      account_type: newAccountType
+    };
+    const { error } = await supabase.from("prop_accounts").insert(payload);
+    if (error) {
+      setErrorBanner(error.message);
+      return;
+    }
+    setAccountModalOpen(false);
+    setNewAccountName("");
+    setNewAccountSize("");
+    setNewAccountType("eval");
+    fetchTrades(month);
+  };
+
   const loadEdit = (t: Trade) => {
     setEditingId(t.id);
     setTradeDate(t.trade_date || DEFAULT_TRADE_DATE);
+    setFirmId(t.firm_id ?? "");
+    setAccountId(t.account_id ?? "");
     setSymbol((t.symbol ?? "") as string);
+    setDirection(t.direction === "Short" ? "Short" : "Long");
+    setContracts(t.contracts !== null && t.contracts !== undefined ? String(t.contracts) : "");
     setSetupValue((t.setup ?? "") as string);
     const hasEmotion = t.emotion && EMOTIONS.includes(t.emotion as any);
     if (hasEmotion) {
@@ -375,6 +638,7 @@ export default function JournalPage() {
       setEmotionCustom("");
     }
     setEntryPrice(t.entry_price !== null && t.entry_price !== undefined ? String(t.entry_price) : "");
+    setExitPrice(t.exit_price !== null && t.exit_price !== undefined ? String(t.exit_price) : "");
     setEntryTime(toTimeInputValue(t.entry_time));
     setExitTime(toTimeInputValue(t.exit_time));
     setPnl(t.pnl !== null && t.pnl !== undefined ? String(t.pnl) : "");
@@ -398,11 +662,17 @@ export default function JournalPage() {
   const exportCsv = () => {
     const rows = trades;
     const headers = [
+      "firm",
+      "account",
+      "firm_type",
       "trade_date",
       "symbol",
+      "direction",
+      "contracts",
       "setup",
       "emotion",
       "entry_price",
+      "exit_price",
       "entry_time",
       "exit_time",
       "pnl",
@@ -411,12 +681,20 @@ export default function JournalPage() {
     ];
     const lines = [headers.join(",")];
     for (const t of rows) {
+      const firm = t.firm_id ? firmById.get(t.firm_id) : null;
+      const account = t.account_id ? accountById.get(t.account_id) : null;
       const values = [
+        firm?.name ?? "",
+        account?.name ?? "",
+        firm?.firm_type ?? "",
         t.trade_date,
         t.symbol ?? "",
+        t.direction ?? "",
+        t.contracts ?? "",
         t.setup ?? "",
         t.emotion ?? "",
         t.entry_price ?? "",
+        t.exit_price ?? "",
         t.entry_time ?? "",
         t.exit_time ?? "",
         t.pnl ?? "",
@@ -516,15 +794,19 @@ export default function JournalPage() {
 
   return (
     <div style={page}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <h2 style={{ margin: 0 }}>Trading Journal</h2>
           <div style={{ opacity: 0.8, marginTop: 4 }}>Log trades, patterns, and emotions to refine your edge.</div>
         </div>
-        <button onClick={exportCsv} style={btnSecondary}>Export CSV</button>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={() => setFirmModalOpen(true)} style={btnSecondary}>Add Firm</button>
+          <button onClick={() => setAccountModalOpen(true)} style={btnSecondary}>Add Account</button>
+          <button onClick={exportCsv} style={btnSecondary}>Export CSV</button>
+        </div>
       </div>
 
-      {errorBanner && (
+            {errorBanner && (
         <div style={errorBannerStyle}>{errorBanner}</div>
       )}
 
@@ -594,6 +876,33 @@ export default function JournalPage() {
           </div>
 
           <div>
+            <label style={label}>Firm</label>
+            <select value={firmId} onChange={(e) => setFirmId(e.target.value)} style={input}>
+              <option value="">Select firm</option>
+              {firms.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}{f.account_size ? ` · ${f.account_size}` : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={label}>Account</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <select value={accountId} onChange={(e) => setAccountId(e.target.value)} style={input}>
+                <option value="">Select account</option>
+                {accountsForFirm.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}{a.account_size ? ` · ${a.account_size}` : ""}
+                  </option>
+                ))}
+              </select>
+              <button onClick={() => setAccountModalOpen(true)} style={btnSecondary}>Add</button>
+            </div>
+          </div>
+
+          <div>
             <label style={label}>Symbol (optional)</label>
             <input value={symbol} onChange={(e) => setSymbol(e.target.value)} style={input} />
           </div>
@@ -612,6 +921,19 @@ export default function JournalPage() {
                 <option key={s} value={s} />
               ))}
             </datalist>
+          </div>
+
+          <div>
+            <label style={label}>Add new setup</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                value={newSetupValue}
+                onChange={(e) => setNewSetupValue(e.target.value)}
+                style={input}
+                placeholder="New setup name"
+              />
+              <button onClick={addCustomSetup} style={btnSecondary}>Add</button>
+            </div>
           </div>
 
           <div>
@@ -643,6 +965,16 @@ export default function JournalPage() {
           </div>
 
           <div>
+            <label style={label}>Exit price</label>
+            <input
+              type="number"
+              value={exitPrice}
+              onChange={(e) => setExitPrice(e.target.value)}
+              style={input}
+            />
+          </div>
+
+          <div>
             <label style={label}>Entry time</label>
             <input
               type="time"
@@ -658,6 +990,24 @@ export default function JournalPage() {
               type="time"
               value={exitTime}
               onChange={(e) => setExitTime(e.target.value)}
+              style={input}
+            />
+          </div>
+
+          <div>
+            <label style={label}>Direction</label>
+            <select value={direction} onChange={(e) => setDirection(e.target.value as "Long" | "Short")} style={input}>
+              <option value="Long">Long</option>
+              <option value="Short">Short</option>
+            </select>
+          </div>
+
+          <div>
+            <label style={label}>Contracts</label>
+            <input
+              type="number"
+              value={contracts}
+              onChange={(e) => setContracts(e.target.value)}
               style={input}
             />
           </div>
@@ -705,9 +1055,14 @@ export default function JournalPage() {
         </div>
 
         <div className="journal-buttons">
-          <button onClick={saveTrade} style={btnPrimary} disabled={isSaving}>
+          <button onClick={() => saveTrade(false)} style={btnPrimary} disabled={isSaving}>
             {isSaving ? "Saving..." : editingId ? "Update Trade" : "Save Trade"}
           </button>
+          {!editingId && (
+            <button onClick={() => saveTrade(true)} style={btnSecondary} disabled={isSaving}>
+              Save and add another
+            </button>
+          )}
           <button onClick={resetForm} style={btnSecondary}>Clear</button>
         </div>
       </div>
@@ -730,6 +1085,45 @@ export default function JournalPage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.85 }}>Firm type</span>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["all", "prop", "personal"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setFirmTypeFilter(t)}
+                  style={{
+                    ...btnSecondary,
+                    padding: "6px 10px",
+                    opacity: firmTypeFilter === t ? 1 : 0.7
+                  }}
+                >
+                  {t === "all" ? "All" : t === "prop" ? "Prop" : "Personal"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.85 }}>Firm</span>
+            <select value={firmFilter} onChange={(e) => setFirmFilter(e.target.value)} style={inputSmall}>
+              <option value="all">All</option>
+              {firms.map((f) => (
+                <option key={f.id} value={f.id}>{f.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.85 }}>Account</span>
+            <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} style={inputSmall}>
+              <option value="all">All</option>
+              {filterAccounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <span style={{ opacity: 0.85 }}>Symbol</span>
             <input
               value={symbolFilter}
@@ -749,9 +1143,162 @@ export default function JournalPage() {
             </select>
           </div>
 
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span style={{ opacity: 0.85 }}>Win/Loss</span>
+            <div style={{ display: "flex", gap: 6 }}>
+              {(["all", "win", "loss"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setWinLossFilter(t)}
+                  style={{
+                    ...btnSecondary,
+                    padding: "6px 10px",
+                    opacity: winLossFilter === t ? 1 : 0.7
+                  }}
+                >
+                  {t === "all" ? "All" : t === "win" ? "Wins" : "Losses"}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div style={{ marginLeft: "auto", opacity: 0.85 }}>
             {loading ? "Loading..." : `No. of trades: ${filteredTrades.length}`}
           </div>
+        </div>
+      </div>
+
+      <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>
+            {selectedDay ? `Trades on ${toDateLabel(selectedDay)}` : "Trades by Day"}
+          </h3>
+          {selectedDay && (
+            <button onClick={() => setSelectedDay(null)} style={btnSecondary}>Clear day filter</button>
+          )}
+        </div>
+
+        <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+          {groupedDays.map((day) => {
+            const isExpanded = expandedDays.has(day.date);
+            return (
+              <div key={day.date} style={card}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 700 }}>{toDateLabel(day.date)}</div>
+                    <div style={{ opacity: 0.7, fontSize: 12 }}>{day.trades.length} trades</div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div
+                      style={{
+                        ...badge,
+                        background: day.total >= 0 ? "rgba(38, 208, 124, 0.18)" : "rgba(255, 99, 99, 0.2)",
+                        color: day.total >= 0 ? "#7CFF7C" : "#FF7A7A"
+                      }}
+                    >
+                      {pnlBadge(day.total)}
+                    </div>
+                    <button
+                      onClick={() => {
+                        setExpandedDays((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(day.date)) next.delete(day.date);
+                          else next.add(day.date);
+                          return next;
+                        });
+                      }}
+                      style={btnSecondary}
+                    >
+                      {isExpanded ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                    {day.trades.map((t) => {
+                      const screenshotUrl = resolveScreenshotUrl(t);
+                      return (
+                        <div key={t.id} style={{ ...card, background: "rgba(255,255,255,0.02)" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ minWidth: 200 }}>
+                              <div style={{ fontWeight: 700 }}>
+                                {(t.symbol ?? "—").toUpperCase()} {t.direction ? `• ${t.direction}` : ""}
+                              </div>
+                              <div style={{ opacity: 0.8, fontSize: 13 }}>
+                                {t.setup ?? "—"} • {t.emotion ?? "—"}
+                              </div>
+                              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                                Entry: {toTimeLabel(t.entry_time)} • Exit: {toTimeLabel(t.exit_time)}
+                              </div>
+                              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                                {t.entry_price != null ? `Entry ${t.entry_price}` : "Entry —"} • {t.exit_price != null ? `Exit ${t.exit_price}` : "Exit —"}
+                              </div>
+                              {t.notes && (
+                                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                                  {truncatePreview(t.notes)}
+                                </div>
+                              )}
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                              <div
+                                style={{
+                                  ...badge,
+                                  background:
+                                    t.pnl === null || Number.isNaN(t.pnl)
+                                      ? "rgba(255,255,255,0.08)"
+                                      : t.pnl >= 0
+                                        ? "rgba(38, 208, 124, 0.18)"
+                                        : "rgba(255, 99, 99, 0.2)",
+                                  color: t.pnl === null || Number.isNaN(t.pnl) ? "white" : t.pnl >= 0 ? "#7CFF7C" : "#FF7A7A"
+                                }}
+                              >
+                                {pnlBadge(t.pnl)}
+                              </div>
+
+                              {screenshotUrl && (
+                                <a href={screenshotUrl} target="_blank" rel="noreferrer">
+                                  <img
+                                    src={screenshotUrl}
+                                    alt="Trade screenshot"
+                                    style={{
+                                      width: 70,
+                                      height: 50,
+                                      objectFit: "cover",
+                                      borderRadius: 6,
+                                      border: "1px solid rgba(255,255,255,0.12)"
+                                    }}
+                                  />
+                                </a>
+                              )}
+
+                              <div style={{ display: "flex", gap: 8 }}>
+                                <button onClick={() => loadEdit(t)} style={btnSecondary}>Edit</button>
+                                <button onClick={() => deleteTrade(t)} style={btnDanger}>Delete</button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {groupedDays.length === 0 && (
+            <div style={{ opacity: 0.8 }}>
+              {selectedDay ? "No trades logged for this day yet." : "No trades logged for this month yet."}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...panel, marginTop: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <h3 style={{ margin: 0 }}>Calendar</h3>
+          <div style={{ opacity: 0.8 }}>{month}</div>
         </div>
 
         <div className="calendar-grid">
@@ -765,18 +1312,20 @@ export default function JournalPage() {
             const stats = dayStats.get(d.key);
             const pnlTotal = stats?.total ?? 0;
             const isSelected = selectedDay === d.key;
-            const isDefaultHighlight = month === "2026-02" && d.day === 25;
             return (
               <button
                 key={d.key}
-                onClick={() => setSelectedDay(d.key)}
+                onClick={() => {
+                  setSelectedDay(d.key);
+                  setExpandedDays((prev) => new Set(prev).add(d.key));
+                }}
                 style={{
                   ...calendarCell,
                   borderColor: isSelected ? "var(--accent)" : "rgba(255,255,255,0.08)",
                   background: isSelected ? "rgba(79, 163, 255, 0.12)" : "rgba(255,255,255,0.03)"
                 }}
               >
-                <div style={{ fontWeight: 700, fontSize: 12, color: isDefaultHighlight ? "#7CFF7C" : "white" }}>
+                <div style={{ fontWeight: 700, fontSize: 12 }}>
                   {d.day}
                 </div>
                 <div
@@ -803,85 +1352,93 @@ export default function JournalPage() {
           })}
         </div>
       </div>
-
-      <div style={{ ...panel, marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>
-            {selectedDay ? `Trades on ${toDateLabel(selectedDay)}` : "Trades for Selected Month"}
-          </h3>
-          {selectedDay && (
-            <button onClick={() => setSelectedDay(null)} style={btnSecondary}>Clear day filter</button>
-          )}
+{firmModalOpen && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Add Firm</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <input
+                style={input}
+                placeholder="Firm name"
+                value={newFirmName}
+                onChange={(e) => setNewFirmName(e.target.value)}
+              />
+              <input
+                style={input}
+                placeholder="Platform (optional)"
+                value={newFirmPlatform}
+                onChange={(e) => setNewFirmPlatform(e.target.value)}
+              />
+              <select
+                style={input}
+                value={newFirmType}
+                onChange={(e) => setNewFirmType(e.target.value as "prop" | "personal")}
+              >
+                <option value="prop">Prop</option>
+                <option value="personal">Personal</option>
+              </select>
+            </div>
+            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setFirmModalOpen(false)} style={btnSecondary}>Cancel</button>
+              <button onClick={saveFirm} style={btnPrimary}>Save</button>
+            </div>
+          </div>
         </div>
+      )}
 
-        <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-          {filteredTrades.map((t) => (
-            <div key={t.id} style={card}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ minWidth: 200 }}>
-                  <div style={{ fontWeight: 700 }}>
-                    {toDateLabel(t.trade_date)}{t.symbol ? ` • ${t.symbol}` : ""}
-                  </div>
-                  <div style={{ opacity: 0.8, fontSize: 13 }}>
-                    {t.setup ?? "—"} • {t.emotion ?? "—"}
-                  </div>
-                  <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                    Entry: {toTimeLabel(t.entry_time)} • Exit: {toTimeLabel(t.exit_time)}
-                  </div>
-                  {t.notes && (
-                    <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                      {truncatePreview(t.notes)}
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                  <div
-                    style={{
-                      ...badge,
-                      background:
-                        t.pnl === null || Number.isNaN(t.pnl)
-                          ? "rgba(255,255,255,0.08)"
-                          : t.pnl >= 0
-                            ? "rgba(38, 208, 124, 0.18)"
-                            : "rgba(255, 99, 99, 0.2)",
-                      color: t.pnl === null || Number.isNaN(t.pnl) ? "white" : t.pnl >= 0 ? "#7CFF7C" : "#FF7A7A"
-                    }}
-                  >
-                    {pnlBadge(t.pnl)}
-                  </div>
-
-                  {t.screenshot_url && (
-                    <a href={t.screenshot_url} target="_blank" rel="noreferrer">
-                      <img
-                        src={t.screenshot_url}
-                        alt="Trade screenshot"
-                        style={{
-                          width: 70,
-                          height: 50,
-                          objectFit: "cover",
-                          borderRadius: 6,
-                          border: "1px solid rgba(255,255,255,0.12)"
-                        }}
-                      />
-                    </a>
-                  )}
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => loadEdit(t)} style={btnSecondary}>Edit</button>
-                    <button onClick={() => deleteTrade(t)} style={btnDanger}>Delete</button>
-                  </div>
-                </div>
+      {accountModalOpen && (
+        <div style={modalOverlay}>
+          <div style={modalCard}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Add Account</div>
+            <div style={{ display: "grid", gap: 10 }}>
+              <select
+                style={input}
+                value={newAccountFirmId}
+                onChange={(e) => setNewAccountFirmId(e.target.value)}
+              >
+                <option value="">Select firm</option>
+                {firms.map((f) => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+              <input
+                style={input}
+                placeholder="Account name"
+                value={newAccountName}
+                onChange={(e) => setNewAccountName(e.target.value)}
+              />
+              <div style={{ display: "flex", gap: 8 }}>
+                <input
+                  style={input}
+                  list="account-size-options"
+                  placeholder="Account size (optional)"
+                  value={newAccountSize}
+                  onChange={(e) => setNewAccountSize(e.target.value)}
+                />
+                <button onClick={addCustomAccountSize} style={btnSecondary}>Add</button>
               </div>
+              <datalist id="account-size-options">
+                {accountSizeOptions.map((s) => (
+                  <option key={s} value={s} />
+                ))}
+              </datalist>
+              <select
+                style={input}
+                value={newAccountType}
+                onChange={(e) => setNewAccountType(e.target.value)}
+              >
+                <option value="eval">Eval</option>
+                <option value="funded">Funded</option>
+                <option value="personal">Personal</option>
+              </select>
             </div>
-          ))}
-          {filteredTrades.length === 0 && (
-            <div style={{ opacity: 0.8 }}>
-              {selectedDay ? "No trades logged for this day yet." : "No trades logged for this month yet."}
+            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setAccountModalOpen(false)} style={btnSecondary}>Cancel</button>
+              <button onClick={saveAccount} style={btnPrimary}>Save</button>
             </div>
-          )}
+          </div>
         </div>
-      </div>
+      )}
 
       <style jsx>{`
         .journal-grid {
@@ -1031,6 +1588,24 @@ const errorBannerStyle: React.CSSProperties = {
   color: "#ffd1d1"
 };
 
+const modalOverlay: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.6)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999
+};
+
+const modalCard: React.CSSProperties = {
+  width: 420,
+  borderRadius: 14,
+  padding: 16,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "#0b1b33"
+};
+
 const calendarCell: React.CSSProperties = {
   padding: 8,
   borderRadius: 10,
@@ -1049,3 +1624,7 @@ const calendarCellEmpty: React.CSSProperties = {
   border: "1px dashed rgba(255,255,255,0.05)",
   background: "rgba(255,255,255,0.02)"
 };
+
+
+
+
