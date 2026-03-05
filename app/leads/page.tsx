@@ -1,10 +1,9 @@
-﻿"use client";
-/* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS } from "../../lib/constants";
+import { PROGRAMS, CHANNELS } from "../../lib/constants";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,6 +36,31 @@ type Lead = {
 
 const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
 const LEAD_SOURCES = ["Instagram", "WhatsApp", "Referral", "YouTube", "Manual"] as const;
+
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  "New": { bg: "rgba(59,130,246,0.15)", text: "#93c5fd" },
+  "Contacted": { bg: "rgba(139,92,246,0.15)", text: "#c4b5fd" },
+  "Nurture": { bg: "rgba(245,158,11,0.15)", text: "#fcd34d" },
+  "Follow Up": { bg: "rgba(236,72,153,0.15)", text: "#f9a8d4" },
+  "Confirmed": { bg: "rgba(34,197,94,0.15)", text: "#86efac" },
+  "Lost": { bg: "rgba(239,68,68,0.15)", text: "#fca5a5" },
+};
+
+const CHANNEL_ICONS: Record<string, string> = {
+  "Instagram": "IG",
+  "Facebook": "FB",
+  "Twitter/X": "X",
+  "WhatsApp": "WA",
+  "TikTok": "TT",
+  "YouTube": "YT",
+  "LinkedIn": "LI",
+  "Referral": "RF",
+  "Website": "WB",
+  "Email": "EM",
+  "Phone Call": "PH",
+  "Walk-in": "WI",
+  "Other": "OT",
+};
 
 function stageKey(s: any) {
   const v = (s ?? "New").toString().trim().toLowerCase().replace(/\s+/g, "");
@@ -216,6 +240,20 @@ END:VCALENDAR`;
   return { title, details, ics, googleUrl, start, end };
 }
 
+function timeAgo(dateStr: string) {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  if (Number.isNaN(then)) return "";
+  const diffMs = now - then;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
 export default function LeadsPage() {
   const router = useRouter();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -226,8 +264,8 @@ export default function LeadsPage() {
 
   const [programFilter, setProgramFilter] = useState<string>("__ALL__");
   const [statusFilter, setStatusFilter] = useState<string>("__ALL__");
-  const [queryStatus, setQueryStatus] = useState<string | null>(null);
-  const [queryFollowup, setQueryFollowup] = useState<string | null>(null);
+  const [sourceFilter, setSourceFilter] = useState<string>("__ALL__");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Form state (Add / Edit)
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -240,6 +278,7 @@ export default function LeadsPage() {
   const [notes, setNotes] = useState("");
   const [program, setProgram] = useState<string>("April Group Mentorship");
   const [status, setStatus] = useState<string>("New");
+  const [formOpen, setFormOpen] = useState(false);
 
   // Follow-up modal
   const [followOpen, setFollowOpen] = useState(false);
@@ -337,33 +376,21 @@ export default function LeadsPage() {
   const filtered = useMemo(() => {
     const hasProgram = leadColumns.includes("program");
     const hasStatus = leadColumns.includes("status");
+    const hasSource = leadColumns.includes("source");
     return leads.filter((l) => {
       if (hasProgram && programFilter !== "__ALL__" && (l.program ?? "") !== programFilter) return false;
       if (hasStatus && statusFilter !== "__ALL__" && stageKey(l.status) !== statusFilter) return false;
-      if (queryStatus === "active") {
-        const stage = stageKey(l.status);
-        if (stage === "Lost" || stage === "Confirmed") return false;
-      }
-      if (queryFollowup === "today") {
-        if (!l.follow_up_at) return false;
-        const now = new Date();
-        const start = new Date(now);
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(now);
-        end.setHours(23, 59, 59, 999);
-        const t = new Date(l.follow_up_at);
-        if (Number.isNaN(t.getTime()) || t < start || t > end) return false;
-        if (stageKey(l.status) === "Lost") return false;
-      }
-      if (queryFollowup === "overdue") {
-        if (!l.follow_up_at) return false;
-        const t = new Date(l.follow_up_at);
-        if (Number.isNaN(t.getTime()) || t >= new Date()) return false;
-        if (stageKey(l.status) === "Lost") return false;
+      if (hasSource && sourceFilter !== "__ALL__" && (l.source ?? "") !== sourceFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const searchable = [
+          l.full_name, l.name, l.email, l.handle, l.phone, l.notes, l.source
+        ].filter(Boolean).join(" ").toLowerCase();
+        if (!searchable.includes(q)) return false;
       }
       return true;
     });
-  }, [leads, programFilter, statusFilter, leadColumns, queryStatus, queryFollowup]);
+  }, [leads, programFilter, statusFilter, sourceFilter, searchQuery, leadColumns]);
 
   const upcomingFollowUps = useMemo(() => {
     const now = new Date();
@@ -384,6 +411,15 @@ export default function LeadsPage() {
       })
       .sort((a, b) => new Date(a.follow_up_at as string).getTime() - new Date(b.follow_up_at as string).getTime());
   }, [leads, leadColumns]);
+
+  const sourceStats = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const l of leads) {
+      const src = l.source || "Unknown";
+      map[src] = (map[src] ?? 0) + 1;
+    }
+    return map;
+  }, [leads]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -409,6 +445,7 @@ export default function LeadsPage() {
     setNotes(l.notes ?? "");
     setProgram(l.program ?? "April Group Mentorship");
     setStatus(stageKey(l.status));
+    setFormOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -458,6 +495,7 @@ export default function LeadsPage() {
     }
 
     resetForm();
+    setFormOpen(false);
     fetchAll();
   };
 
@@ -697,6 +735,58 @@ export default function LeadsPage() {
     router.refresh();
   };
 
+  const StatusBadge = ({ status }: { status: string }) => {
+    const stage = stageKey(status);
+    const colors = STATUS_COLORS[stage] ?? STATUS_COLORS["New"];
+    return (
+      <span style={{
+        display: "inline-block",
+        padding: "3px 10px",
+        borderRadius: 999,
+        background: colors.bg,
+        color: colors.text,
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: "0.02em",
+      }}>
+        {stage}
+      </span>
+    );
+  };
+
+  const ChannelBadge = ({ source }: { source: string | null }) => {
+    const src = source || "Other";
+    const abbr = CHANNEL_ICONS[src] || src.slice(0, 2).toUpperCase();
+    return (
+      <span style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 4,
+        padding: "3px 8px",
+        borderRadius: 999,
+        background: "rgba(255,255,255,0.08)",
+        color: "rgba(255,255,255,0.75)",
+        fontSize: 11,
+        fontWeight: 600,
+      }}>
+        <span style={{
+          width: 18,
+          height: 18,
+          borderRadius: 999,
+          background: "rgba(255,255,255,0.12)",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          fontSize: 9,
+          fontWeight: 800,
+        }}>
+          {abbr}
+        </span>
+        {src}
+      </span>
+    );
+  };
+
   const followButtons = (l: Lead) => {
     const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
     const isFuture = Number.isFinite(followMs) && followMs > Date.now();
@@ -707,12 +797,12 @@ export default function LeadsPage() {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
         <button
           onClick={() => downloadICS(`MOM_FollowUp_${fileSafe}.ics`, r.ics)}
-          style={btnPrimary}
+          style={btnSmall}
         >
-          Add to Calendar (ICS)
+          Add to Calendar
         </button>
-        <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
-          Google Calendar
+        <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtnSmall}>
+          Google Cal
         </a>
       </div>
     );
@@ -789,126 +879,68 @@ export default function LeadsPage() {
 
   const card = (l: Lead) => {
     const name = leadName(l);
-    const contactedLabel = daysAgoLabel(l.last_contacted_at ?? l.created_at ?? null);
-    const badge = followUpBadge(l.follow_up_at);
-    const stage = stageKey(l.status);
-    const primaryAction =
-      stage === "Confirmed" ? "convert" : stage === "Follow Up" ? "follow" : "confirm";
+    const isOverdue = l.follow_up_at && new Date(l.follow_up_at).getTime() < Date.now();
     return (
-      <div
-        key={l.id}
-        style={{
-          ...cardStyle,
-          ...(hoveredId === l.id ? cardHoverStyle : null)
-        }}
-        onMouseEnter={() => setHoveredId(l.id)}
-        onMouseLeave={() => setHoveredId(null)}
-      >
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={selectedIds.has(l.id)}
-                onChange={() => toggleSelected(l.id)}
-                style={{ width: 16, height: 16 }}
-              />
-              <div style={{ fontWeight: 700 }}>{name}</div>
+      <div key={l.id} style={{
+        border: isOverdue ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(255,255,255,0.08)",
+        borderRadius: 14,
+        padding: 16,
+        background: isOverdue ? "rgba(239,68,68,0.04)" : "rgba(255,255,255,0.03)",
+        transition: "border-color 0.2s",
+      }}>
+        {/* Header row */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontWeight: 700, fontSize: 15 }}>{name}</span>
+              <StatusBadge status={l.status ?? "New"} />
+              <ChannelBadge source={l.source} />
             </div>
-            <div style={{ opacity: 0.8, fontSize: 13 }}>
-              {l.program ?? "—"} • {stageKey(l.status)}
+
+            {/* Contact info row */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, fontSize: 13, opacity: 0.8 }}>
+              {l.program && (
+                <span>{l.program}</span>
+              )}
+              {l.handle && (
+                <span>@{l.handle}</span>
+              )}
+              {l.email && (
+                <span>{l.email}</span>
+              )}
+              {l.phone && (
+                <span>{l.phone}</span>
+              )}
             </div>
-            {l.last_note ? (
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.95 }}>
-                Last note: {truncatePreview(l.last_note, 100)}
+
+            {/* Notes & timestamps */}
+            {l.last_note && (
+              <div style={{
+                marginTop: 8, fontSize: 12, opacity: 0.9,
+                padding: "6px 10px", borderRadius: 8,
+                background: "rgba(255,255,255,0.04)",
+                borderLeft: "3px solid rgba(255,255,255,0.15)"
+              }}>
+                {truncatePreview(l.last_note, 120)}
               </div>
-            ) : null}
-            <div style={{ marginTop: 4, fontSize: 12, opacity: 0.85 }}>{contactedLabel}</div>
-            <div style={{ opacity: 0.8, fontSize: 13 }}>
-              {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
-            </div>
-            {l.follow_up_at ? (
-              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                Follow-up: {new Date(l.follow_up_at).toLocaleString()}
-              </div>
-            ) : null}
-            {badge ? (
-              <div style={{ marginTop: 6 }}>
-                <span style={{ ...followBadgeBase, ...followBadgeTone(badge.tone) }}>
-                  {badge.label}
+            )}
+
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+              {l.last_contacted_at && (
+                <span>Contacted {timeAgo(l.last_contacted_at)}</span>
+              )}
+              {l.follow_up_at && (
+                <span style={{ color: isOverdue ? "#fca5a5" : "#fcd34d" }}>
+                  {isOverdue ? "Overdue: " : "Follow-up: "}
+                  {new Date(l.follow_up_at).toLocaleString()}
                 </span>
-              </div>
-            ) : null}
+              )}
+              {l.created_at && (
+                <span>Added {timeAgo(l.created_at)}</span>
+              )}
+            </div>
 
             {followButtons(l)}
-          </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end" }}>
-            <button onClick={() => loadEdit(l)} style={btnSecondary}>Edit</button>
-            <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
-            <button
-              onClick={() => markContacted(l)}
-              style={{
-                ...btnSecondary,
-                opacity: disableMarkContacted || stageKey(l.status) === "Contacted" || markingId === l.id ? 0.6 : 1
-              }}
-              disabled={disableMarkContacted || stageKey(l.status) === "Contacted" || markingId === l.id}
-            >
-              {markingId === l.id ? "Marking..." : "Mark Contacted"}
-            </button>
-            <button
-              onClick={() => undoContacted(l)}
-              style={{
-                ...btnSecondary,
-                opacity: disableMarkContacted || stageKey(l.status) !== "Contacted" || markingId === l.id ? 0.5 : 1
-              }}
-              disabled={disableMarkContacted || stageKey(l.status) !== "Contacted" || markingId === l.id}
-              title={stageKey(l.status) !== "Contacted" ? "Only for contacted leads" : undefined}
-            >
-              Undo Contacted
-            </button>
-            <div style={{ width: "100%" }} />
-            <button
-              onClick={() => openFollow(l)}
-              style={primaryAction === "follow" ? btnPrimary : btnSecondary}
-            >
-              Follow
-            </button>
-            <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-            <button
-              onClick={() => setStatusOnly(l, "Confirmed")}
-              style={primaryAction === "confirm" ? btnPrimary : btnSecondary}
-            >
-              Confirm
-            </button>
-            {stageKey(l.status) === "Confirmed" && (
-              <>
-                <button
-                  onClick={() => convertToStudent(l)}
-                  style={primaryAction === "convert" ? btnPrimary : btnSecondary}
-                  disabled={!!l.student_id}
-                >
-                  Convert to Student
-                </button>
-                {l.student_id ? (
-                  <span
-                    style={{
-                      padding: "4px 8px",
-                      borderRadius: 999,
-                      border: "1px solid rgba(46, 204, 113, 0.5)",
-                      color: "#b6f2cf",
-                      fontSize: 11,
-                      fontWeight: 700
-                    }}
-                  >
-                    Converted
-                  </span>
-                ) : null}
-              </>
-            )}
-            <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
-            <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
-            <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>
           </div>
         </div>
         {disableMarkContacted && contactedHint ? (
@@ -917,33 +949,70 @@ export default function LeadsPage() {
           </div>
         ) : null}
 
-        {l.notes ? (
-          <div style={{ marginTop: 8, fontSize: 13, opacity: 0.9 }}>
+        {/* Action buttons */}
+        <div style={{
+          display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12,
+          paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)"
+        }}>
+          <button onClick={() => loadEdit(l)} style={btnSecondary}>Edit</button>
+          <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
+          <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
+          <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
+          <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
+          <button onClick={() => setStatusOnly(l, "Confirmed")} style={{
+            ...btnSecondary,
+            background: "rgba(34,197,94,0.12)",
+            borderColor: "rgba(34,197,94,0.25)",
+          }}>Confirmed</button>
+          {stageKey(l.status) === "Confirmed" && (
+            <button
+              onClick={() => convertToStudent(l)}
+              style={{
+                ...btnSecondary,
+                background: "rgba(34,197,94,0.15)",
+                borderColor: "rgba(34,197,94,0.3)",
+              }}
+              disabled={!!l.student_id}
+            >
+              {l.student_id ? "Converted" : "Convert to Student"}
+            </button>
+          )}
+          <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
+          <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
+          <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>
+        </div>
+
+        {l.notes && !l.last_note && (
+          <div style={{ marginTop: 8, fontSize: 13, opacity: 0.85 }}>
             {l.notes}
           </div>
-        ) : null}
+        )}
       </div>
     );
   };
 
   return (
     <div style={page}>
-      <h2 style={{ margin: 0 }}>Leads (Master List)</h2>
-      <div style={{ opacity: 0.85, marginTop: 6 }}>
-        Add follow-up dates, then tap Add to Calendar to get phone notifications.
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+        <div>
+          <h2 style={{ margin: 0 }}>Leads</h2>
+          <div style={{ opacity: 0.7, marginTop: 4, fontSize: 13 }}>
+            Add follow-up dates, then tap Add to Calendar to get phone notifications.
+          </div>
+        </div>
+        <button
+          onClick={() => { resetForm(); setFormOpen(!formOpen); }}
+          style={{
+            ...btnPrimary,
+            padding: "10px 20px",
+            fontSize: 14,
+            fontWeight: 700,
+          }}
+        >
+          {formOpen ? "Close Form" : "+ Add Lead"}
+        </button>
       </div>
-      {convertError ? (
-        <div style={{ ...panel, marginTop: 12, background: "rgba(255,0,0,0.08)" }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Convert to student failed</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>{convertError}</div>
-        </div>
-      ) : null}
-      {convertSuccess ? (
-        <div style={{ ...panel, marginTop: 12, background: "rgba(46, 204, 113, 0.12)" }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Convert to student</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>{convertSuccess}</div>
-        </div>
-      ) : null}
+
       {debugVisible && (
         <div style={{ ...panel, marginTop: 12, background: "rgba(255,255,255,0.06)" }}>
           <div style={{ fontWeight: 700, marginBottom: 6 }}>Debug</div>
@@ -955,16 +1024,44 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {/* Upcoming Follow Ups */}
-      <div style={{ ...panel, marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>Upcoming Follow-ups (next 14 days)</h3>
-          <div style={{ opacity: 0.85 }}>{upcomingFollowUps.length} reminders</div>
+      {/* Channel stats bar */}
+      {Object.keys(sourceStats).length > 0 && (
+        <div style={{ ...panel, marginTop: 12 }}>
+          <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 8 }}>Leads by Channel</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {Object.entries(sourceStats).sort((a, b) => b[1] - a[1]).map(([src, count]) => (
+              <button
+                key={src}
+                onClick={() => setSourceFilter(sourceFilter === src ? "__ALL__" : src)}
+                style={{
+                  ...btnSecondary,
+                  padding: "6px 12px",
+                  fontSize: 12,
+                  background: sourceFilter === src ? "rgba(79,163,255,0.2)" : "rgba(255,255,255,0.06)",
+                  borderColor: sourceFilter === src ? "rgba(79,163,255,0.4)" : "rgba(255,255,255,0.12)",
+                }}
+              >
+                {CHANNEL_ICONS[src] ? `${CHANNEL_ICONS[src]} ` : ""}{src} ({count})
+              </button>
+            ))}
+          </div>
         </div>
+      )}
 
-        {upcomingFollowUps.length === 0 ? (
-          <div style={{ marginTop: 10, opacity: 0.85 }}>No follow-ups scheduled in the next 14 days.</div>
-        ) : (
+      {/* Upcoming Follow Ups */}
+      {upcomingFollowUps.length > 0 && (
+        <div style={{ ...panel, marginTop: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Upcoming Follow-ups</h3>
+            <span style={{
+              padding: "4px 10px", borderRadius: 999,
+              background: "rgba(236,72,153,0.15)", color: "#f9a8d4",
+              fontSize: 12, fontWeight: 700,
+            }}>
+              {upcomingFollowUps.length} in next 14 days
+            </span>
+          </div>
+
           <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
             {upcomingFollowUps.map((l) => {
               const name = leadName(l);
@@ -972,31 +1069,31 @@ export default function LeadsPage() {
               const fileSafe = name.replace(/[^a-z0-9]+/gi, "_");
               return (
                 <div key={l.id} style={{
-                  border: "1px solid rgba(255,255,255,0.08)",
+                  border: "1px solid rgba(236,72,153,0.15)",
                   borderRadius: 12,
-                  padding: 12,
-                  background: "rgba(255,255,255,0.03)"
+                  padding: 14,
+                  background: "rgba(236,72,153,0.04)"
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                     <div>
-                      <div style={{ fontWeight: 800 }}>{name}</div>
+                      <div style={{ fontWeight: 700 }}>{name}</div>
                       <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {l.program ?? "—"} • {new Date(l.follow_up_at as string).toLocaleString()}
+                        {l.program ?? "—"} | {new Date(l.follow_up_at as string).toLocaleString()}
                       </div>
-                      <div style={{ opacity: 0.85, fontSize: 13 }}>
-                        {l.handle ? `@${l.handle}` : ""}{l.email ? ` • ${l.email}` : ""}{l.phone ? ` • ${l.phone}` : ""}
+                      <div style={{ opacity: 0.75, fontSize: 12 }}>
+                        {l.handle ? `@${l.handle}` : ""}{l.email ? ` | ${l.email}` : ""}{l.phone ? ` | ${l.phone}` : ""}
                       </div>
                     </div>
 
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                       <button
                         onClick={() => downloadICS(`MOM_FollowUp_${fileSafe}.ics`, r.ics)}
-                        style={btnPrimary}
+                        style={btnSmall}
                       >
-                        Add to Calendar (ICS)
+                        Add to Calendar
                       </button>
-                      <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtn}>
-                        Google Calendar
+                      <a href={r.googleUrl} target="_blank" rel="noreferrer" style={linkBtnSmall}>
+                        Google Cal
                       </a>
                       <button onClick={() => loadEdit(l)} style={btnSecondary}>Edit</button>
                       <button onClick={() => openFollow(l)} style={btnSecondary}>Change date</button>
@@ -1006,97 +1103,123 @@ export default function LeadsPage() {
               );
             })}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
-      <div style={{ ...panel, marginTop: 16 }}>
-        <h3 style={{ marginTop: 0 }}>{editingId ? "Edit Lead" : "Add Lead"}</h3>
+      {/* Add/Edit Form */}
+      {formOpen && (
+        <div style={{ ...panel, marginTop: 12 }}>
+          <h3 style={{ marginTop: 0, fontSize: 15 }}>{editingId ? "Edit Lead" : "Add Lead"}</h3>
 
-        <div style={grid2}>
-          <div>
-            <label style={label}>Full name</label>
-            <input value={fullName} onChange={(e) => setFullName(e.target.value)} style={input} />
+          <div style={grid2}>
+            <div>
+              <label style={label}>Full name *</label>
+              <input
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Enter full name"
+                style={input}
+              />
+            </div>
+
+            <div>
+              <label style={label}>Program</label>
+              <select value={program} onChange={(e) => setProgram(e.target.value)} style={input}>
+                {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={label}>Channel / Source</label>
+              <select value={source} onChange={(e) => setSource(e.target.value)} style={input}>
+                {CHANNELS.map((ch) => <option key={ch} value={ch}>{ch}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={label}>Status</label>
+              <select value={status} onChange={(e) => setStatus(e.target.value)} style={input}>
+                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+            </div>
+
+            <div>
+              <label style={label}>Handle (without @)</label>
+              <input
+                value={handle}
+                onChange={(e) => setHandle(e.target.value)}
+                placeholder="username"
+                style={input}
+              />
+            </div>
+
+            <div>
+              <label style={label}>Phone</label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+1 (555) 000-0000"
+                style={input}
+              />
+            </div>
+
+            <div>
+              <label style={label}>Email</label>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="email@example.com"
+                style={input}
+              />
+            </div>
+
+            <div>
+              <label style={label}>Notes</label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Additional notes..."
+                style={{ ...input, minHeight: 60, resize: "vertical" }}
+              />
+            </div>
           </div>
 
-          <div>
-            <label style={label}>Program</label>
-            <select value={program} onChange={(e) => setProgram(e.target.value)} style={input}>
-              {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label style={label}>Source</label>
-            <select
-              value={leadSource}
-              onChange={(e) => {
-                setLeadSource(e.target.value);
-                setSource(e.target.value);
-              }}
-              style={input}
-            >
-              {LEAD_SOURCES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label style={label}>Status</label>
-            <select value={status} onChange={(e) => setStatus(e.target.value)} style={input}>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label style={label}>Instagram handle (without @)</label>
-            <input value={handle} onChange={(e) => setHandle(e.target.value)} style={input} />
-          </div>
-
-          <div>
-            <label style={label}>Phone</label>
-            <input value={phone} onChange={(e) => setPhone(e.target.value)} style={input} />
-          </div>
-
-          <div>
-            <label style={label}>Email</label>
-            <input value={email} onChange={(e) => setEmail(e.target.value)} style={input} />
-          </div>
-
-          <div>
-            <label style={label}>Notes</label>
-            <input value={notes} onChange={(e) => setNotes(e.target.value)} style={input} />
+          <div style={{ display: "flex", gap: 10, marginTop: 14 }}>
+            <button onClick={saveLead} style={{ ...btnPrimary, padding: "12px 24px", fontWeight: 700 }}>
+              {editingId ? "Update Lead" : "Add Lead"}
+            </button>
+            <button onClick={() => { resetForm(); setFormOpen(false); }} style={btnSecondary}>Cancel</button>
           </div>
         </div>
+      )}
 
-        <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
-          <button onClick={saveLead} style={btnPrimary}>{editingId ? "Update Lead" : "Add Lead"}</button>
-          <button onClick={resetForm} style={btnSecondary}>Clear</button>
-        </div>
-      </div>
-
-      <div style={{ ...panel, marginTop: 16 }}>
+      {/* Filters & list */}
+      <div style={{ ...panel, marginTop: 12 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={selectAllVisible} style={btnSecondarySmall}>Select all</button>
-            <button onClick={clearSelection} style={btnSecondarySmall}>Clear</button>
-          </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Program</span>
-            <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={inputSmall}>
-              <option value="__ALL__">All</option>
-              {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search leads..."
+            style={{ ...inputSmall, minWidth: 180, flex: "1 1 180px" }}
+          />
 
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Status</span>
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputSmall}>
-              <option value="__ALL__">All</option>
-              {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
+          <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={inputSmall}>
+            <option value="__ALL__">All Programs</option>
+            {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
 
-          <div style={{ marginLeft: "auto", opacity: 0.85 }}>
-            {loading ? "Loading..." : `${filtered.length} leads`}
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputSmall}>
+            <option value="__ALL__">All Statuses</option>
+            {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+
+          <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} style={inputSmall}>
+            <option value="__ALL__">All Channels</option>
+            {CHANNELS.map((ch) => <option key={ch} value={ch}>{ch}</option>)}
+          </select>
+
+          <div style={{ marginLeft: "auto", opacity: 0.7, fontSize: 13 }}>
+            {loading ? "Loading..." : `${filtered.length} of ${leads.length} leads`}
           </div>
         </div>
         {selectedIds.size > 0 && (
@@ -1128,11 +1251,18 @@ export default function LeadsPage() {
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
           {filtered.map(card)}
         </div>
+
+        {!loading && filtered.length === 0 && (
+          <div style={{ textAlign: "center", padding: 40, opacity: 0.5 }}>
+            No leads found. {leads.length > 0 ? "Try adjusting your filters." : "Add your first lead!"}
+          </div>
+        )}
       </div>
 
+      {/* Follow-up Modal */}
       {followOpen && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} onClick={() => setFollowOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Set Follow-up</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
               {(followLead?.full_name ?? followLead?.name) ?? ""}
@@ -1145,7 +1275,7 @@ export default function LeadsPage() {
               style={{ ...input, marginTop: 12 }}
             />
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={() => setFollowOpen(false)} style={btnSecondary}>Cancel</button>
               <button onClick={saveFollow} style={btnPrimary}>Save</button>
             </div>
@@ -1153,9 +1283,10 @@ export default function LeadsPage() {
         </div>
       )}
 
+      {/* Note Modal */}
       {noteOpen && (
-        <div style={modalOverlay}>
-          <div style={modalCard}>
+        <div style={modalOverlay} onClick={closeNoteModal}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
             <div style={{ fontWeight: 700, fontSize: 16 }}>Add Note</div>
             <div style={{ opacity: 0.85, marginTop: 6 }}>
               {(noteLead?.full_name ?? noteLead?.name) ?? ""}
@@ -1178,7 +1309,7 @@ export default function LeadsPage() {
               />
             </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 12, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={closeNoteModal} style={btnSecondary}>Cancel</button>
               <button onClick={saveNote} style={btnPrimary}>Save</button>
             </div>
@@ -1192,7 +1323,7 @@ export default function LeadsPage() {
 const page: React.CSSProperties = {
   maxWidth: 1100,
   margin: "20px auto",
-  padding: 12,
+  padding: 16,
   color: "white",
   fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
   background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
@@ -1200,7 +1331,7 @@ const page: React.CSSProperties = {
 };
 
 const panel: React.CSSProperties = {
-  padding: 14,
+  padding: 16,
   borderRadius: 14,
   border: "1px solid rgba(255,255,255,0.08)",
   background: "rgba(255,255,255,0.03)"
@@ -1253,109 +1384,111 @@ function followBadgeTone(tone: "overdue" | "today" | "future"): React.CSSPropert
 const grid2: React.CSSProperties = {
   display: "grid",
   gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 10
+  gap: 12
 };
 
 const label: React.CSSProperties = {
   display: "block",
   fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 6
+  opacity: 0.7,
+  marginBottom: 6,
+  fontWeight: 600,
 };
 
 const input: React.CSSProperties = {
-  padding: "10px 10px",
+  width: "100%",
+  padding: "10px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white"
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: 14,
+  outline: "none",
+  boxSizing: "border-box",
 };
 
 const inputSmall: React.CSSProperties = {
-  padding: "8px 10px",
+  padding: "8px 12px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white"
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: 13,
+  outline: "none",
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "7px 10px",
+  padding: "9px 14px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
+  border: "1px solid rgba(31,79,255,0.4)",
   background: "#1f4fff",
   color: "white",
   cursor: "pointer",
   textDecoration: "none",
-  fontSize: 12
+  fontSize: 13,
+  fontWeight: 600,
 };
 
 const btnSecondary: React.CSSProperties = {
-  padding: "7px 10px",
+  padding: "9px 14px",
   borderRadius: 10,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.06)",
   color: "white",
   cursor: "pointer",
-  fontSize: 12
+  fontSize: 13,
 };
 
 const btnDanger: React.CSSProperties = {
-  padding: "7px 10px",
+  padding: "9px 14px",
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "#ff3b30",
-  color: "white",
+  border: "1px solid rgba(255,59,48,0.3)",
+  background: "rgba(255,59,48,0.15)",
+  color: "#fca5a5",
   cursor: "pointer",
-  fontSize: 12
+  fontSize: 13,
 };
 
-const btnSecondarySmall: React.CSSProperties = {
-  padding: "6px 10px",
-  borderRadius: 999,
+const btnSmall: React.CSSProperties = {
+  padding: "6px 12px",
+  borderRadius: 8,
+  border: "1px solid rgba(31,79,255,0.3)",
+  background: "rgba(31,79,255,0.15)",
+  color: "#93c5fd",
+  cursor: "pointer",
+  fontSize: 12,
+  fontWeight: 600,
+};
+
+const linkBtnSmall: React.CSSProperties = {
+  padding: "6px 12px",
+  borderRadius: 8,
   border: "1px solid rgba(255,255,255,0.12)",
   background: "rgba(255,255,255,0.06)",
-  color: "white",
-  cursor: "pointer",
-  fontSize: 11,
-  fontWeight: 600
-};
-
-const btnDangerSmall: React.CSSProperties = {
-  ...btnSecondarySmall,
-  background: "#ff3b30"
-};
-
-const linkBtn: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
+  color: "rgba(255,255,255,0.8)",
   textDecoration: "none",
   display: "inline-flex",
   alignItems: "center",
-  justifyContent: "center"
+  justifyContent: "center",
+  fontSize: 12,
 };
 
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.65)",
+  background: "rgba(0,0,0,0.7)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  zIndex: 9999
+  zIndex: 9999,
+  padding: 16,
 };
 
 const modalCard: React.CSSProperties = {
-  width: 360,
-  borderRadius: 14,
-  padding: 14,
+  width: 400,
+  maxWidth: "100%",
+  borderRadius: 16,
+  padding: 20,
   border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33"
+  background: "#0b1b33",
 };
-
-
-
-

@@ -1,11 +1,9 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/roi-dashboard", label: "ROI" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/leads", label: "Leads" },
   { href: "/journal", label: "Journal" },
@@ -20,7 +18,14 @@ export default function Nav() {
   const pathname = usePathname();
 
   return (
-    <div className="nav">
+    <div className="nav" style={{
+      display: "flex",
+      gap: 4,
+      overflowX: "auto",
+      WebkitOverflowScrolling: "touch",
+      scrollbarWidth: "none",
+      padding: "8px 12px",
+    }}>
       {links.map((l) => {
         const active = pathname?.startsWith(l.href);
         return (
@@ -28,9 +33,16 @@ export default function Nav() {
             key={l.href}
             href={l.href}
             style={{
-              color: active ? "var(--text)" : "var(--muted)",
+              color: active ? "white" : "var(--muted)",
               borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
               paddingBottom: 6,
+              paddingLeft: 8,
+              paddingRight: 8,
+              fontSize: 13,
+              fontWeight: active ? 700 : 400,
+              whiteSpace: "nowrap",
+              textDecoration: "none",
+              transition: "color 0.15s, border-color 0.15s",
             }}
           >
             {l.label}
@@ -40,5 +52,3 @@ export default function Nav() {
     </div>
   );
 }
-
-
