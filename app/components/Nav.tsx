@@ -11,7 +11,6 @@ const links = [
   { href: "/confirmed", label: "Confirmed" },
   { href: "/archive", label: "Archive" },
   { href: "/roi-dashboard", label: "ROI" },
-  { href: "/modules", label: "Modules" },
   { href: "/admin", label: "Admin" },
 ];
 

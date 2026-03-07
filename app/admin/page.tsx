@@ -67,7 +67,6 @@ export default function AdminPage() {
           <Link href="/dashboard" style={linkStyle}>Dashboard</Link>
           <Link href="/pipeline" style={linkStyle}>Pipeline</Link>
           <Link href="/leads" style={linkStyle}>Leads</Link>
-          <Link href="/modules" style={linkStyle}>Modules</Link>
           <button onClick={logout} style={btnStyle}>Logout</button>
         </div>
       </div>
