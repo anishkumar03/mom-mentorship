@@ -4,6 +4,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Bold, Italic, Code, List, ListOrdered, CheckSquare, Calendar } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import dynamic from "next/dynamic";
+
+const JournalDashboard = dynamic(() => import("./JournalDashboard"), { ssr: false });
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -1167,6 +1170,9 @@ export default function JournalPage() {
         </div>
       </div>
 
+      {/* Performance Dashboard */}
+      {!loading && <JournalDashboard trades={filteredBase as any} month={month} />}
+
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>
@@ -1467,6 +1473,11 @@ export default function JournalPage() {
           grid-template-columns: repeat(7, minmax(90px, 1fr));
           gap: 8px;
           margin-top: 12px;
+        }
+        @media (max-width: 900px) {
+          :global(.card) > div[style*="grid-template-columns: 1fr 1fr 1fr"] {
+            grid-template-columns: 1fr !important;
+          }
         }
         @media (max-width: 720px) {
           .journal-notes {
