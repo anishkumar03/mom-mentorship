@@ -1,18 +1,4 @@
 ﻿import Nav from "./components/Nav";
-
-<nav style={{
-  display: "flex",
-  gap: 20,
-  padding: "20px 40px",
-  background: "#0f1c2f",
-  borderBottom: "1px solid #1e2a3d"
-}}>
-  <a href="/dashboard" style={{ color: "#4fa3ff", textDecoration: "none", fontWeight: 600 }}>Dashboard</a>
-  <a href="/leads" style={{ color: "#4fa3ff", textDecoration: "none", fontWeight: 600 }}>Leads</a>
-  <a href="/pipeline" style={{ color: "#4fa3ff", textDecoration: "none", fontWeight: 600 }}>Pipeline</a>
-  <a href="/archive" style={{ color: "#4fa3ff", textDecoration: "none", fontWeight: 600 }}>Archive</a>
-  <a href="/admin" style={{ color: "#4fa3ff", textDecoration: "none", fontWeight: 600 }}>Admin</a>
-</nav>
 import type { Metadata } from "next";
 import BottomTabs from "./components/BottomTabs";
 import "./globals.css";
@@ -29,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-         className={"font-sans ` antialiased`"}
+         className="font-sans antialiased"
       >
       <Nav />
         {children}

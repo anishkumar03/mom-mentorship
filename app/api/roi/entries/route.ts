@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+function getSupabase() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+}
 
 function toNumber(v: unknown) {
   if (typeof v === "number") return v;
@@ -34,6 +36,7 @@ export async function GET(req: Request) {
   const firmParam = url.searchParams.get("firm") ?? "all";
   const typeParam = url.searchParams.get("type") ?? "all";
 
+  const supabase = getSupabase();
   let query = supabase
     .from("roi_entries")
     .select("id,firm_id,entry_date,entry_type,amount,category,description,notes,created_at,prop_firms(name)")
