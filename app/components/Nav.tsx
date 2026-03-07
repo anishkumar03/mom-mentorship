@@ -24,8 +24,8 @@ export default function Nav() {
       gap: 4,
       overflowX: "auto",
       WebkitOverflowScrolling: "touch",
-      scrollbarWidth: "none",
       padding: "8px 12px",
+      flexWrap: "wrap",
     }}>
       {links.map((l) => {
         const active = pathname?.startsWith(l.href);
