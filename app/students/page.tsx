@@ -254,7 +254,7 @@ export default function StudentsPage() {
       setPayments([]);
       setPaymentsError(paymentsRes.error.message);
     } else {
-      console.log("[payments] fetched rows:", paymentsRes.data?.length, paymentsRes.data?.slice(0, 2));
+      console.log("[payments] fetched rows:", paymentsRes.data?.length, "columns:", paymentsRes.data?.[0] ? Object.keys(paymentsRes.data[0]) : "none", "first 2:", JSON.stringify(paymentsRes.data?.slice(0, 2)));
       const rows = (paymentsRes.data ?? []).map((p: any) => ({
         ...p,
         amount: toNumber(p.amount),
