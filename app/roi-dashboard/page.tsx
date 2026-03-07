@@ -363,16 +363,6 @@ export default function RoiDashboardPage() {
           <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Based on selected month</div>
         </div>
       </div>
-      <div className="card" style={{ marginTop: 12, padding: 12 }}>
-        <div style={{ fontWeight: 700, marginBottom: 6 }}>Lifetime totals</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, color: "var(--muted)", fontSize: 13 }}>
-          <span>Spend {lifetime.spend}</span>
-          <span>Payouts {lifetime.payouts}</span>
-          <span>Net {lifetime.net}</span>
-          <span>ROI {lifetime.roi}</span>
-        </div>
-      </div>
-
       <div className="card" style={{ marginTop: 16, padding: 16 }}>
         <div style={{ fontWeight: 700, marginBottom: 10 }}>Performance by Firm</div>
         {loading ? (
@@ -409,7 +399,7 @@ export default function RoiDashboardPage() {
         <div style={{ marginTop: 14 }}>
           <div style={{ fontWeight: 700, marginBottom: 8, fontSize: 13 }}>Recent Entries</div>
           {loading ? (
-            <div style={{ color: "var(--muted)" }}>Loading entriesâ€¦</div>
+            <div style={{ color: "var(--muted)" }}>Loading entries…</div>
           ) : recentEntries.length === 0 ? (
             <div style={{ color: "var(--muted)" }}>No recent entries.</div>
           ) : (
@@ -417,14 +407,14 @@ export default function RoiDashboardPage() {
               {recentEntries.map((e) => (
                 <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px" }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{e.firm_name ?? "â€”"}</div>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{e.firm_name ?? "—"}</div>
                     <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                      {e.entry_date ? new Date(e.entry_date).toLocaleDateString() : "â€”"} â€¢ {e.entry_type}
+                      {e.entry_date ? new Date(e.entry_date).toLocaleDateString() : "—"} &bull; {e.entry_type}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 700, fontSize: 13 }}>{money(e.amount)}</div>
-                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{e.category ?? "â€”"}</div>
+                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{e.category ?? "—"}</div>
                   </div>
                 </div>
               ))}

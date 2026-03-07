@@ -29,7 +29,7 @@ type Payment = {
   id: string;
   student_id: string;
   amount: number;
-  payment_date: string | null;
+  paid_at: string | null;
   paid_at?: string | null;
   method?: string | null;
   note?: string | null;
@@ -248,8 +248,8 @@ export default function StudentsPage() {
   const fetchPayments = async () => {
     const paymentsRes = await supabase
       .from("payments")
-      .select("id,student_id,amount,payment_date,created_at")
-      .order("payment_date", { ascending: false })
+      .select("id,student_id,amount,paid_at,created_at")
+      .order("paid_at", { ascending: false })
       .order("created_at", { ascending: false });
     if (paymentsRes.error) {
       console.error(paymentsRes.error);
@@ -451,7 +451,7 @@ export default function StudentsPage() {
         const insertRes = await supabase.from("payments").insert({
           student_id: savedStudent.id,
           amount,
-          payment_date: new Date().toISOString()
+          paid_at: new Date().toISOString()
         });
         if (insertRes.error) {
           setPaymentsError(insertRes.error.message);
@@ -487,7 +487,7 @@ export default function StudentsPage() {
     const payload = {
       student_id: paymentStudent.id,
       amount,
-      payment_date: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
+      paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
       method: paymentMethod.trim() ? paymentMethod.trim() : null,
       note: paymentNote.trim() ? paymentNote.trim() : null
     };

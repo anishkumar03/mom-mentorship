@@ -63,8 +63,15 @@ const EMOTIONS = [
   "Other"
 ] as const;
 
-const DEFAULT_TRADE_DATE = "2026-02-25";
-const DEFAULT_MONTH = "2026-02";
+function todayStr() {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+function currentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
 function toTimeInputValue(iso: string | null) {
   if (!iso) return "";
@@ -105,7 +112,7 @@ function monthRange(monthValue: string) {
   const year = Number(yearRaw);
   const monthIndex = Number(monthRaw) - 1;
   if (!Number.isFinite(year) || !Number.isFinite(monthIndex)) {
-    return { start: DEFAULT_TRADE_DATE, end: DEFAULT_TRADE_DATE };
+    return { start: todayStr(), end: todayStr() };
   }
   const start = new Date(year, monthIndex, 1);
   const end = new Date(year, monthIndex + 1, 0);
@@ -144,7 +151,7 @@ export default function JournalPage() {
   const [loading, setLoading] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
-  const [month, setMonth] = useState(DEFAULT_MONTH);
+  const [month, setMonth] = useState(() => currentMonth());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [symbolFilter, setSymbolFilter] = useState("");
   const [setupFilter, setSetupFilter] = useState("__ALL__");
@@ -155,7 +162,7 @@ export default function JournalPage() {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [tradeDate, setTradeDate] = useState(DEFAULT_TRADE_DATE);
+  const [tradeDate, setTradeDate] = useState(() => todayStr());
   const [firmId, setFirmId] = useState("");
   const [accountId, setAccountId] = useState("");
   const [symbol, setSymbol] = useState("");
@@ -286,16 +293,6 @@ export default function JournalPage() {
     }
   }, [testPlanHtml]);
 
-  const setupFilterOptions = useMemo(() => {
-    const values = new Set<string>();
-    COMMON_SETUPS.forEach((s) => values.add(s));
-    customSetups.forEach((s) => values.add(s));
-    trades.forEach((t) => {
-      if (t.setup) values.add(t.setup);
-    });
-    return Array.from(values);
-  }, [trades, customSetups]);
-
   const setupOptions = useMemo(() => {
     const values = new Set<string>();
     COMMON_SETUPS.forEach((s) => values.add(s));
@@ -422,7 +419,7 @@ export default function JournalPage() {
 
   const resetForm = () => {
     setEditingId(null);
-    setTradeDate(DEFAULT_TRADE_DATE);
+    setTradeDate(todayStr());
     setSymbol("");
     setDirection("Long");
     setContracts("");
@@ -621,7 +618,7 @@ export default function JournalPage() {
 
   const loadEdit = (t: Trade) => {
     setEditingId(t.id);
-    setTradeDate(t.trade_date || DEFAULT_TRADE_DATE);
+    setTradeDate(t.trade_date || todayStr());
     setFirmId(t.firm_id ?? "");
     setAccountId(t.account_id ?? "");
     setSymbol((t.symbol ?? "") as string);
@@ -795,16 +792,16 @@ export default function JournalPage() {
   };
 
   return (
-    <div style={page}>
-      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+    <div className="container" style={{ paddingBottom: 30 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
         <div>
-          <h2 style={{ margin: 0 }}>Trading Journal</h2>
-          <div style={{ opacity: 0.8, marginTop: 4 }}>Log trades, patterns, and emotions to refine your edge.</div>
+          <h1>Trading Journal</h1>
+          <div className="sub">Log trades, patterns, and emotions to refine your edge.</div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <button onClick={() => setFirmModalOpen(true)} style={btnSecondary}>Add Firm</button>
-          <button onClick={() => setAccountModalOpen(true)} style={btnSecondary}>Add Account</button>
-          <button onClick={exportCsv} style={btnSecondary}>Export CSV</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          <button onClick={() => setFirmModalOpen(true)} style={actionBtn}>Add Firm</button>
+          <button onClick={() => setAccountModalOpen(true)} style={actionBtn}>Add Account</button>
+          <button onClick={exportCsv} style={actionBtn}>Export CSV</button>
         </div>
       </div>
 
@@ -812,9 +809,9 @@ export default function JournalPage() {
         <div style={errorBannerStyle}>{errorBanner}</div>
       )}
 
-      <div style={{ ...panel, marginTop: 16 }}>
+      <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Trade Plan</h3>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Trade Plan</div>
         </div>
 
         <div style={{ marginTop: 10 }}>
@@ -863,11 +860,11 @@ export default function JournalPage() {
         </div>
       </div>
 
-      <div style={{ ...panel, marginTop: 16 }}>
+      <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-          <h3 style={{ margin: 0 }}>{editingId ? "Edit Trade" : "Add Trade"}</h3>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{editingId ? "Edit Trade" : "Add Trade"}</div>
           {editingId && (
-            <div style={{ fontSize: 12, opacity: 0.85 }}>Editing trade {editingId.slice(0, 8)}...</div>
+            <div style={{ fontSize: 12, color: "var(--accent)" }}>Editing {editingId.slice(0, 8)}...</div>
           )}
         </div>
 
@@ -1022,7 +1019,7 @@ export default function JournalPage() {
               onChange={(e) => setPnl(e.target.value)}
               style={{
                 ...input,
-                color: pnl.trim() ? (Number(pnl) >= 0 ? "#7CFF7C" : "#FF7A7A") : "white"
+                color: pnl.trim() ? (Number(pnl) >= 0 ? "#4cc88c" : "#ff6b6b") : "var(--text)"
               }}
             />
           </div>
@@ -1069,15 +1066,15 @@ export default function JournalPage() {
         </div>
       </div>
 
-      <div style={{ ...panel, marginTop: 16 }}>
+      <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Month Snapshot</h3>
-          <div style={{ opacity: 0.8 }}>{month}</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Month Snapshot</div>
+          <div style={{ color: "var(--muted)", fontSize: 13 }}>{month}</div>
         </div>
 
         <div className="journal-filters">
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Month</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Month</span>
             <input
               type="month"
               value={month}
@@ -1087,7 +1084,7 @@ export default function JournalPage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Firm type</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Firm type</span>
             <div style={{ display: "flex", gap: 6 }}>
               {(["all", "prop", "personal"] as const).map((t) => (
                 <button
@@ -1106,7 +1103,7 @@ export default function JournalPage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Firm</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Firm</span>
             <select value={firmFilter} onChange={(e) => setFirmFilter(e.target.value)} style={inputSmall}>
               <option value="all">All</option>
               {firms.map((f) => (
@@ -1116,7 +1113,7 @@ export default function JournalPage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Account</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Account</span>
             <select value={accountFilter} onChange={(e) => setAccountFilter(e.target.value)} style={inputSmall}>
               <option value="all">All</option>
               {filterAccounts.map((a) => (
@@ -1126,7 +1123,7 @@ export default function JournalPage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Symbol</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Symbol</span>
             <input
               value={symbolFilter}
               onChange={(e) => setSymbolFilter(e.target.value)}
@@ -1136,17 +1133,17 @@ export default function JournalPage() {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Setup</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Setup</span>
             <select value={setupFilter} onChange={(e) => setSetupFilter(e.target.value)} style={inputSmall}>
               <option value="__ALL__">All</option>
-              {setupFilterOptions.map((s) => (
+              {setupOptions.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <span style={{ opacity: 0.85 }}>Win/Loss</span>
+            <span style={{ color: "var(--muted)", fontSize: 13 }}>Win/Loss</span>
             <div style={{ display: "flex", gap: 6 }}>
               {(["all", "win", "loss"] as const).map((t) => (
                 <button
@@ -1164,19 +1161,19 @@ export default function JournalPage() {
             </div>
           </div>
 
-          <div style={{ marginLeft: "auto", opacity: 0.85 }}>
-            {loading ? "Loading..." : `No. of trades: ${filteredTrades.length}`}
+          <div style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 13 }}>
+            {loading ? "Loading..." : `${filteredTrades.length} trade${filteredTrades.length !== 1 ? "s" : ""}`}
           </div>
         </div>
       </div>
 
-      <div style={{ ...panel, marginTop: 16 }}>
+      <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>
             {selectedDay ? `Trades on ${toDateLabel(selectedDay)}` : "Trades by Day"}
-          </h3>
+          </div>
           {selectedDay && (
-            <button onClick={() => setSelectedDay(null)} style={btnSecondary}>Clear day filter</button>
+            <button onClick={() => setSelectedDay(null)} style={actionBtn}>Clear day filter</button>
           )}
         </div>
 
@@ -1184,18 +1181,18 @@ export default function JournalPage() {
           {groupedDays.map((day) => {
             const isExpanded = expandedDays.has(day.date);
             return (
-              <div key={day.date} style={card}>
+              <div key={day.date} style={tradeCard}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                   <div>
                     <div style={{ fontWeight: 700 }}>{toDateLabel(day.date)}</div>
-                    <div style={{ opacity: 0.7, fontSize: 12 }}>{day.trades.length} trades</div>
+                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{day.trades.length} trade{day.trades.length !== 1 ? "s" : ""}</div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div
                       style={{
                         ...badge,
-                        background: day.total >= 0 ? "rgba(38, 208, 124, 0.18)" : "rgba(255, 99, 99, 0.2)",
-                        color: day.total >= 0 ? "#7CFF7C" : "#FF7A7A"
+                        background: day.total >= 0 ? "rgba(76, 200, 140, 0.15)" : "rgba(255, 107, 107, 0.15)",
+                        color: day.total >= 0 ? "#4cc88c" : "#ff6b6b"
                       }}
                     >
                       {pnlBadge(day.total)}
@@ -1221,23 +1218,23 @@ export default function JournalPage() {
                     {day.trades.map((t) => {
                       const screenshotUrl = resolveScreenshotUrl(t);
                       return (
-                        <div key={t.id} style={{ ...card, background: "rgba(255,255,255,0.02)" }}>
+                        <div key={t.id} style={{ ...tradeCard, background: "var(--card)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
                             <div style={{ minWidth: 200 }}>
                               <div style={{ fontWeight: 700 }}>
                                 {(t.symbol ?? "—").toUpperCase()} {t.direction ? `• ${t.direction}` : ""}
                               </div>
-                              <div style={{ opacity: 0.8, fontSize: 13 }}>
-                                {t.setup ?? "—"} • {t.emotion ?? "—"}
+                              <div style={{ color: "var(--muted)", fontSize: 13 }}>
+                                {t.setup ?? "—"} &bull; {t.emotion ?? "—"}
                               </div>
-                              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                                Entry: {toTimeLabel(t.entry_time)} • Exit: {toTimeLabel(t.exit_time)}
+                              <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
+                                Entry: {toTimeLabel(t.entry_time)} &bull; Exit: {toTimeLabel(t.exit_time)}
                               </div>
-                              <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
-                                {t.entry_price != null ? `Entry ${t.entry_price}` : "Entry —"} • {t.exit_price != null ? `Exit ${t.exit_price}` : "Exit —"}
+                              <div style={{ marginTop: 4, fontSize: 12, color: "var(--muted)" }}>
+                                {t.entry_price != null ? `Entry ${t.entry_price}` : "Entry —"} &bull; {t.exit_price != null ? `Exit ${t.exit_price}` : "Exit —"}
                               </div>
                               {t.notes && (
-                                <div style={{ marginTop: 6, fontSize: 12, opacity: 0.85 }}>
+                                <div style={{ marginTop: 6, fontSize: 12, color: "var(--muted)" }}>
                                   {truncatePreview(t.notes)}
                                 </div>
                               )}
@@ -1251,9 +1248,9 @@ export default function JournalPage() {
                                     t.pnl === null || Number.isNaN(t.pnl)
                                       ? "rgba(255,255,255,0.08)"
                                       : t.pnl >= 0
-                                        ? "rgba(38, 208, 124, 0.18)"
-                                        : "rgba(255, 99, 99, 0.2)",
-                                  color: t.pnl === null || Number.isNaN(t.pnl) ? "white" : t.pnl >= 0 ? "#7CFF7C" : "#FF7A7A"
+                                        ? "rgba(76, 200, 140, 0.15)"
+                                        : "rgba(255, 107, 107, 0.15)",
+                                  color: t.pnl === null || Number.isNaN(t.pnl) ? "var(--muted)" : t.pnl >= 0 ? "#4cc88c" : "#ff6b6b"
                                 }}
                               >
                                 {pnlBadge(t.pnl)}
@@ -1290,17 +1287,17 @@ export default function JournalPage() {
             );
           })}
           {groupedDays.length === 0 && (
-            <div style={{ opacity: 0.8 }}>
+            <div style={{ color: "var(--muted)", textAlign: "center", padding: 20 }}>
               {selectedDay ? "No trades logged for this day yet." : "No trades logged for this month yet."}
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ ...panel, marginTop: 16 }}>
+      <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-          <h3 style={{ margin: 0 }}>Calendar</h3>
-          <div style={{ opacity: 0.8 }}>{month}</div>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>Calendar</div>
+          <div style={{ color: "var(--muted)", fontSize: 13 }}>{month}</div>
         </div>
 
         <div className="calendar-grid">
@@ -1323,8 +1320,8 @@ export default function JournalPage() {
                 }}
                 style={{
                   ...calendarCell,
-                  borderColor: isSelected ? "var(--accent)" : "rgba(255,255,255,0.08)",
-                  background: isSelected ? "rgba(79, 163, 255, 0.12)" : "rgba(255,255,255,0.03)"
+                  borderColor: isSelected ? "var(--accent)" : "var(--border)",
+                  background: isSelected ? "rgba(79, 163, 255, 0.12)" : "var(--cardSoft)"
                 }}
               >
                 <div style={{ fontWeight: 700, fontSize: 12 }}>
@@ -1333,19 +1330,20 @@ export default function JournalPage() {
                 <div
                   style={{
                     fontSize: 12,
-                    color: pnlTotal >= 0 ? "#7CFF7C" : "#FF7A7A",
+                    fontWeight: 600,
+                    color: pnlTotal >= 0 ? "#4cc88c" : "#ff6b6b",
                     marginTop: 6
                   }}
                 >
                   {stats ? pnlBadge(pnlTotal) : "—"}
                 </div>
                 {stats && (
-                  <div style={{ fontSize: 10, opacity: 0.8, marginTop: 4 }}>
-                    {stats.count} trade{stats.count > 1 ? "s" : ""}
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 4 }}>
+                    {stats.count} trade{stats.count !== 1 ? "s" : ""}
                   </div>
                 )}
                 {stats?.symbols?.length ? (
-                  <div style={{ fontSize: 10, opacity: 0.75, marginTop: 2 }}>
+                  <div style={{ fontSize: 10, color: "var(--muted)", marginTop: 2 }}>
                     {stats.symbols.slice(0, 3).join(", ")}
                   </div>
                 ) : null}
@@ -1486,87 +1484,74 @@ export default function JournalPage() {
   );
 }
 
-const page: React.CSSProperties = {
-  maxWidth: 1150,
-  margin: "20px auto",
-  padding: 12,
-  color: "white",
-  fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-  background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
-  minHeight: "100vh"
-};
-
-const panel: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.03)"
-};
-
 const label: React.CSSProperties = {
   display: "block",
   fontSize: 12,
-  opacity: 0.85,
-  marginBottom: 6
+  color: "var(--muted)",
+  marginBottom: 6,
+  fontWeight: 600
 };
 
 const input: React.CSSProperties = {
-  padding: "10px 10px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white",
-  width: "100%"
+  padding: "9px 12px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--cardSoft)",
+  color: "var(--text)",
+  width: "100%",
+  fontSize: 14
 };
 
 const inputSmall: React.CSSProperties = {
-  padding: "8px 10px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "rgba(0,0,0,0.25)",
-  color: "white"
+  padding: "7px 10px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--cardSoft)",
+  color: "var(--text)",
+  fontSize: 13
+};
+
+const actionBtn: React.CSSProperties = {
+  height: 36,
+  padding: "0 14px",
+  borderRadius: 8,
+  fontSize: 13,
+  fontWeight: 600
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "#1f4fff",
+  padding: "9px 16px",
+  borderRadius: 8,
+  border: "none",
+  background: "var(--accent)",
   color: "white",
   cursor: "pointer",
-  textDecoration: "none"
+  fontWeight: 600,
+  fontSize: 13
 };
 
 const btnSecondary: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
-  color: "white",
-  cursor: "pointer"
+  padding: "9px 14px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "var(--cardSoft)",
+  color: "var(--text)",
+  cursor: "pointer",
+  fontSize: 13
 };
 
 const btnDanger: React.CSSProperties = {
-  padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "#ff3b30",
-  color: "white",
-  cursor: "pointer"
-};
-
-const linkButton: React.CSSProperties = {
-  marginLeft: 6,
-  padding: 0,
-  border: "none",
-  background: "transparent",
-  color: "#9ec6ff",
+  padding: "9px 14px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,59,48,0.3)",
+  background: "rgba(255,59,48,0.15)",
+  color: "#fca5a5",
   cursor: "pointer",
-  textDecoration: "underline"
+  fontSize: 13
 };
 
 const badge: React.CSSProperties = {
-  padding: "6px 10px",
+  padding: "4px 10px",
   borderRadius: 999,
   fontWeight: 700,
   fontSize: 12,
@@ -1574,20 +1559,21 @@ const badge: React.CSSProperties = {
   textAlign: "center"
 };
 
-const card: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 12,
-  padding: 12,
-  background: "rgba(255,255,255,0.03)"
+const tradeCard: React.CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: "var(--radius)",
+  padding: 14,
+  background: "var(--cardSoft)"
 };
 
 const errorBannerStyle: React.CSSProperties = {
-  marginTop: 12,
-  padding: 10,
-  borderRadius: 10,
-  border: "1px solid rgba(255, 99, 99, 0.5)",
-  background: "rgba(255, 99, 99, 0.12)",
-  color: "#ffd1d1"
+  marginBottom: 12,
+  padding: 12,
+  borderRadius: "var(--radius)",
+  border: "1px solid rgba(255, 86, 86, 0.4)",
+  background: "rgba(255, 86, 86, 0.08)",
+  color: "#fca5a5",
+  fontSize: 13
 };
 
 const modalOverlay: React.CSSProperties = {
@@ -1602,16 +1588,18 @@ const modalOverlay: React.CSSProperties = {
 
 const modalCard: React.CSSProperties = {
   width: 420,
+  maxWidth: "90vw",
   borderRadius: 14,
-  padding: 16,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33"
+  padding: 20,
+  border: "1px solid var(--border)",
+  background: "var(--card)"
 };
 
 const calendarCell: React.CSSProperties = {
   padding: 8,
   borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--border)",
+  background: "var(--cardSoft)",
   textAlign: "left",
   minHeight: 72,
   cursor: "pointer",
@@ -1624,7 +1612,7 @@ const calendarCellEmpty: React.CSSProperties = {
   minHeight: 72,
   borderRadius: 10,
   border: "1px dashed rgba(255,255,255,0.05)",
-  background: "rgba(255,255,255,0.02)"
+  background: "transparent"
 };
 
 
