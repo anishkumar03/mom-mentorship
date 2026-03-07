@@ -254,6 +254,7 @@ export default function StudentsPage() {
       setPayments([]);
       setPaymentsError(paymentsRes.error.message);
     } else {
+      console.log("[payments] fetched rows:", paymentsRes.data?.length, paymentsRes.data?.slice(0, 2));
       const rows = (paymentsRes.data ?? []).map((p: any) => ({
         ...p,
         amount: toNumber(p.amount),
