@@ -247,8 +247,7 @@ export default function StudentsPage() {
   const fetchPayments = async () => {
     const paymentsRes = await supabase
       .from("payments")
-      .select("id,student_id,amount,paid_at,created_at")
-      .order("paid_at", { ascending: false })
+      .select("*")
       .order("created_at", { ascending: false });
     if (paymentsRes.error) {
       console.error(paymentsRes.error);
@@ -257,7 +256,8 @@ export default function StudentsPage() {
     } else {
       const rows = (paymentsRes.data ?? []).map((p: any) => ({
         ...p,
-        amount: toNumber(p.amount)
+        amount: toNumber(p.amount),
+        paid_at: p.paid_at ?? p.payment_date ?? null,
       })) as Payment[];
       setPayments(rows);
       setPaymentsError(null);
@@ -447,13 +447,23 @@ export default function StudentsPage() {
       if (existing.error) {
         setPaymentsError(existing.error.message);
       } else if (!existing.data || existing.data.length === 0) {
+        const now = new Date().toISOString();
         const insertRes = await supabase.from("payments").insert({
           student_id: savedStudent.id,
           amount,
-          paid_at: new Date().toISOString()
+          paid_at: now,
+          payment_date: now,
         });
         if (insertRes.error) {
-          setPaymentsError(insertRes.error.message);
+          // Retry with only one date column if both fail
+          const retry = await supabase.from("payments").insert({
+            student_id: savedStudent.id,
+            amount,
+            payment_date: now,
+          });
+          if (retry.error) {
+            setPaymentsError(retry.error.message);
+          }
         }
       }
     }
@@ -483,15 +493,23 @@ export default function StudentsPage() {
       return;
     }
 
-    const payload = {
+    const dateVal = paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString();
+    const payload: Record<string, unknown> = {
       student_id: paymentStudent.id,
       amount,
-      paid_at: paymentDate ? new Date(paymentDate).toISOString() : new Date().toISOString(),
+      paid_at: dateVal,
+      payment_date: dateVal,
       method: paymentMethod.trim() ? paymentMethod.trim() : null,
       note: paymentNote.trim() ? paymentNote.trim() : null
     };
 
-    const { error } = await supabase.from("payments").insert(payload);
+    let { error } = await supabase.from("payments").insert(payload);
+    if (error) {
+      // Retry without paid_at in case only payment_date exists
+      const { paid_at: _, ...fallback } = payload as any;
+      const retry = await supabase.from("payments").insert(fallback);
+      error = retry.error;
+    }
     if (error) {
       alert(error.message);
       return;
