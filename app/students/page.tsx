@@ -245,23 +245,28 @@ export default function StudentsPage() {
   };
 
   const fetchPayments = async () => {
-    const paymentsRes = await supabase
-      .from("payments")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (paymentsRes.error) {
-      console.error(paymentsRes.error);
-      setPayments([]);
-      setPaymentsError(paymentsRes.error.message);
-    } else {
-      console.warn("[payments] fetched rows:", paymentsRes.data?.length, "columns:", paymentsRes.data?.[0] ? Object.keys(paymentsRes.data[0]) : "none", "first 2:", JSON.stringify(paymentsRes.data?.slice(0, 2)));
-      const rows = (paymentsRes.data ?? []).map((p: any) => ({
-        ...p,
-        amount: toNumber(p.amount),
-        paid_at: p.paid_at ?? p.payment_date ?? null,
-      })) as Payment[];
-      setPayments(rows);
-      setPaymentsError(null);
+    try {
+      console.warn("[payments] START fetchPayments");
+      const paymentsRes = await supabase
+        .from("payments")
+        .select("*")
+        .order("created_at", { ascending: false });
+      console.warn("[payments] result:", { error: paymentsRes.error, count: paymentsRes.data?.length, first: paymentsRes.data?.[0] });
+      if (paymentsRes.error) {
+        console.error(paymentsRes.error);
+        setPayments([]);
+        setPaymentsError(paymentsRes.error.message);
+      } else {
+        const rows = (paymentsRes.data ?? []).map((p: any) => ({
+          ...p,
+          amount: toNumber(p.amount),
+          paid_at: p.paid_at ?? p.payment_date ?? null,
+        })) as Payment[];
+        setPayments(rows);
+        setPaymentsError(null);
+      }
+    } catch (err) {
+      console.warn("[payments] CATCH error:", err);
     }
   };
 
