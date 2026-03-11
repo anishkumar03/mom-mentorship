@@ -29,11 +29,21 @@ export default function Nav() {
     }}>
       {links.map((l) => {
         const active = pathname?.startsWith(l.href);
+        const isQuickAdd = l.href === "/quick-add";
         return (
           <Link
             key={l.href}
             href={l.href}
-            style={{
+            style={isQuickAdd ? {
+              color: "white",
+              background: "var(--accent)",
+              borderRadius: 6,
+              padding: "4px 12px",
+              fontSize: 13,
+              fontWeight: 700,
+              whiteSpace: "nowrap",
+              textDecoration: "none",
+            } : {
               color: active ? "white" : "var(--muted)",
               borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
               paddingBottom: 6,
