@@ -15,7 +15,7 @@ export default function QuickAddPage() {
   const [email, setEmail] = useState("");
   const [handle, setHandle] = useState("");
   const [source, setSource] = useState("Instagram");
-  const [program, setProgram] = useState(PROGRAMS[0]);
+  const [program, setProgram] = useState<string>(PROGRAMS[0]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ type: "success" | "duplicate" | "error"; message: string } | null>(null);
