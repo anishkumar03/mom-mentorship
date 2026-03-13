@@ -11,6 +11,7 @@ const tabs = [
   { href: "/journal", label: "Journal" },
   { href: "/students", label: "Students" },
   { href: "/confirmed", label: "Confirmed" },
+  { href: "/batches", label: "Batches" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/admin", label: "Admin" },
 ];

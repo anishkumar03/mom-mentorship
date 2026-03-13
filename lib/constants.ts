@@ -16,6 +16,10 @@ export const CHANNELS = [
   "Other",
 ] as const;
 
+export const DEFAULT_BATCHES = [
+  "April 7 Batch",
+] as const;
+
 export const PAYMENT_METHODS = [
   "Cash",
   "Zelle",
