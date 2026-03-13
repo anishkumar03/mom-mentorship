@@ -10,6 +10,7 @@ const links = [
   { href: "/journal", label: "Journal" },
   { href: "/students", label: "Students" },
   { href: "/confirmed", label: "Confirmed" },
+  { href: "/batches", label: "Batches" },
   { href: "/archive", label: "Archive" },
   { href: "/roi-dashboard", label: "ROI" },
   { href: "/admin", label: "Admin" },
