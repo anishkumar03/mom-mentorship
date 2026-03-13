@@ -68,16 +68,6 @@ function leadName(l: Lead) {
   return name || "(no name)";
 }
 
-function maskSupabaseUrl(raw?: string) {
-  if (!raw) return "(missing)";
-  try {
-    const u = new URL(raw);
-    return `${u.protocol}//${u.host}`;
-  } catch {
-    return raw.split("/")[0] || raw;
-  }
-}
-
 function toLocalInputValue(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -213,13 +203,6 @@ export default function PipelinePage() {
   const [loading, setLoading] = useState(true);
   const [leadColumns, setLeadColumns] = useState<string[]>([]);
   const [fetchedUnarchivedCount, setFetchedUnarchivedCount] = useState(0);
-  const [debugCount, setDebugCount] = useState<number | null>(null);
-  const [debugError, setDebugError] = useState<string | null>(null);
-
-  const debugVisible =
-    process.env.NODE_ENV === "development" ||
-    (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("debug") === "1");
-
   // Follow-up modal
   const [followOpen, setFollowOpen] = useState(false);
   const [followLead, setFollowLead] = useState<Lead | null>(null);
@@ -289,25 +272,6 @@ export default function PipelinePage() {
     fetchAll();
     router.refresh();
   }, [program]);
-
-  useEffect(() => {
-    if (!debugVisible) return;
-    let mounted = true;
-    (async () => {
-      const { count, error } = await supabase.from("leads").select("*", { count: "exact", head: true });
-      if (!mounted) return;
-      if (error) {
-        setDebugError(error.message);
-        setDebugCount(null);
-      } else {
-        setDebugError(null);
-        setDebugCount(typeof count === "number" ? count : null);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [debugVisible]);
 
   const byStage = useMemo(() => {
     const map: Record<string, Lead[]> = {};
@@ -722,17 +686,6 @@ export default function PipelinePage() {
           {loading ? "Loading..." : `${leads.length} leads`}
         </div>
       </div>
-
-      {debugVisible && (
-        <div style={{ ...panel, marginTop: 12, background: "rgba(255,255,255,0.06)" }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>Debug</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>Supabase URL: {maskSupabaseUrl(process.env.NEXT_PUBLIC_SUPABASE_URL)}</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>Anon key present: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "Yes" : "No"}</div>
-          <div style={{ fontSize: 12, opacity: 0.9 }}>
-            Leads count: {debugError ? `Error: ${debugError}` : debugCount ?? "—"}
-          </div>
-        </div>
-      )}
 
       <div style={{ ...panel, marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ opacity: 0.7, fontSize: 13 }}>Program</span>

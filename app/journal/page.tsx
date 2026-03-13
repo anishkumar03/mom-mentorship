@@ -197,6 +197,8 @@ export default function JournalPage() {
   const [customAccountSizes, setCustomAccountSizes] = useState<string[]>([]);
   const [testPlanHtml, setTestPlanHtml] = useState("");
   const testPlanRef = useRef<HTMLDivElement | null>(null);
+  const [planSaving, setPlanSaving] = useState(false);
+  const [planSaved, setPlanSaved] = useState(false);
 
   const fetchTrades = async (monthValue: string) => {
     setLoading(true);
@@ -279,8 +281,20 @@ export default function JournalPage() {
   }, [screenshotPreview]);
 
   useEffect(() => {
-    const saved = typeof window !== "undefined" ? window.localStorage.getItem("journal_test_plan_html") : null;
-    setTestPlanHtml(saved ?? "");
+    // Load trade plan from Supabase first, fallback to localStorage
+    (async () => {
+      const { data } = await supabase
+        .from("journal_settings")
+        .select("value")
+        .eq("key", "trade_plan")
+        .single();
+      if (data?.value) {
+        setTestPlanHtml(data.value);
+      } else {
+        const saved = typeof window !== "undefined" ? window.localStorage.getItem("journal_test_plan_html") : null;
+        setTestPlanHtml(saved ?? "");
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -788,6 +802,21 @@ export default function JournalPage() {
   };
 
 
+  const saveTradePlan = async () => {
+    setPlanSaving(true);
+    setPlanSaved(false);
+    const { error } = await supabase
+      .from("journal_settings")
+      .upsert({ key: "trade_plan", value: testPlanHtml }, { onConflict: "key" });
+    setPlanSaving(false);
+    if (!error) {
+      setPlanSaved(true);
+      setTimeout(() => setPlanSaved(false), 2000);
+    } else {
+      alert("Failed to save: " + error.message);
+    }
+  };
+
   const pnlBadge = (value: number | null) => {
     if (value === null || Number.isNaN(value)) return "—";
     const sign = value > 0 ? "+" : value < 0 ? "" : "";
@@ -815,6 +844,23 @@ export default function JournalPage() {
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>Trade Plan</div>
+          <button
+            onClick={saveTradePlan}
+            disabled={planSaving}
+            style={{
+              padding: "6px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+              background: planSaved ? "#22c55e" : "var(--accent)",
+              color: "white",
+              border: "none",
+              borderRadius: 6,
+              cursor: planSaving ? "not-allowed" : "pointer",
+              opacity: planSaving ? 0.6 : 1,
+            }}
+          >
+            {planSaving ? "Saving..." : planSaved ? "Saved!" : "Save Plan"}
+          </button>
         </div>
 
         <div style={{ marginTop: 10 }}>

@@ -20,6 +20,7 @@ type Lead = {
   notes: string | null;
   program: string | null;
   status: string | null;
+  batch: string | null;
   archived?: boolean | null;
   created_at?: string | null;
 };
@@ -192,6 +193,7 @@ export default function ConfirmedPage() {
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{safeName(l)}</span>
                   <span style={confirmedBadge}>Confirmed</span>
+                  {l.batch && <span style={batchBadgeStyle}>{l.batch}</span>}
                   {l.source && <span style={channelBadge}>{l.source}</span>}
                 </div>
 
@@ -270,6 +272,16 @@ const confirmedBadge: React.CSSProperties = {
   fontSize: 11,
   fontWeight: 700,
   letterSpacing: "0.02em",
+};
+
+const batchBadgeStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "3px 10px",
+  borderRadius: 999,
+  background: "rgba(79,163,255,0.15)",
+  color: "#93c5fd",
+  fontSize: 11,
+  fontWeight: 700,
 };
 
 const channelBadge: React.CSSProperties = {

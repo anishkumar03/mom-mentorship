@@ -4,12 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const tabs = [
+  { href: "/quick-add", label: "+ Lead" },
   { href: "/dashboard", label: "Dashboard" },
   { href: "/roi-dashboard", label: "ROI" },
   { href: "/leads", label: "Leads" },
   { href: "/journal", label: "Journal" },
   { href: "/students", label: "Students" },
   { href: "/confirmed", label: "Confirmed" },
+  { href: "/batches", label: "Batches" },
   { href: "/pipeline", label: "Pipeline" },
   { href: "/admin", label: "Admin" },
 ];
