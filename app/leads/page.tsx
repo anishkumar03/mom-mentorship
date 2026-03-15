@@ -808,14 +808,13 @@ export default function LeadsPage() {
       if (existing.data && existing.data.length > 0) {
         const { error } = await supabase
           .from("leads")
-          .delete()
+          .update({ student_id: existing.data[0].id, status: "Confirmed", converted_at: new Date().toISOString() })
           .eq("id", l.id);
         if (error) {
           setConvertError(error.message);
           return;
         }
-        setConvertSuccess("Student already exists — lead removed.");
-        setLeads((prev) => prev.filter((lead) => lead.id !== l.id));
+        setConvertSuccess("Linked to existing student.");
         fetchAll();
         router.refresh();
         return;
@@ -853,7 +852,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .delete()
+      .update({ student_id: inserted.data.id, status: "Confirmed", converted_at: new Date().toISOString() })
       .eq("id", l.id);
 
     if (error) {
@@ -861,8 +860,7 @@ export default function LeadsPage() {
       return;
     }
 
-    setConvertSuccess("Converted.");
-    setLeads((prev) => prev.filter((lead) => lead.id !== l.id));
+    setConvertSuccess("Converted to student.");
     fetchAll();
     router.refresh();
   };
