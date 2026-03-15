@@ -785,6 +785,11 @@ export default function LeadsPage() {
     const ok = confirm(`DELETE ${l.full_name ?? l.name ?? "this lead"}? This cannot be undone.`);
     if (!ok) return;
 
+    // Delete linked student first if this lead was converted
+    if (l.student_id) {
+      await supabase.from("students").delete().eq("id", l.student_id);
+    }
+
     const { error } = await supabase.from("leads").delete().eq("id", l.id);
     if (error) alert(error.message);
     else fetchAll();
