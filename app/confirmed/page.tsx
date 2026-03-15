@@ -24,6 +24,8 @@ type Lead = {
   total_fee: number | null;
   archived?: boolean | null;
   created_at?: string | null;
+  student_id?: string | null;
+  converted_at?: string | null;
 };
 
 type LeadPayment = {
@@ -98,6 +100,10 @@ export default function ConfirmedPage() {
   // Fee editing state
   const [editingFeeId, setEditingFeeId] = useState<string | null>(null);
   const [editingFeeValue, setEditingFeeValue] = useState("");
+
+  // Convert to student state
+  const [convertError, setConvertError] = useState<string | null>(null);
+  const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -272,6 +278,75 @@ export default function ConfirmedPage() {
     fetchPayments();
   };
 
+  const convertToStudent = async (l: Lead) => {
+    if (l.student_id) return;
+    setConvertError(null);
+    setConvertSuccess(null);
+    const email = (l.email ?? "").trim().toLowerCase();
+    if (email) {
+      const existing = await supabase
+        .from("students")
+        .select("id,email")
+        .ilike("email", email)
+        .limit(1);
+      if (existing.error) {
+        setConvertError(existing.error.message);
+        return;
+      }
+      if (existing.data && existing.data.length > 0) {
+        const { error } = await supabase
+          .from("leads")
+          .update({ student_id: existing.data[0].id, status: "Confirmed", converted_at: new Date().toISOString() })
+          .eq("id", l.id);
+        if (error) {
+          setConvertError(error.message);
+          return;
+        }
+        setConvertSuccess(`${safeName(l)} linked to existing student.`);
+        fetchAll();
+        return;
+      }
+    }
+
+    const sName =
+      (l.full_name ?? "").trim() ||
+      (l.name ?? "").trim() ||
+      email ||
+      "Unnamed";
+    const sFullName = (l.full_name ?? l.name ?? "").trim() || null;
+
+    const payload = {
+      name: sName,
+      full_name: sFullName,
+      email: email || null,
+      phone: l.phone ?? null,
+      program: l.program ?? null,
+      notes: l.notes ?? null,
+      total_fee: 0,
+      paid_in_full: false,
+    };
+
+    const inserted = await supabase.from("students").insert(payload).select("id").single();
+
+    if (inserted.error) {
+      setConvertError(inserted.error.message);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("leads")
+      .update({ student_id: inserted.data.id, status: "Confirmed", converted_at: new Date().toISOString() })
+      .eq("id", l.id);
+
+    if (error) {
+      setConvertError(error.message);
+      return;
+    }
+
+    setConvertSuccess(`${safeName(l)} converted to student.`);
+    fetchAll();
+  };
+
   const deletePayment = async (p: LeadPayment) => {
     const ok = confirm("Delete this payment?");
     if (!ok) return;
@@ -282,6 +357,20 @@ export default function ConfirmedPage() {
 
   return (
     <div style={page}>
+      {/* Convert banners */}
+      {convertError && (
+        <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(255,59,48,0.15)", border: "1px solid rgba(255,59,48,0.3)", color: "#fca5a5", fontSize: 13, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>Error: {convertError}</span>
+          <button onClick={() => setConvertError(null)} style={{ background: "none", border: "none", color: "#fca5a5", cursor: "pointer", fontSize: 16 }}>×</button>
+        </div>
+      )}
+      {convertSuccess && (
+        <div style={{ padding: "10px 14px", borderRadius: 10, background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)", color: "#86efac", fontSize: 13, marginBottom: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span>{convertSuccess}</span>
+          <button onClick={() => setConvertSuccess(null)} style={{ background: "none", border: "none", color: "#86efac", cursor: "pointer", fontSize: 16 }}>×</button>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
         <div>
@@ -428,6 +517,19 @@ export default function ConfirmedPage() {
 
                     <button onClick={() => openPayments(l)} style={btnSmall}>
                       Record Payment
+                    </button>
+                    <button
+                      onClick={() => convertToStudent(l)}
+                      disabled={!!l.student_id}
+                      style={{
+                        ...btnSmall,
+                        background: l.student_id ? "rgba(34,197,94,0.08)" : "rgba(34,197,94,0.15)",
+                        border: "1px solid rgba(34,197,94,0.3)",
+                        color: l.student_id ? "rgba(134,239,172,0.5)" : "#86efac",
+                        cursor: l.student_id ? "default" : "pointer",
+                      }}
+                    >
+                      {l.student_id ? "Converted" : "Convert to Student"}
                     </button>
                   </div>
 
