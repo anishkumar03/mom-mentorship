@@ -453,7 +453,7 @@ export default function PipelinePage() {
       .insert({
         name: safeName,
         full_name: safeFullName,
-        email: email || null,
+        email: email || "",
         phone: l.phone ?? null,
         program: l.program ?? "General Lead"
       })

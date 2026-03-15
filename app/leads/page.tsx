@@ -836,7 +836,7 @@ export default function LeadsPage() {
     const payload = {
       name: safeName,
       full_name: safeFullName,
-      email: email || null,
+      email: email || "",
       phone: l.phone ?? null,
       program: l.program ?? null,
       notes: l.notes ?? null,
