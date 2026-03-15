@@ -564,10 +564,14 @@ export default function StudentsPage() {
   };
 
   const deleteStudent = async (student: Student) => {
-    const ok = confirm("Delete this student? This cannot be undone.");
+    const ok = confirm("Delete this student? This will also remove any linked lead. This cannot be undone.");
     if (!ok) return;
 
     setDeletingStudentId(student.id);
+
+    // Delete linked leads first (so confirmed/leads pages stay in sync)
+    await supabase.from("leads").delete().eq("student_id", student.id);
+
     const { error } = await supabase.from("students").delete().eq("id", student.id);
     if (error) {
       alert(error.message);

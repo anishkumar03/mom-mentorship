@@ -276,6 +276,17 @@ export default function LeadsPage() {
   const [noteLead, setNoteLead] = useState<Lead | null>(null);
   const [noteText, setNoteText] = useState("");
   const [noteContactedAt, setNoteContactedAt] = useState("");
+
+  // Email modal
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailLead, setEmailLead] = useState<Lead | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailDrafts, setEmailDrafts] = useState<any[]>([]);
+  const [emailDraftId, setEmailDraftId] = useState<string | null>(null);
+  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+
   const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [queryFollowup, setQueryFollowup] = useState<string | null>(null);
   const [contactedHint, setContactedHint] = useState<string | null>(null);
@@ -603,6 +614,160 @@ export default function LeadsPage() {
     setNoteContactedAt("");
   };
 
+  // ─── Email functions ───
+  const openEmail = (l: Lead) => {
+    setEmailLead(l);
+    setEmailSubject("");
+    setEmailBody("");
+    setEmailDraftId(null);
+    setEmailStatus(null);
+    setEmailOpen(true);
+    fetchDrafts(l.id);
+  };
+
+  const fetchDrafts = async (leadId: string) => {
+    const { data } = await supabase
+      .from("email_drafts")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    setEmailDrafts(data ?? []);
+  };
+
+  const saveDraft = async () => {
+    if (!emailLead) return;
+    const toEmail = (emailLead.email ?? "").trim();
+    if (!toEmail) {
+      alert("This lead has no email address. Add one first.");
+      return;
+    }
+
+    const payload = {
+      lead_id: emailLead.id,
+      to_email: toEmail,
+      to_name: leadName(emailLead),
+      subject: emailSubject.trim(),
+      body: emailBody.trim(),
+      status: "draft",
+      updated_at: new Date().toISOString(),
+    };
+
+    if (emailDraftId) {
+      const { error } = await supabase
+        .from("email_drafts")
+        .update(payload)
+        .eq("id", emailDraftId);
+      if (error) { alert(error.message); return; }
+    } else {
+      const { data, error } = await supabase
+        .from("email_drafts")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error) { alert(error.message); return; }
+      setEmailDraftId(data.id);
+    }
+
+    setEmailStatus("Draft saved!");
+    setTimeout(() => setEmailStatus(null), 2000);
+    fetchDrafts(emailLead.id);
+  };
+
+  const loadDraft = (draft: any) => {
+    setEmailDraftId(draft.id);
+    setEmailSubject(draft.subject ?? "");
+    setEmailBody(draft.body ?? "");
+    setEmailStatus(null);
+  };
+
+  const deleteDraft = async (draftId: string) => {
+    const { error } = await supabase.from("email_drafts").delete().eq("id", draftId);
+    if (error) { alert(error.message); return; }
+    if (emailDraftId === draftId) {
+      setEmailDraftId(null);
+      setEmailSubject("");
+      setEmailBody("");
+    }
+    if (emailLead) fetchDrafts(emailLead.id);
+  };
+
+  const sendEmail = async () => {
+    if (!emailLead) return;
+    const toEmail = (emailLead.email ?? "").trim();
+    if (!toEmail) {
+      alert("This lead has no email address. Add one first.");
+      return;
+    }
+    if (!emailSubject.trim()) {
+      alert("Subject is required");
+      return;
+    }
+    if (!emailBody.trim()) {
+      alert("Email body is required");
+      return;
+    }
+
+    setEmailSending(true);
+    setEmailStatus(null);
+
+    // Save draft first if not saved
+    if (!emailDraftId) {
+      const { data, error } = await supabase
+        .from("email_drafts")
+        .insert({
+          lead_id: emailLead.id,
+          to_email: toEmail,
+          to_name: leadName(emailLead),
+          subject: emailSubject.trim(),
+          body: emailBody.trim(),
+          status: "draft",
+        })
+        .select("id")
+        .single();
+      if (error) { alert(error.message); setEmailSending(false); return; }
+      setEmailDraftId(data.id);
+    }
+
+    try {
+      const res = await fetch("/api/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draft_id: emailDraftId,
+          lead_id: emailLead.id,
+          to: toEmail,
+          to_name: leadName(emailLead),
+          subject: emailSubject.trim(),
+          body: emailBody.trim(),
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok) {
+        setEmailStatus(`Failed: ${result.error}`);
+      } else {
+        setEmailStatus("Email sent successfully!");
+        fetchDrafts(emailLead.id);
+        fetchAll(); // refresh last_contacted_at
+      }
+    } catch (err: any) {
+      setEmailStatus(`Error: ${err.message}`);
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
+  const closeEmailModal = () => {
+    setEmailOpen(false);
+    setEmailLead(null);
+    setEmailSubject("");
+    setEmailBody("");
+    setEmailDraftId(null);
+    setEmailStatus(null);
+    setEmailDrafts([]);
+  };
+
   const archiveLead = async (l: Lead) => {
     if (!leadColumns.includes("archived")) {
       alert("Archive is unavailable because this leads table has no archived column.");
@@ -619,6 +784,11 @@ export default function LeadsPage() {
   const deleteLead = async (l: Lead) => {
     const ok = confirm(`DELETE ${l.full_name ?? l.name ?? "this lead"}? This cannot be undone.`);
     if (!ok) return;
+
+    // Delete linked student first if this lead was converted
+    if (l.student_id) {
+      await supabase.from("students").delete().eq("id", l.student_id);
+    }
 
     const { error } = await supabase.from("leads").delete().eq("id", l.id);
     if (error) alert(error.message);
@@ -643,14 +813,13 @@ export default function LeadsPage() {
       if (existing.data && existing.data.length > 0) {
         const { error } = await supabase
           .from("leads")
-          .delete()
+          .update({ student_id: existing.data[0].id, status: "Confirmed", converted_at: new Date().toISOString() })
           .eq("id", l.id);
         if (error) {
           setConvertError(error.message);
           return;
         }
-        setConvertSuccess("Student already exists — lead removed.");
-        setLeads((prev) => prev.filter((lead) => lead.id !== l.id));
+        setConvertSuccess("Linked to existing student.");
         fetchAll();
         router.refresh();
         return;
@@ -671,7 +840,7 @@ export default function LeadsPage() {
       phone: l.phone ?? null,
       program: l.program ?? null,
       notes: l.notes ?? null,
-      total_fee: null,
+      total_fee: 0,
       paid_in_full: false
     };
 
@@ -688,7 +857,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .delete()
+      .update({ student_id: inserted.data.id, status: "Confirmed", converted_at: new Date().toISOString() })
       .eq("id", l.id);
 
     if (error) {
@@ -696,8 +865,7 @@ export default function LeadsPage() {
       return;
     }
 
-    setConvertSuccess("Converted.");
-    setLeads((prev) => prev.filter((lead) => lead.id !== l.id));
+    setConvertSuccess("Converted to student.");
     fetchAll();
     router.refresh();
   };
@@ -923,6 +1091,13 @@ export default function LeadsPage() {
         }}>
           <button onClick={() => loadEdit(l)} style={btnSecondary}>Edit</button>
           <button onClick={() => openNote(l)} style={btnSecondary}>Add Note</button>
+          {l.email && (
+            <button onClick={() => openEmail(l)} style={{
+              ...btnSecondary,
+              background: "rgba(139,92,246,0.12)",
+              borderColor: "rgba(139,92,246,0.25)",
+            }}>Email</button>
+          )}
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
@@ -980,6 +1155,20 @@ export default function LeadsPage() {
         </button>
       </div>
 
+
+      {/* Convert feedback */}
+      {convertError && (
+        <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(239,68,68,0.15)", color: "#fca5a5", fontSize: 13 }}>
+          {convertError}
+          <button onClick={() => setConvertError(null)} style={{ marginLeft: 10, background: "none", border: "none", color: "#fca5a5", cursor: "pointer", fontSize: 12 }}>Dismiss</button>
+        </div>
+      )}
+      {convertSuccess && (
+        <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(34,197,94,0.15)", color: "#86efac", fontSize: 13 }}>
+          {convertSuccess}
+          <button onClick={() => setConvertSuccess(null)} style={{ marginLeft: 10, background: "none", border: "none", color: "#86efac", cursor: "pointer", fontSize: 12 }}>Dismiss</button>
+        </div>
+      )}
 
       {/* Channel stats bar */}
       {Object.keys(sourceStats).length > 0 && (
@@ -1273,6 +1462,107 @@ export default function LeadsPage() {
           </div>
         </div>
       )}
+
+      {/* Email Compose Modal */}
+      {emailOpen && (
+        <div style={modalOverlay} onClick={closeEmailModal}>
+          <div style={emailModalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>Compose Email</div>
+              <button onClick={closeEmailModal} style={{ ...btnSecondary, padding: "4px 10px", fontSize: 12 }}>
+                Close
+              </button>
+            </div>
+
+            <div style={{ opacity: 0.85, marginTop: 6 }}>
+              To: {leadName(emailLead!)} &lt;{emailLead?.email}&gt;
+            </div>
+
+            {/* Saved drafts list */}
+            {emailDrafts.length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>Saved Drafts / Sent Emails</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 120, overflowY: "auto" }}>
+                  {emailDrafts.map((d: any) => (
+                    <div key={d.id} style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "center",
+                      padding: "6px 10px", borderRadius: 8,
+                      background: d.status === "sent" ? "rgba(34,197,94,0.08)" : "rgba(255,255,255,0.04)",
+                      border: d.id === emailDraftId ? "1px solid rgba(139,92,246,0.4)" : "1px solid rgba(255,255,255,0.06)",
+                    }}>
+                      <div style={{ flex: 1, minWidth: 0, cursor: d.status === "draft" ? "pointer" : "default" }}
+                        onClick={() => d.status === "draft" && loadDraft(d)}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>
+                          {d.subject || "(no subject)"}
+                          <span style={{
+                            marginLeft: 8, fontSize: 10, padding: "2px 6px", borderRadius: 999,
+                            background: d.status === "sent" ? "rgba(34,197,94,0.2)" : d.status === "failed" ? "rgba(239,68,68,0.2)" : "rgba(139,92,246,0.2)",
+                            color: d.status === "sent" ? "#86efac" : d.status === "failed" ? "#fca5a5" : "#c4b5fd",
+                          }}>
+                            {d.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, opacity: 0.6 }}>
+                          {d.sent_at ? `Sent ${timeAgo(d.sent_at)}` : `Draft ${timeAgo(d.created_at)}`}
+                        </div>
+                      </div>
+                      {d.status === "draft" && (
+                        <button onClick={() => deleteDraft(d.id)} style={{ ...btnDanger, padding: "4px 8px", fontSize: 11 }}>
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginTop: 12 }}>
+              <label style={label}>Subject</label>
+              <input
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="Enter email subject..."
+                style={input}
+              />
+            </div>
+
+            <div style={{ marginTop: 10 }}>
+              <label style={label}>Body</label>
+              <textarea
+                value={emailBody}
+                onChange={(e) => setEmailBody(e.target.value)}
+                placeholder="Write your email here..."
+                style={{ ...input, width: "100%", minHeight: 160, resize: "vertical" }}
+              />
+            </div>
+
+            {emailStatus && (
+              <div style={{
+                marginTop: 10, padding: "8px 12px", borderRadius: 8, fontSize: 13,
+                background: emailStatus.startsWith("Failed") || emailStatus.startsWith("Error")
+                  ? "rgba(239,68,68,0.15)" : emailStatus.includes("sent")
+                  ? "rgba(34,197,94,0.15)" : "rgba(139,92,246,0.15)",
+                color: emailStatus.startsWith("Failed") || emailStatus.startsWith("Error")
+                  ? "#fca5a5" : emailStatus.includes("sent")
+                  ? "#86efac" : "#c4b5fd",
+              }}>
+                {emailStatus}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
+              <button onClick={closeEmailModal} style={btnSecondary}>Cancel</button>
+              <button onClick={saveDraft} style={btnSecondary} disabled={emailSending}>
+                Save Draft
+              </button>
+              <button onClick={sendEmail} style={btnPrimary} disabled={emailSending}>
+                {emailSending ? "Sending..." : "Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1466,4 +1756,15 @@ const modalCard: React.CSSProperties = {
   padding: 20,
   border: "1px solid rgba(255,255,255,0.10)",
   background: "#0b1b33",
+};
+
+const emailModalCard: React.CSSProperties = {
+  width: 560,
+  maxWidth: "100%",
+  borderRadius: 16,
+  padding: 20,
+  border: "1px solid rgba(139,92,246,0.2)",
+  background: "#0b1b33",
+  maxHeight: "90vh",
+  overflowY: "auto",
 };
