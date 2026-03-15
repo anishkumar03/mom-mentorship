@@ -840,7 +840,7 @@ export default function LeadsPage() {
       phone: l.phone ?? null,
       program: l.program ?? null,
       notes: l.notes ?? null,
-      total_fee: null,
+      total_fee: 0,
       paid_in_full: false
     };
 
@@ -1155,6 +1155,20 @@ export default function LeadsPage() {
         </button>
       </div>
 
+
+      {/* Convert feedback */}
+      {convertError && (
+        <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(239,68,68,0.15)", color: "#fca5a5", fontSize: 13 }}>
+          {convertError}
+          <button onClick={() => setConvertError(null)} style={{ marginLeft: 10, background: "none", border: "none", color: "#fca5a5", cursor: "pointer", fontSize: 12 }}>Dismiss</button>
+        </div>
+      )}
+      {convertSuccess && (
+        <div style={{ marginTop: 12, padding: "10px 14px", borderRadius: 10, background: "rgba(34,197,94,0.15)", color: "#86efac", fontSize: 13 }}>
+          {convertSuccess}
+          <button onClick={() => setConvertSuccess(null)} style={{ marginLeft: 10, background: "none", border: "none", color: "#86efac", cursor: "pointer", fontSize: 12 }}>Dismiss</button>
+        </div>
+      )}
 
       {/* Channel stats bar */}
       {Object.keys(sourceStats).length > 0 && (

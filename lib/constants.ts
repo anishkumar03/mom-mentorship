@@ -1,4 +1,4 @@
-export const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
+export const PROGRAMS = ["April Group Mentorship", "Private Coaching"] as const;
 
 export const CHANNELS = [
   "Instagram",
