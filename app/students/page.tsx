@@ -475,6 +475,19 @@ export default function StudentsPage() {
       }
     }
 
+    // Sync updated fields back to the linked lead(s)
+    if (editingId && savedStudent) {
+      const leadPayload: Record<string, unknown> = {};
+      if (savedStudent.email != null) leadPayload.email = savedStudent.email;
+      if (savedStudent.phone != null) leadPayload.phone = savedStudent.phone;
+      if (savedStudent.name != null) leadPayload.full_name = savedStudent.name;
+      if (savedStudent.program != null) leadPayload.program = savedStudent.program;
+      if (savedStudent.notes != null) leadPayload.notes = savedStudent.notes;
+      if (Object.keys(leadPayload).length > 0) {
+        await supabase.from("leads").update(leadPayload).eq("student_id", editingId);
+      }
+    }
+
     resetForm();
     setFormOpen(false);
     await fetchStudents();
