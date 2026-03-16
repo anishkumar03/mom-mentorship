@@ -180,6 +180,7 @@ export default function StudentsPage() {
   const [paymentsError, setPaymentsError] = useState<string | null>(null);
   const [studentColumns, setStudentColumns] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [programFilter, setProgramFilter] = useState<string>("All");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
@@ -296,14 +297,20 @@ export default function StudentsPage() {
   }, [payments]);
 
   const filteredStudents = useMemo(() => {
-    if (!searchQuery.trim()) return students;
-    const q = searchQuery.toLowerCase();
-    return students.filter((s) => {
-      const searchable = [s.full_name, s.name, s.email, s.phone, s.program, s.notes]
-        .filter(Boolean).join(" ").toLowerCase();
-      return searchable.includes(q);
-    });
-  }, [students, searchQuery]);
+    let result = students;
+    if (programFilter !== "All") {
+      result = result.filter((s) => s.program === programFilter);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter((s) => {
+        const searchable = [s.full_name, s.name, s.email, s.phone, s.program, s.notes]
+          .filter(Boolean).join(" ").toLowerCase();
+        return searchable.includes(q);
+      });
+    }
+    return result;
+  }, [students, searchQuery, programFilter]);
 
   const dueSoon = useMemo(() => {
     const now = new Date();
@@ -893,6 +900,16 @@ export default function StudentsPage() {
       {/* Student list */}
       <div style={{ ...panel, marginTop: 12 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
+          <select
+            value={programFilter}
+            onChange={(e) => setProgramFilter(e.target.value)}
+            style={{ ...inputSmall, minWidth: 140 }}
+          >
+            <option value="All">All Programs</option>
+            {PROGRAMS.map((p) => (
+              <option key={p} value={p}>{p}</option>
+            ))}
+          </select>
           <input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
