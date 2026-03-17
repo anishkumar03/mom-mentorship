@@ -13,6 +13,7 @@ const links = [
   { href: "/batches", label: "Batches" },
   { href: "/archive", label: "Archive" },
   { href: "/roi-dashboard", label: "ROI" },
+  { href: "/discipline", label: "Discipline" },
   { href: "/admin", label: "Admin" },
 ];
 
