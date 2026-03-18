@@ -13,6 +13,7 @@ const tabs = [
   { href: "/confirmed", label: "Confirmed" },
   { href: "/batches", label: "Batches" },
   { href: "/pipeline", label: "Pipeline" },
+  { href: "/discipline", label: "Discipline" },
   { href: "/admin", label: "Admin" },
 ];
 
