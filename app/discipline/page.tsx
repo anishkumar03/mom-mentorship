@@ -2,23 +2,41 @@
 
 import { useState, useEffect } from "react";
 
-/* ── 6 NON-NEGOTIABLE RULES ── */
-const RULES = [
-  "IFVG setups only",
-  "Max $150 risk",
-  "Max 2 trades",
-  "1.5R target always",
-  "Daily stop $300 → close",
-  "No strategy switch",
-];
+/* ── CONFIGURATION OPTIONS ── */
+const STREAK_LENGTH_OPTIONS = [5, 10, 15, 20, 30];
+const MAX_RISK_OPTIONS = [50, 100, 150, 200, 250, 300];
+const MAX_TRADES_OPTIONS = [1, 2, 3, 4, 5];
+const R_TARGET_OPTIONS = ["1 to 1.5", "1 to 2", "1.5 to 2", "2 to 2.5", "2 to 3"];
+const DAILY_STOP_OPTIONS = ["250 to 300", "300 to 350", "350 to 400", "400 to 500"];
 
-/* ── MILESTONES ── */
-const MILESTONES: Record<number, { label: string; message: string }> = {
-  5:  { label: "MILESTONE 1", message: "5 days clean → You are building momentum." },
-  10: { label: "MILESTONE 2", message: "10 days clean → Halfway. New pathways forming." },
-  16: { label: "MILESTONE 3", message: "15 days clean → Payout territory. Trust the process." },
-  20: { label: "MILESTONE 4", message: "20 days clean → DISCIPLINE MASTERED. You are the edge." },
+/* ── STREAK CONFIG ── */
+interface StreakConfig {
+  streakDays: number;
+  maxRisk: number;
+  maxTrades: number;
+  rTarget: string;
+  dailyStop: string;
+}
+
+const DEFAULT_CONFIG: StreakConfig = {
+  streakDays: 20,
+  maxRisk: 150,
+  maxTrades: 2,
+  rTarget: "1 to 1.5",
+  dailyStop: "300 to 350",
 };
+
+/* ── BUILD RULES FROM CONFIG ── */
+function buildRules(config: StreakConfig): string[] {
+  return [
+    "IFVG setups only",
+    `Max $${config.maxRisk} risk`,
+    `Max ${config.maxTrades} trades`,
+    `${config.rTarget}R target`,
+    `Daily stop $${config.dailyStop} → close`,
+    "No strategy switch",
+  ];
+}
 
 interface DayData {
   rules: boolean[];
@@ -40,10 +58,12 @@ const emptyDay = (): DayData => ({
 
 const STORAGE_KEY = "mom_discipline_streak";
 const STREAK_START_KEY = "mom_discipline_streak_start";
+const STREAK_CONFIG_KEY = "mom_discipline_streak_config";
 
 export default function DisciplinePage() {
   const [days, setDays] = useState<DayData[]>([]);
   const [streakStart, setStreakStart] = useState<string>("");
+  const [config, setConfig] = useState<StreakConfig>(DEFAULT_CONFIG);
   const [loaded, setLoaded] = useState(false);
 
   /* load from localStorage */
@@ -51,21 +71,36 @@ export default function DisciplinePage() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       const start = localStorage.getItem(STREAK_START_KEY);
-      if (saved) setDays(JSON.parse(saved));
-      else setDays(Array.from({ length: 20 }, emptyDay));
+      const savedConfig = localStorage.getItem(STREAK_CONFIG_KEY);
+
+      if (savedConfig) {
+        const parsed = JSON.parse(savedConfig) as StreakConfig;
+        setConfig(parsed);
+        if (saved) setDays(JSON.parse(saved));
+        else setDays(Array.from({ length: parsed.streakDays }, emptyDay));
+      } else {
+        if (saved) setDays(JSON.parse(saved));
+        else setDays(Array.from({ length: DEFAULT_CONFIG.streakDays }, emptyDay));
+      }
+
       if (start) setStreakStart(start);
     } catch {
-      setDays(Array.from({ length: 20 }, emptyDay));
+      setDays(Array.from({ length: config.streakDays }, emptyDay));
     }
     setLoaded(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /* save to localStorage on change */
   useEffect(() => {
     if (!loaded) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(days));
+    localStorage.setItem(STREAK_CONFIG_KEY, JSON.stringify(config));
     if (streakStart) localStorage.setItem(STREAK_START_KEY, streakStart);
-  }, [days, streakStart, loaded]);
+  }, [days, streakStart, config, loaded]);
+
+  const isStreakActive = !!streakStart;
+  const RULES = buildRules(config);
 
   const updateDay = (idx: number, patch: Partial<DayData>) => {
     setDays((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
@@ -93,17 +128,37 @@ export default function DisciplinePage() {
     return streak;
   })();
 
+  const milestones: Record<number, { label: string; message: string }> = {};
+  const total = config.streakDays;
+  if (total >= 5) milestones[5] = { label: "MILESTONE 1", message: "5 days clean → You are building momentum." };
+  if (total >= 10) milestones[10] = { label: "MILESTONE 2", message: "10 days clean → New pathways forming." };
+  if (total >= 15) milestones[15] = { label: "MILESTONE 3", message: "15 days clean → Payout territory. Trust the process." };
+  if (total >= 20) milestones[20] = { label: "MILESTONE 4", message: "20 days clean → DISCIPLINE MASTERED. You are the edge." };
+
   const resetStreak = () => {
-    if (confirm("Reset the entire 20-day streak? This cannot be undone.")) {
-      setDays(Array.from({ length: 20 }, emptyDay));
+    if (confirm("Reset the entire streak? This cannot be undone.")) {
+      setDays(Array.from({ length: config.streakDays }, emptyDay));
       setStreakStart("");
       localStorage.removeItem(STREAK_START_KEY);
+      localStorage.removeItem(STREAK_CONFIG_KEY);
+      setConfig(DEFAULT_CONFIG);
     }
   };
 
   const startStreak = () => {
     const today = new Date().toISOString().slice(0, 10);
     setStreakStart(today);
+    setDays(Array.from({ length: config.streakDays }, emptyDay));
+  };
+
+  const updateConfig = (patch: Partial<StreakConfig>) => {
+    setConfig((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.streakDays && patch.streakDays !== prev.streakDays) {
+        setDays(Array.from({ length: patch.streakDays }, emptyDay));
+      }
+      return next;
+    });
   };
 
   if (!loaded) return null;
@@ -143,12 +198,12 @@ export default function DisciplinePage() {
 
   const grid: React.CSSProperties = {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(380, 1fr))",
+    gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
     gap: 14,
   };
 
   const dayCard = (d: DayData, dayNum: number): React.CSSProperties => {
-    const milestone = MILESTONES[dayNum];
+    const milestone = milestones[dayNum];
     const perfect = isPerfect(d) && d.rules.some(Boolean);
     return {
       border: milestone
@@ -225,6 +280,36 @@ export default function DisciplinePage() {
     color: count >= 5 ? "#000" : "#fff",
   });
 
+  const selectStyle: React.CSSProperties = {
+    padding: "6px 10px",
+    borderRadius: 6,
+    border: "1px solid rgba(212,160,23,0.4)",
+    background: "rgba(212,160,23,0.1)",
+    color: "#d4a017",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+    outline: "none",
+  };
+
+  const selectDisabled: React.CSSProperties = {
+    ...selectStyle,
+    opacity: 0.6,
+    cursor: "not-allowed",
+    background: "rgba(255,255,255,0.04)",
+    borderColor: "rgba(255,255,255,0.1)",
+    color: "var(--muted)",
+  };
+
+  const configLabel: React.CSSProperties = {
+    fontSize: 11,
+    color: "var(--muted)",
+    marginBottom: 4,
+    fontWeight: 600,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  };
+
   return (
     <div style={page}>
       {/* Header */}
@@ -238,11 +323,11 @@ export default function DisciplinePage() {
           }}
         />
         <h1 style={{ fontSize: 26, fontWeight: 800, letterSpacing: 1, margin: 0 }}>
-          20-DAY DISCIPLINED STREAK
+          {config.streakDays}-DAY DISCIPLINED STREAK
         </h1>
         <p style={{ color: "var(--muted)", fontSize: 13, marginTop: 6 }}>
-          Mind Over Markets &nbsp;|&nbsp; IFVG Strategy &nbsp;|&nbsp; $150 Risk
-          &nbsp;|&nbsp; 2 Trades Max &nbsp;|&nbsp; Copy Trade All Accounts
+          Mind Over Markets &nbsp;|&nbsp; IFVG Strategy &nbsp;|&nbsp; ${config.maxRisk} Risk
+          &nbsp;|&nbsp; {config.maxTrades} Trades Max &nbsp;|&nbsp; Copy Trade All Accounts
         </p>
         <p
           style={{
@@ -269,7 +354,12 @@ export default function DisciplinePage() {
             style={{
               fontSize: 40,
               fontWeight: 800,
-              color: currentStreak >= 20 ? "#22c55e" : currentStreak >= 10 ? "#d4a017" : "var(--text)",
+              color:
+                currentStreak >= config.streakDays
+                  ? "#22c55e"
+                  : currentStreak >= Math.floor(config.streakDays / 2)
+                  ? "#d4a017"
+                  : "var(--text)",
             }}
           >
             {currentStreak}
@@ -279,34 +369,192 @@ export default function DisciplinePage() {
             <div style={{ fontSize: 12, color: "var(--muted)" }}>
               {currentStreak === 0
                 ? "Start your streak today"
-                : currentStreak >= 20
+                : currentStreak >= config.streakDays
                 ? "STREAK COMPLETE! You are the edge."
-                : `${20 - currentStreak} days to go`}
+                : `${config.streakDays - currentStreak} days to go`}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── STREAK BUILDER / CONFIG PANEL ── */}
+      <div
+        style={{
+          marginBottom: 24,
+          padding: 16,
+          background: isStreakActive
+            ? "rgba(255,255,255,0.03)"
+            : "rgba(212,160,23,0.06)",
+          border: isStreakActive
+            ? "1px solid rgba(255,255,255,0.08)"
+            : "2px solid rgba(212,160,23,0.3)",
+          borderRadius: 12,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 14,
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              margin: 0,
+              color: isStreakActive ? "var(--muted)" : "#d4a017",
+            }}
+          >
+            {isStreakActive ? "STREAK PARAMETERS (LOCKED)" : "BUILD YOUR STREAK"}
+          </h2>
+          {isStreakActive && (
+            <span
+              style={{
+                fontSize: 11,
+                color: "var(--muted)",
+                background: "rgba(255,255,255,0.06)",
+                padding: "3px 10px",
+                borderRadius: 4,
+              }}
+            >
+              Started: {streakStart}
+            </span>
+          )}
+        </div>
+
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {/* Streak Days */}
+          <div>
+            <div style={configLabel}>Streak Days</div>
+            <select
+              style={isStreakActive ? selectDisabled : selectStyle}
+              value={config.streakDays}
+              disabled={isStreakActive}
+              onChange={(e) => updateConfig({ streakDays: Number(e.target.value) })}
+            >
+              {STREAK_LENGTH_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  {v}-Day Streak
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Max Risk */}
+          <div>
+            <div style={configLabel}>Max Risk</div>
+            <select
+              style={isStreakActive ? selectDisabled : selectStyle}
+              value={config.maxRisk}
+              disabled={isStreakActive}
+              onChange={(e) => updateConfig({ maxRisk: Number(e.target.value) })}
+            >
+              {MAX_RISK_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  ${v}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Max Trades */}
+          <div>
+            <div style={configLabel}>Max Trades</div>
+            <select
+              style={isStreakActive ? selectDisabled : selectStyle}
+              value={config.maxTrades}
+              disabled={isStreakActive}
+              onChange={(e) => updateConfig({ maxTrades: Number(e.target.value) })}
+            >
+              {MAX_TRADES_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  {v} Trade{v > 1 ? "s" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* R Target */}
+          <div>
+            <div style={configLabel}>R Target</div>
+            <select
+              style={isStreakActive ? selectDisabled : selectStyle}
+              value={config.rTarget}
+              disabled={isStreakActive}
+              onChange={(e) => updateConfig({ rTarget: e.target.value })}
+            >
+              {R_TARGET_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  {v}R
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Daily Stop */}
+          <div>
+            <div style={configLabel}>Daily Stop</div>
+            <select
+              style={isStreakActive ? selectDisabled : selectStyle}
+              value={config.dailyStop}
+              disabled={isStreakActive}
+              onChange={(e) => updateConfig({ dailyStop: e.target.value })}
+            >
+              {DAILY_STOP_OPTIONS.map((v) => (
+                <option key={v} value={v}>
+                  ${v}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* No Strategy Switch — fixed */}
+          <div>
+            <div style={configLabel}>Strategy</div>
+            <div
+              style={{
+                padding: "6px 10px",
+                borderRadius: 6,
+                border: "1px solid rgba(255,255,255,0.1)",
+                background: "rgba(255,255,255,0.04)",
+                color: "var(--muted)",
+                fontSize: 13,
+                fontWeight: 600,
+              }}
+            >
+              No strategy switch
             </div>
           </div>
         </div>
 
-        {!streakStart && (
-          <button
-            onClick={startStreak}
-            style={{
-              marginTop: 12,
-              padding: "8px 24px",
-              background: "#d4a017",
-              color: "#000",
-              border: "none",
-              borderRadius: 8,
-              fontWeight: 700,
-              fontSize: 14,
-              cursor: "pointer",
-            }}
-          >
-            Start My 20-Day Streak
-          </button>
-        )}
-        {streakStart && (
-          <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 8 }}>
-            Started: {streakStart} &nbsp;
+        {/* Start / Reset buttons */}
+        <div style={{ marginTop: 16, textAlign: "center" }}>
+          {!isStreakActive ? (
+            <button
+              onClick={startStreak}
+              style={{
+                padding: "10px 32px",
+                background: "#d4a017",
+                color: "#000",
+                border: "none",
+                borderRadius: 8,
+                fontWeight: 700,
+                fontSize: 15,
+                cursor: "pointer",
+                letterSpacing: 0.5,
+              }}
+            >
+              Start My {config.streakDays}-Day Streak
+            </button>
+          ) : (
             <button
               onClick={resetStreak}
               style={{
@@ -314,15 +562,16 @@ export default function DisciplinePage() {
                 color: "#ef4444",
                 border: "1px solid rgba(239,68,68,0.3)",
                 borderRadius: 6,
-                padding: "2px 10px",
-                fontSize: 11,
+                padding: "6px 16px",
+                fontSize: 12,
                 cursor: "pointer",
+                fontWeight: 600,
               }}
             >
               Reset Streak
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* 6 Rules Reference Bar */}
@@ -339,7 +588,7 @@ export default function DisciplinePage() {
       <div style={grid}>
         {days.map((d, idx) => {
           const dayNum = idx + 1;
-          const milestone = MILESTONES[dayNum];
+          const milestone = milestones[dayNum];
           const count = rulesFollowed(d);
           const perfect = isPerfect(d) && d.rules.some(Boolean);
 
