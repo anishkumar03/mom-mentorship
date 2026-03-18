@@ -16,6 +16,7 @@ interface StreakConfig {
   maxTrades: number;
   rTarget: string;
   dailyStop: string;
+  notes: string;
 }
 
 const DEFAULT_CONFIG: StreakConfig = {
@@ -24,6 +25,7 @@ const DEFAULT_CONFIG: StreakConfig = {
   maxTrades: 2,
   rTarget: "1 to 1.5",
   dailyStop: "300 to 350",
+  notes: "",
 };
 
 /* ── BUILD RULES FROM CONFIG ── */
@@ -535,6 +537,36 @@ export default function DisciplinePage() {
           </div>
         </div>
 
+        {/* Notes field */}
+        <div style={{ marginTop: 12 }}>
+          <div style={configLabel}>Notes</div>
+          <textarea
+            style={{
+              width: "100%",
+              minHeight: 48,
+              padding: "8px 10px",
+              borderRadius: 6,
+              border: isStreakActive
+                ? "1px solid rgba(255,255,255,0.1)"
+                : "1px solid rgba(212,160,23,0.4)",
+              background: isStreakActive
+                ? "rgba(255,255,255,0.04)"
+                : "rgba(212,160,23,0.1)",
+              color: isStreakActive ? "var(--muted)" : "#d4a017",
+              fontSize: 13,
+              fontWeight: 600,
+              resize: "vertical",
+              outline: "none",
+              opacity: isStreakActive ? 0.6 : 1,
+              boxSizing: "border-box",
+            }}
+            placeholder="Add your streak notes, reminders, or rules here..."
+            value={config.notes}
+            disabled={isStreakActive}
+            onChange={(e) => updateConfig({ notes: e.target.value })}
+          />
+        </div>
+
         {/* Start / Reset buttons */}
         <div style={{ marginTop: 16, textAlign: "center" }}>
           {!isStreakActive ? (
@@ -582,6 +614,26 @@ export default function DisciplinePage() {
             <div style={{ fontSize: 18 }}>{i + 1}</div>
           </div>
         ))}
+        {config.notes && (
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              marginTop: 6,
+              padding: "8px 12px",
+              background: "#d4a017",
+              borderRadius: 6,
+              color: "#000",
+              fontSize: 12,
+              fontWeight: 600,
+              whiteSpace: "pre-wrap",
+            }}
+          >
+            <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: 0.5, opacity: 0.7 }}>
+              NOTES:
+            </span>{" "}
+            {config.notes}
+          </div>
+        )}
       </div>
 
       {/* Day Cards Grid */}
