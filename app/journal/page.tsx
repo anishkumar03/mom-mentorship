@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Bold, Italic, Code, List, ListOrdered, CheckSquare, Calendar } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
+import { trackActivity } from "../../lib/trackActivity";
 
 const JournalDashboard = dynamic(() => import("./JournalDashboard"), { ssr: false });
 
@@ -298,6 +299,15 @@ export default function JournalPage() {
   }, []);
 
   useEffect(() => {
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        trackActivity(userData.user.id, "journal", "opened");
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
     const el = testPlanRef.current;
     if (el && el.innerHTML !== testPlanHtml) {
       el.innerHTML = testPlanHtml;
@@ -579,6 +589,15 @@ export default function JournalPage() {
         resetForm();
       }
       fetchTrades(month);
+      const { data: userData } = await supabase.auth.getUser();
+      if (userData.user) {
+        trackActivity(userData.user.id, "journal", "completed", {
+          symbol: payload.symbol,
+          pnl: payload.pnl,
+          emotion: payload.emotion,
+          setup: payload.setup,
+        });
+      }
     } finally {
       setIsSaving(false);
     }
