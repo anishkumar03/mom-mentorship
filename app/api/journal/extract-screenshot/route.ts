@@ -197,8 +197,8 @@ export async function POST(req: NextRequest) {
     const parsed = JSON.parse(content);
     const rawTrades = Array.isArray(parsed?.trades) ? parsed.trades : [];
     const trades = rawTrades
-      .map((trade) => normalizePayload(trade))
-      .filter((trade) =>
+      .map((trade: Record<string, unknown>) => normalizePayload(trade))
+      .filter((trade: Record<string, unknown>) =>
         Object.values(trade).some((value) => value !== null)
       );
 
