@@ -23,6 +23,8 @@ type Trade = {
   symbol: string | null;
   direction: string | null;
   contracts: number | null;
+  commissions: number | null;
+  fees: number | null;
   setup: string | null;
   emotion: string | null;
   entry_price: number | null;
@@ -33,6 +35,8 @@ type Trade = {
   notes: string | null;
   screenshot_url: string | null;
   screenshot_path: string | null;
+  setup_screenshot_url: string | null;
+  setup_screenshot_path: string | null;
   archived: boolean | null;
 };
 
@@ -49,6 +53,24 @@ type Account = {
   name: string;
   account_size: string | null;
   account_type: string | null;
+};
+
+type ExtractedTradeFields = {
+  symbol: string | null;
+  direction: "Long" | "Short" | null;
+  entry_time: string | null;
+  exit_time: string | null;
+  entry_price: number | null;
+  exit_price: number | null;
+  pnl: number | null;
+  contracts: number | null;
+  commissions: number | null;
+  fees: number | null;
+};
+
+type UploadedScreenshot = {
+  path: string;
+  url: string;
 };
 
 const COMMON_SETUPS = ["ICT FVG", "Unicorn", "Breaker", "Liquidity Sweep"] as const;
@@ -90,6 +112,12 @@ function toISOFromDateAndTime(dateValue: string, timeValue: string) {
   const d = new Date(`${dateValue}T${timeValue}`);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+function formatExtractedValue(key: keyof ExtractedTradeFields, value: ExtractedTradeFields[keyof ExtractedTradeFields]) {
+  if (value === null || value === undefined || value === "") return "Not found";
+  if (key === "entry_time" || key === "exit_time") return String(value);
+  return String(value);
 }
 
 function truncatePreview(text: string, max = 120) {
@@ -172,6 +200,8 @@ export default function JournalPage() {
   const [symbol, setSymbol] = useState("");
   const [direction, setDirection] = useState<"Long" | "Short">("Long");
   const [contracts, setContracts] = useState("");
+  const [commissions, setCommissions] = useState("");
+  const [fees, setFees] = useState("");
   const [setupValue, setSetupValue] = useState("");
   const [newSetupValue, setNewSetupValue] = useState("");
   const [customSetups, setCustomSetups] = useState<string[]>([]);
@@ -185,6 +215,20 @@ export default function JournalPage() {
   const [notes, setNotes] = useState("");
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [currentScreenshot, setCurrentScreenshot] = useState<string | null>(null);
+  const [uploadedScreenshot, setUploadedScreenshot] = useState<UploadedScreenshot | null>(null);
+  const [setupScreenshotFile, setSetupScreenshotFile] = useState<File | null>(null);
+  const [setupScreenshotPreview, setSetupScreenshotPreview] = useState<string | null>(null);
+  const [uploadedSetupScreenshot, setUploadedSetupScreenshot] = useState<UploadedScreenshot | null>(null);
+  const [applySetupScreenshotToAll, setApplySetupScreenshotToAll] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [isSetupDragActive, setIsSetupDragActive] = useState(false);
+  const [screenshotRemoved, setScreenshotRemoved] = useState(false);
+  const [isExtractingScreenshot, setIsExtractingScreenshot] = useState(false);
+  const [extractedTrades, setExtractedTrades] = useState<ExtractedTradeFields[]>([]);
+  const [currentTradeIndex, setCurrentTradeIndex] = useState(0);
+  const [extractionMessage, setExtractionMessage] = useState<string | null>(null);
+  const [extractionError, setExtractionError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [firmModalOpen, setFirmModalOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
@@ -198,6 +242,9 @@ export default function JournalPage() {
   const [customAccountSizes, setCustomAccountSizes] = useState<string[]>([]);
   const [testPlanHtml, setTestPlanHtml] = useState("");
   const testPlanRef = useRef<HTMLDivElement | null>(null);
+  const screenshotInputRef = useRef<HTMLInputElement | null>(null);
+  const setupScreenshotInputRef = useRef<HTMLInputElement | null>(null);
+  const dragDepthRef = useRef(0);
   const [planSaving, setPlanSaving] = useState(false);
   const [planSaved, setPlanSaved] = useState(false);
 
@@ -278,8 +325,11 @@ export default function JournalPage() {
       if (screenshotPreview?.startsWith("blob:")) {
         URL.revokeObjectURL(screenshotPreview);
       }
+      if (setupScreenshotPreview?.startsWith("blob:")) {
+        URL.revokeObjectURL(setupScreenshotPreview);
+      }
     };
-  }, [screenshotPreview]);
+  }, [screenshotPreview, setupScreenshotPreview]);
 
   useEffect(() => {
     // Load trade plan from Supabase first, fallback to localStorage
@@ -409,13 +459,18 @@ export default function JournalPage() {
   }, [filterAccounts, accountFilter]);
 
   const dayStats = useMemo(() => {
-    const map = new Map<string, { total: number; count: number; symbols: string[] }>();
+    const map = new Map<string, { gross: number; commissions: number; fees: number; net: number; count: number; symbols: string[] }>();
     for (const t of filteredBase) {
       const key = t.trade_date ?? "";
       if (!key) continue;
-      const current = map.get(key) ?? { total: 0, count: 0, symbols: [] as string[] };
+      const current = map.get(key) ?? { gross: 0, commissions: 0, fees: 0, net: 0, count: 0, symbols: [] as string[] };
       const pnlValue = typeof t.pnl === "number" ? t.pnl : 0;
-      current.total += pnlValue;
+      const commissionsValue = typeof t.commissions === "number" ? t.commissions : 0;
+      const feesValue = typeof t.fees === "number" ? t.fees : 0;
+      current.gross += pnlValue;
+      current.commissions += commissionsValue;
+      current.fees += feesValue;
+      current.net += pnlValue - commissionsValue - feesValue;
       current.count += 1;
       if (t.symbol && !current.symbols.includes(t.symbol)) current.symbols.push(t.symbol);
       map.set(key, current);
@@ -424,13 +479,19 @@ export default function JournalPage() {
   }, [filteredBase]);
 
   const groupedDays = useMemo(() => {
-    const map = new Map<string, { date: string; trades: Trade[]; total: number }>();
+    const map = new Map<string, { date: string; trades: Trade[]; gross: number; commissions: number; fees: number; net: number }>();
     for (const t of filteredBase) {
       const key = t.trade_date ?? "";
       if (!key) continue;
-      const current = map.get(key) ?? { date: key, trades: [] as Trade[], total: 0 };
+      const current = map.get(key) ?? { date: key, trades: [] as Trade[], gross: 0, commissions: 0, fees: 0, net: 0 };
+      const pnlValue = typeof t.pnl === "number" ? t.pnl : 0;
+      const commissionsValue = typeof t.commissions === "number" ? t.commissions : 0;
+      const feesValue = typeof t.fees === "number" ? t.fees : 0;
       current.trades.push(t);
-      current.total += typeof t.pnl === "number" ? t.pnl : 0;
+      current.gross += pnlValue;
+      current.commissions += commissionsValue;
+      current.fees += feesValue;
+      current.net += pnlValue - commissionsValue - feesValue;
       map.set(key, current);
     }
     return Array.from(map.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
@@ -444,23 +505,85 @@ export default function JournalPage() {
     return null;
   };
 
-  const resetForm = () => {
-    setEditingId(null);
-    setTradeDate(todayStr());
-    setSymbol("");
-    setDirection("Long");
-    setContracts("");
+  const clearManualFields = () => {
     setSetupValue("");
     setEmotionOption("Neutral");
     setEmotionCustom("");
+    setNotes("");
+  };
+
+  const clearExtractedTradeFields = () => {
+    setSymbol("");
+    setDirection("Long");
+    setContracts("");
+    setCommissions("");
+    setFees("");
     setEntryPrice("");
     setExitPrice("");
     setEntryTime("");
     setExitTime("");
     setPnl("");
-    setNotes("");
+  };
+
+  const clearExtractionQueue = () => {
+    setExtractedTrades([]);
+    setCurrentTradeIndex(0);
+  };
+
+  const clearSetupScreenshotState = () => {
+    if (setupScreenshotPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(setupScreenshotPreview);
+    }
+    setSetupScreenshotFile(null);
+    setSetupScreenshotPreview(null);
+    setUploadedSetupScreenshot(null);
+    if (setupScreenshotInputRef.current) {
+      setupScreenshotInputRef.current.value = "";
+    }
+  };
+
+  const loadExtractedTradeIntoForm = (trade: ExtractedTradeFields) => {
+    clearExtractedTradeFields();
+    if (trade.symbol) setSymbol(trade.symbol);
+    if (trade.direction) setDirection(trade.direction);
+    if (trade.entry_time) setEntryTime(trade.entry_time);
+    if (trade.exit_time) setExitTime(trade.exit_time);
+    if (trade.entry_price !== null) setEntryPrice(String(trade.entry_price));
+    if (trade.exit_price !== null) setExitPrice(String(trade.exit_price));
+    if (trade.pnl !== null) setPnl(String(trade.pnl));
+    if (trade.contracts !== null) setContracts(String(trade.contracts));
+    if (trade.commissions !== null) setCommissions(String(trade.commissions));
+    if (trade.fees !== null) setFees(String(trade.fees));
+  };
+
+  const loadExtractedTrade = (index: number) => {
+    const trade = extractedTrades[index];
+    if (!trade) return;
+    setCurrentTradeIndex(index);
+    loadExtractedTradeIntoForm(trade);
+    clearManualFields();
+    setExtractionError(false);
+  };
+
+  const resetForm = () => {
+    setEditingId(null);
+    setTradeDate(todayStr());
+    clearExtractedTradeFields();
+    clearManualFields();
     setScreenshotFile(null);
     setScreenshotPreview(null);
+    setCurrentScreenshot(null);
+    setUploadedScreenshot(null);
+    clearSetupScreenshotState();
+    setApplySetupScreenshotToAll(false);
+    setIsDragActive(false);
+    setScreenshotRemoved(false);
+    clearExtractionQueue();
+    setExtractionMessage(null);
+    setExtractionError(false);
+    if (screenshotInputRef.current) {
+      screenshotInputRef.current.value = "";
+    }
   };
 
   const onScreenshotChange = (file: File | null) => {
@@ -468,12 +591,248 @@ export default function JournalPage() {
       URL.revokeObjectURL(screenshotPreview);
     }
     setScreenshotFile(file);
+    setUploadedScreenshot(null);
+    setScreenshotRemoved(false);
+    setExtractionError(false);
+    clearExtractionQueue();
     if (file) {
       const url = URL.createObjectURL(file);
       setScreenshotPreview(url);
+      setCurrentScreenshot(url);
+      setExtractionMessage("Screenshot ready. Extract trade data when you want to prefill the form.");
     } else {
       setScreenshotPreview(null);
+      setCurrentScreenshot(null);
+      setExtractionMessage(null);
     }
+  };
+
+  const onSetupScreenshotChange = (file: File | null) => {
+    if (setupScreenshotPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(setupScreenshotPreview);
+    }
+    setSetupScreenshotFile(file);
+    setUploadedSetupScreenshot(null);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setSetupScreenshotPreview(url);
+    } else {
+      setSetupScreenshotPreview(null);
+    }
+  };
+
+  const clearScreenshot = () => {
+    if (screenshotPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(screenshotPreview);
+    }
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setCurrentScreenshot(null);
+    setUploadedScreenshot(null);
+    clearSetupScreenshotState();
+    setApplySetupScreenshotToAll(false);
+    setScreenshotRemoved(true);
+    clearExtractionQueue();
+    clearExtractedTradeFields();
+    clearManualFields();
+    setExtractionMessage(null);
+    setExtractionError(false);
+    setIsDragActive(false);
+    if (screenshotInputRef.current) {
+      screenshotInputRef.current.value = "";
+    }
+  };
+
+  const extractScreenshotValues = async (file: File) => {
+    setIsExtractingScreenshot(true);
+    setExtractionMessage(null);
+    setExtractionError(false);
+    clearExtractionQueue();
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/journal/extract-screenshot", {
+        method: "POST",
+        body: formData
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setExtractionMessage(payload?.error ?? "Could not extract values from the screenshot.");
+        setExtractionError(true);
+        return;
+      }
+      const trades = (Array.isArray(payload?.trades) ? payload.trades : []) as ExtractedTradeFields[];
+      if (trades.length === 0) {
+        clearExtractedTradeFields();
+        setExtractionMessage("No trade rows were extracted from the screenshot.");
+        return;
+      }
+      setExtractedTrades(trades);
+      setCurrentTradeIndex(0);
+      loadExtractedTradeIntoForm(trades[0]);
+      clearManualFields();
+      setExtractionMessage(
+        trades.length === 1
+          ? "Extracted 1 trade. Review and edit before saving."
+          : `Extracted ${trades.length} trades. Review each trade before saving.`
+      );
+    } catch (error: any) {
+      setExtractionMessage(error?.message ?? "Could not extract values from the screenshot.");
+      setExtractionError(true);
+    } finally {
+      setIsExtractingScreenshot(false);
+    }
+  };
+
+  const handleScreenshotUpload = async (file: File | null) => {
+    if (!file) return;
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/jpg"]);
+    if (!allowedTypes.has(file.type)) {
+      setExtractionMessage("Only png, jpg, and jpeg files are supported.");
+      setExtractionError(true);
+      return;
+    }
+    onScreenshotChange(file);
+  };
+
+  const handleSetupScreenshotUpload = async (file: File | null) => {
+    if (!file) return;
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/jpg"]);
+    if (!allowedTypes.has(file.type)) {
+      setExtractionMessage("Only png, jpg, and jpeg files are supported.");
+      setExtractionError(true);
+      return;
+    }
+    onSetupScreenshotChange(file);
+  };
+
+  const handleSetupDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsSetupDragActive(true);
+  };
+
+  const handleSetupDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setIsSetupDragActive(true);
+  };
+
+  const handleSetupDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsSetupDragActive(false);
+  };
+
+  const handleSetupDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsSetupDragActive(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    void handleSetupScreenshotUpload(file);
+  };
+
+  const triggerScreenshotExtraction = async () => {
+    if (!screenshotFile) {
+      setExtractionMessage(
+        screenshotPreview
+          ? "Re-upload this screenshot to extract trade data."
+          : "Add a screenshot first, then extract trade data."
+      );
+      setExtractionError(true);
+      return;
+    }
+    await extractScreenshotValues(screenshotFile);
+  };
+
+  const queueActive = !editingId && extractedTrades.length > 1;
+  const currentExtractedTrade = extractedTrades[currentTradeIndex] ?? null;
+  const queueTotal = extractedTrades.length;
+  const queueProgress = queueTotal > 0 ? Math.round(((currentTradeIndex + 1) / queueTotal) * 100) : 0;
+
+  const finishTradeQueue = (message?: string) => {
+    clearExtractionQueue();
+    clearExtractedTradeFields();
+    clearManualFields();
+    setScreenshotFile(null);
+    setScreenshotPreview(null);
+    setCurrentScreenshot(null);
+    setUploadedScreenshot(null);
+    clearSetupScreenshotState();
+    setApplySetupScreenshotToAll(false);
+    setIsDragActive(false);
+    setIsSetupDragActive(false);
+    setScreenshotRemoved(false);
+    if (screenshotInputRef.current) {
+      screenshotInputRef.current.value = "";
+    }
+    setExtractionMessage(message ?? null);
+    setExtractionError(false);
+  };
+
+  const moveToQueueTrade = (nextIndex: number, message?: string) => {
+    if (nextIndex < 0 || nextIndex >= extractedTrades.length) return;
+    console.debug("[journal-queue] moving to extracted trade", {
+      from: currentTradeIndex,
+      to: nextIndex,
+      total: extractedTrades.length
+    });
+    loadExtractedTrade(nextIndex);
+    setExtractionMessage(message ?? `Reviewing trade ${nextIndex + 1} of ${extractedTrades.length}.`);
+    setExtractionError(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const loadPreviousTrade = () => {
+    if (!queueActive || currentTradeIndex === 0) return;
+    moveToQueueTrade(currentTradeIndex - 1, `Reviewing trade ${currentTradeIndex} of ${extractedTrades.length}.`);
+  };
+
+  const skipQueuedTrade = () => {
+    if (!queueActive) return;
+    const nextIndex = currentTradeIndex + 1;
+    if (nextIndex >= extractedTrades.length) {
+      finishTradeQueue("Skipped the final extracted trade.");
+      return;
+    }
+    moveToQueueTrade(nextIndex, `Skipped trade ${currentTradeIndex + 1}. Loaded trade ${nextIndex + 1} of ${extractedTrades.length}.`);
+  };
+
+  const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current += 1;
+    setIsDragActive(true);
+  };
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepthRef.current = 0;
+    setIsDragActive(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    void handleScreenshotUpload(file);
   };
 
   const addCustomSetup = () => {
@@ -508,7 +867,13 @@ export default function JournalPage() {
     return { path, url: data.publicUrl };
   };
 
-  const saveTrade = async (keepAnother = false) => {
+  const saveTrade = async ({
+    keepAnother = false,
+    advanceQueue = false
+  }: {
+    keepAnother?: boolean;
+    advanceQueue?: boolean;
+  } = {}) => {
     setIsSaving(true);
     setErrorBanner(null);
     try {
@@ -528,6 +893,8 @@ export default function JournalPage() {
         symbol: symbol.trim() ? symbol.trim().toUpperCase() : null,
         direction: direction,
         contracts: contracts.trim() ? Number(contracts) : null,
+        commissions: commissions.trim() ? Number(commissions) : null,
+        fees: fees.trim() ? Number(fees) : null,
         setup: resolvedSetup,
         emotion: resolvedEmotion,
         entry_price: entryPrice.trim() ? Number(entryPrice) : null,
@@ -541,13 +908,16 @@ export default function JournalPage() {
       if (payload.entry_price !== null && Number.isNaN(payload.entry_price)) payload.entry_price = null;
       if (payload.exit_price !== null && Number.isNaN(payload.exit_price)) payload.exit_price = null;
       if (payload.contracts !== null && Number.isNaN(payload.contracts)) payload.contracts = null;
+      if (payload.commissions !== null && Number.isNaN(payload.commissions)) payload.commissions = null;
+      if (payload.fees !== null && Number.isNaN(payload.fees)) payload.fees = null;
       if (payload.pnl !== null && Number.isNaN(payload.pnl)) payload.pnl = null;
 
-      if (screenshotFile) {
+      let persistedScreenshot = uploadedScreenshot;
+      if (screenshotFile && !persistedScreenshot) {
         try {
           const uploaded = await uploadScreenshot(screenshotFile, tradeDate);
-          payload.screenshot_path = uploaded.path;
-          payload.screenshot_url = uploaded.url;
+          persistedScreenshot = uploaded;
+          setUploadedScreenshot(uploaded);
         } catch (err: any) {
           setErrorBanner(
             err?.message?.includes("bucket")
@@ -557,8 +927,36 @@ export default function JournalPage() {
           setIsSaving(false);
           return;
         }
+      }
+
+      if (persistedScreenshot) {
+        payload.screenshot_path = persistedScreenshot.path;
+        payload.screenshot_url = persistedScreenshot.url;
+      } else if (screenshotRemoved) {
+        payload.screenshot_path = null;
+        payload.screenshot_url = null;
       } else if (editingId && screenshotPreview && !screenshotPreview.startsWith("blob:")) {
         payload.screenshot_url = screenshotPreview;
+      }
+
+      let persistedSetupScreenshot = uploadedSetupScreenshot;
+      if (setupScreenshotFile && !persistedSetupScreenshot) {
+        try {
+          const uploaded = await uploadScreenshot(setupScreenshotFile, tradeDate);
+          persistedSetupScreenshot = uploaded;
+          setUploadedSetupScreenshot(uploaded);
+        } catch (err: any) {
+          setErrorBanner(`Setup screenshot upload failed: ${err?.message ?? "Unknown error"}`);
+          setIsSaving(false);
+          return;
+        }
+      }
+
+      if (persistedSetupScreenshot) {
+        payload.setup_screenshot_path = persistedSetupScreenshot.path;
+        payload.setup_screenshot_url = persistedSetupScreenshot.url;
+      } else if (editingId && setupScreenshotPreview && !setupScreenshotPreview.startsWith("blob:")) {
+        payload.setup_screenshot_url = setupScreenshotPreview;
       }
 
       let res;
@@ -574,17 +972,41 @@ export default function JournalPage() {
         return;
       }
 
-      if (keepAnother) {
-        setSymbol("");
-        setSetupValue("");
-        setEntryPrice("");
-        setExitPrice("");
-        setEntryTime("");
-        setExitTime("");
-        setPnl("");
-        setNotes("");
+      if (advanceQueue && queueActive) {
+        const nextIndex = currentTradeIndex + 1;
+        console.debug("[journal-queue] save succeeded", {
+          currentTradeIndex,
+          nextIndex,
+          queueLength: extractedTrades.length
+        });
+        if (nextIndex < extractedTrades.length) {
+          moveToQueueTrade(
+            nextIndex,
+            `Saved trade ${currentTradeIndex + 1}. Loaded trade ${nextIndex + 1} of ${extractedTrades.length}.`
+          );
+          if (!applySetupScreenshotToAll) {
+            clearSetupScreenshotState();
+          }
+        } else {
+          finishTradeQueue(`Saved trade ${currentTradeIndex + 1} of ${extractedTrades.length}. Queue complete.`);
+        }
+      } else if (keepAnother) {
+        clearExtractedTradeFields();
+        clearManualFields();
         setScreenshotFile(null);
         setScreenshotPreview(null);
+        setCurrentScreenshot(null);
+        setUploadedScreenshot(null);
+        clearSetupScreenshotState();
+        setApplySetupScreenshotToAll(false);
+        setIsDragActive(false);
+        setScreenshotRemoved(false);
+        clearExtractionQueue();
+        setExtractionMessage(null);
+        setExtractionError(false);
+        if (screenshotInputRef.current) {
+          screenshotInputRef.current.value = "";
+        }
       } else {
         resetForm();
       }
@@ -660,6 +1082,8 @@ export default function JournalPage() {
     setSymbol((t.symbol ?? "") as string);
     setDirection(t.direction === "Short" ? "Short" : "Long");
     setContracts(t.contracts !== null && t.contracts !== undefined ? String(t.contracts) : "");
+    setCommissions(t.commissions !== null && t.commissions !== undefined ? String(t.commissions) : "");
+    setFees(t.fees !== null && t.fees !== undefined ? String(t.fees) : "");
     setSetupValue((t.setup ?? "") as string);
     const hasEmotion = t.emotion && EMOTIONS.includes(t.emotion as any);
     if (hasEmotion) {
@@ -679,7 +1103,20 @@ export default function JournalPage() {
     setPnl(t.pnl !== null && t.pnl !== undefined ? String(t.pnl) : "");
     setNotes((t.notes ?? "") as string);
     setScreenshotFile(null);
-    setScreenshotPreview(t.screenshot_url ?? null);
+    setScreenshotPreview(resolveScreenshotUrl(t));
+    setCurrentScreenshot(resolveScreenshotUrl(t));
+    setUploadedScreenshot(null);
+    setSetupScreenshotFile(null);
+    setSetupScreenshotPreview(t.setup_screenshot_url ?? null);
+    setUploadedSetupScreenshot(null);
+    setApplySetupScreenshotToAll(false);
+    setScreenshotRemoved(false);
+    clearExtractionQueue();
+    setExtractionMessage(null);
+    setExtractionError(false);
+    if (screenshotInputRef.current) {
+      screenshotInputRef.current.value = "";
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -702,9 +1139,11 @@ export default function JournalPage() {
       "firm_type",
       "trade_date",
       "symbol",
-      "direction",
-      "contracts",
-      "setup",
+        "direction",
+        "contracts",
+        "commissions",
+        "fees",
+        "setup",
       "emotion",
       "entry_price",
       "exit_price",
@@ -726,6 +1165,8 @@ export default function JournalPage() {
         t.symbol ?? "",
         t.direction ?? "",
         t.contracts ?? "",
+        t.commissions ?? "",
+        t.fees ?? "",
         t.setup ?? "",
         t.emotion ?? "",
         t.entry_price ?? "",
@@ -936,6 +1377,31 @@ export default function JournalPage() {
           )}
         </div>
 
+        {queueActive && currentExtractedTrade && (
+          <div style={queueBannerStyle}>
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={queueBannerTopRowStyle}>
+                <div style={{ fontSize: 12, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Review Queue
+                </div>
+                <div style={queueBadgeStyle}>Detected {queueTotal} trades</div>
+              </div>
+              <div style={{ fontWeight: 700, fontSize: 16, marginTop: 4 }}>
+                Trade {currentTradeIndex + 1} of {queueTotal}
+              </div>
+              <div style={queueProgressTrackStyle}>
+                <div style={{ ...queueProgressFillStyle, width: `${queueProgress}%` }} />
+              </div>
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                Save each extracted row only after review. Setup, emotion, and notes stay manual for every trade.
+              </div>
+            </div>
+            {currentScreenshot && (
+              <img src={currentScreenshot} alt="Queue screenshot thumbnail" style={queueThumbnailStyle} />
+            )}
+          </div>
+        )}
+
         <div className="journal-grid">
           <div>
             <label style={label}>Trade date</label>
@@ -1092,6 +1558,99 @@ export default function JournalPage() {
             />
           </div>
 
+          <div>
+            <label style={label}>Commissions</label>
+            <input
+              type="number"
+              value={commissions}
+              onChange={(e) => setCommissions(e.target.value)}
+              style={input}
+            />
+          </div>
+
+          <div>
+            <label style={label}>Fees</label>
+            <input
+              type="number"
+              value={fees}
+              onChange={(e) => setFees(e.target.value)}
+              style={input}
+            />
+          </div>
+
+          <div className="journal-setup-screenshot">
+            <label style={label}>Setup Screenshot (optional)</label>
+            <input
+              ref={setupScreenshotInputRef}
+              type="file"
+              accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+              onChange={(e) => {
+                void handleSetupScreenshotUpload(e.target.files?.[0] ?? null);
+              }}
+              style={{ display: "none" }}
+            />
+            <div
+              onDragEnter={handleSetupDragEnter}
+              onDragOver={handleSetupDragOver}
+              onDragLeave={handleSetupDragLeave}
+              onDrop={handleSetupDrop}
+              style={{
+                ...compactDropZoneStyle,
+                borderColor: isSetupDragActive ? "rgba(77, 163, 255, 0.85)" : "rgba(255,255,255,0.12)",
+                background: isSetupDragActive
+                  ? "linear-gradient(180deg, rgba(77, 163, 255, 0.14), rgba(16, 28, 48, 0.94))"
+                  : "rgba(255,255,255,0.03)"
+              }}
+            >
+              <div style={compactDropZoneTopStyle}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>
+                    {isSetupDragActive ? "Drop setup screenshot" : "Drag and drop or browse"}
+                  </div>
+                  <div style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.45, marginTop: 4 }}>
+                    Optional reference image for the setup. Saved separately from the trade screenshot.
+                  </div>
+                </div>
+                {setupScreenshotPreview && (
+                  <img
+                    src={setupScreenshotPreview}
+                    alt="Setup screenshot preview"
+                    style={compactSetupPreviewStyle}
+                  />
+                )}
+              </div>
+              <div style={compactDropZoneActionsStyle}>
+                <button
+                  type="button"
+                  onClick={() => setupScreenshotInputRef.current?.click()}
+                  style={btnSecondary}
+                >
+                  {setupScreenshotPreview ? "Replace" : "Browse"}
+                </button>
+                {setupScreenshotPreview && (
+                  <button
+                    type="button"
+                    onClick={clearSetupScreenshotState}
+                    style={btnSecondary}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+            {queueActive && (
+              <label style={{ ...queueToggleStyle, marginTop: 8 }}>
+                <input
+                  type="checkbox"
+                  checked={applySetupScreenshotToAll}
+                  onChange={(e) => setApplySetupScreenshotToAll(e.target.checked)}
+                  style={checkboxStyle}
+                />
+                <span>Apply setup screenshot to all extracted trades</span>
+              </label>
+            )}
+          </div>
+
           <div className="journal-notes">
             <label style={label}>Notes</label>
             <textarea
@@ -1101,37 +1660,154 @@ export default function JournalPage() {
             />
           </div>
 
-          <div>
+          <div className="journal-screenshot-stack">
             <label style={label}>Screenshot</label>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => onScreenshotChange(e.target.files?.[0] ?? null)}
-              style={input}
-            />
-            {screenshotPreview && (
-              <div style={{ marginTop: 8 }}>
-                <img
-                  src={screenshotPreview}
-                  alt="Screenshot preview"
-                  style={{ width: 140, height: 90, objectFit: "cover", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)" }}
+            <div className="journal-screenshot-columns">
+              <div style={screenshotSectionCardStyle}>
+                <input
+                  ref={screenshotInputRef}
+                  type="file"
+                  accept=".png,.jpg,.jpeg,image/png,image/jpeg"
+                  onChange={(e) => {
+                    void handleScreenshotUpload(e.target.files?.[0] ?? null);
+                  }}
+                  style={{ display: "none" }}
                 />
+                <div
+                  onDragEnter={handleDragEnter}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  style={{
+                    ...dropZoneStyle,
+                    borderColor: isDragActive ? "rgba(77, 163, 255, 0.85)" : "rgba(77, 163, 255, 0.3)",
+                    background: isDragActive
+                      ? "linear-gradient(180deg, rgba(77, 163, 255, 0.16), rgba(16, 28, 48, 0.95))"
+                      : "linear-gradient(180deg, rgba(77, 163, 255, 0.08), rgba(16, 28, 48, 0.92))",
+                    boxShadow: isDragActive ? "0 0 0 1px rgba(77, 163, 255, 0.28), 0 20px 40px rgba(2, 8, 23, 0.35)" : "none"
+                  }}
+                >
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>
+                    {isDragActive ? "Drop screenshot to attach" : "Drag and drop a trade screenshot"}
+                  </div>
+                  <div style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>
+                    PNG and JPEG only. You can also browse for a file and extract values after the preview loads.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => screenshotInputRef.current?.click()}
+                    style={btnSecondary}
+                    disabled={isExtractingScreenshot}
+                  >
+                    Browse Screenshot
+                  </button>
+                </div>
+
+                {screenshotPreview && (
+                  <div className="journal-screenshot-preview" style={screenshotPreviewWrap}>
+                    <img
+                      src={screenshotPreview}
+                      alt="Screenshot preview"
+                      style={screenshotPreviewImage}
+                    />
+                    <div style={screenshotPreviewContentStyle}>
+                      <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.5 }}>
+                        Screenshot attached. It will stay linked to this journal entry while you review and save each trade.
+                      </div>
+                      <div style={screenshotPreviewActionsStyle}>
+                        <button
+                          type="button"
+                          onClick={() => void triggerScreenshotExtraction()}
+                          style={{ ...btnPrimary, width: "100%" }}
+                          disabled={isExtractingScreenshot}
+                        >
+                          {isExtractingScreenshot ? "Extracting..." : "Extract Trade Data"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearScreenshot}
+                          style={{ ...btnSecondary, width: "100%" }}
+                          disabled={isExtractingScreenshot}
+                        >
+                          Clear Screenshot
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {extractionMessage && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      fontSize: 12,
+                      color: extractionError ? "#fca5a5" : "var(--muted)"
+                    }}
+                  >
+                    {extractionMessage}
+                  </div>
+                )}
               </div>
-            )}
+
+              {currentExtractedTrade && (
+                <div style={previewCard}>
+                  <div style={previewTitle}>{queueActive ? "Queued trade preview" : "Extracted values"}</div>
+                  <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+                    Review these values, then edit any field in the form before saving.
+                  </div>
+                  <div className="journal-preview-grid">
+                    {(
+                      [
+                        ["symbol", "Symbol"],
+                        ["direction", "Direction"],
+                        ["entry_time", "Entry time"],
+                        ["exit_time", "Exit time"],
+                        ["entry_price", "Entry price"],
+                        ["exit_price", "Exit price"],
+                        ["pnl", "PnL"],
+                        ["contracts", "Contracts"],
+                        ["commissions", "Commissions"],
+                        ["fees", "Fees"]
+                      ] as Array<[keyof ExtractedTradeFields, string]>
+                    ).map(([key, labelText]) => (
+                      <div key={key} style={previewItem}>
+                        <div style={previewLabel}>{labelText}</div>
+                        <div style={previewValue}>{formatExtractedValue(key, currentExtractedTrade[key])}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="journal-buttons">
-          <button onClick={() => saveTrade(false)} style={btnPrimary} disabled={isSaving}>
-            {isSaving ? "Saving..." : editingId ? "Update Trade" : "Save Trade"}
-          </button>
-          {!editingId && (
-            <button onClick={() => saveTrade(true)} style={btnSecondary} disabled={isSaving}>
+          {!queueActive && (
+            <button onClick={() => saveTrade({ keepAnother: false })} style={btnPrimary} disabled={isSaving}>
+              {isSaving ? "Saving..." : editingId ? "Update Trade" : "Save Trade"}
+            </button>
+          )}
+          {!editingId && !queueActive && (
+            <button onClick={() => saveTrade({ keepAnother: true })} style={btnSecondary} disabled={isSaving}>
               Save and add another
             </button>
           )}
           <button onClick={resetForm} style={btnSecondary}>Clear</button>
         </div>
+        {queueActive && (
+          <div style={queueFooterStyle}>
+            <button onClick={loadPreviousTrade} style={btnSecondary} disabled={isSaving || currentTradeIndex === 0}>
+              Previous
+            </button>
+            <button onClick={skipQueuedTrade} style={btnSecondary} disabled={isSaving}>
+              Skip Trade
+            </button>
+            <button onClick={() => saveTrade({ advanceQueue: true })} style={btnPrimary} disabled={isSaving}>
+              {isSaving ? "Saving..." : currentTradeIndex + 1 >= queueTotal ? "Save & Finish" : "Save & Next"}
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="card" style={{ padding: 16 }}>
@@ -1254,19 +1930,25 @@ export default function JournalPage() {
             return (
               <div key={day.date} style={tradeCard}>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                  <div>
+                  <div style={{ flex: 1, minWidth: 220 }}>
                     <div style={{ fontWeight: 700 }}>{toDateLabel(day.date)}</div>
                     <div style={{ color: "var(--muted)", fontSize: 12 }}>{day.trades.length} trade{day.trades.length !== 1 ? "s" : ""}</div>
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 8, fontSize: 12, color: "var(--muted)" }}>
+                      <span>Gross PnL: {pnlBadge(day.gross)}</span>
+                      <span>Commissions: {day.commissions}</span>
+                      <span>Fees: {day.fees}</span>
+                      <span style={{ color: day.net >= 0 ? "#4cc88c" : "#ff6b6b" }}>Net: {pnlBadge(day.net)}</span>
+                    </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     <div
                       style={{
                         ...badge,
-                        background: day.total >= 0 ? "rgba(76, 200, 140, 0.15)" : "rgba(255, 107, 107, 0.15)",
-                        color: day.total >= 0 ? "#4cc88c" : "#ff6b6b"
+                        background: day.net >= 0 ? "rgba(76, 200, 140, 0.15)" : "rgba(255, 107, 107, 0.15)",
+                        color: day.net >= 0 ? "#4cc88c" : "#ff6b6b"
                       }}
                     >
-                      {pnlBadge(day.total)}
+                      {pnlBadge(day.net)}
                     </div>
                     <button
                       onClick={() => {
@@ -1286,6 +1968,27 @@ export default function JournalPage() {
 
                 {isExpanded && (
                   <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
+                    <div style={dayBreakdownStyle}>
+                      <div style={dayBreakdownTitleStyle}>Daily Breakdown</div>
+                      <div style={dayBreakdownGridStyle}>
+                        <div style={dayBreakdownItemStyle}>
+                          <span style={dayBreakdownLabelStyle}>Gross PnL</span>
+                          <strong>{pnlBadge(day.gross)}</strong>
+                        </div>
+                        <div style={dayBreakdownItemStyle}>
+                          <span style={dayBreakdownLabelStyle}>Commissions</span>
+                          <strong>{day.commissions}</strong>
+                        </div>
+                        <div style={dayBreakdownItemStyle}>
+                          <span style={dayBreakdownLabelStyle}>Fees</span>
+                          <strong>{day.fees}</strong>
+                        </div>
+                        <div style={dayBreakdownItemStyle}>
+                          <span style={dayBreakdownLabelStyle}>Net</span>
+                          <strong style={{ color: day.net >= 0 ? "#4cc88c" : "#ff6b6b" }}>{pnlBadge(day.net)}</strong>
+                        </div>
+                      </div>
+                    </div>
                     {day.trades.map((t) => {
                       const screenshotUrl = resolveScreenshotUrl(t);
                       return (
@@ -1380,7 +2083,7 @@ export default function JournalPage() {
               return <div key={`empty-${idx}`} style={calendarCellEmpty} />;
             }
             const stats = dayStats.get(d.key);
-            const pnlTotal = stats?.total ?? 0;
+            const pnlTotal = stats?.net ?? 0;
             const isSelected = selectedDay === d.key;
             return (
               <button
@@ -1521,11 +2224,23 @@ export default function JournalPage() {
         .journal-notes {
           grid-column: span 2;
         }
+        .journal-setup-screenshot {
+          grid-column: span 2;
+        }
+        .journal-screenshot-stack {
+          grid-column: span 2;
+        }
         .journal-buttons {
           display: flex;
           gap: 10px;
           margin-top: 12px;
           flex-wrap: wrap;
+        }
+        .journal-screenshot-columns {
+          display: grid;
+          grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+          gap: 12px;
+          align-items: stretch;
         }
         .journal-filters {
           display: flex;
@@ -1548,12 +2263,30 @@ export default function JournalPage() {
           .journal-notes {
             grid-column: span 1;
           }
+          .journal-setup-screenshot {
+            grid-column: span 1;
+          }
+          .journal-screenshot-stack {
+            grid-column: span 1;
+          }
           .journal-buttons button {
             width: 100%;
+          }
+          .journal-screenshot-columns {
+            grid-template-columns: 1fr;
+          }
+          :global(.journal-screenshot-preview) {
+            grid-template-columns: 1fr;
           }
           .calendar-grid {
             grid-template-columns: repeat(7, minmax(44px, 1fr));
           }
+        }
+        .journal-preview-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+          gap: 10px;
+          margin-top: 12px;
         }
       `}</style>
     </div>
@@ -1640,6 +2373,252 @@ const tradeCard: React.CSSProperties = {
   borderRadius: "var(--radius)",
   padding: 14,
   background: "var(--cardSoft)"
+};
+
+const previewCard: React.CSSProperties = {
+  border: "1px solid rgba(79, 163, 255, 0.24)",
+  borderRadius: "var(--radius)",
+  padding: 14,
+  background: "rgba(79, 163, 255, 0.08)",
+  minHeight: "100%"
+};
+
+const queueBannerStyle: React.CSSProperties = {
+  marginTop: 14,
+  marginBottom: 12,
+  padding: 14,
+  borderRadius: 14,
+  border: "1px solid rgba(77, 163, 255, 0.24)",
+  background: "linear-gradient(180deg, rgba(77, 163, 255, 0.12), rgba(22, 36, 58, 0.92))",
+  display: "flex",
+  alignItems: "stretch",
+  justifyContent: "space-between",
+  gap: 14,
+  flexWrap: "wrap"
+};
+
+const queueBannerTopRowStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: 10,
+  flexWrap: "wrap"
+};
+
+const queueBadgeStyle: React.CSSProperties = {
+  padding: "5px 10px",
+  borderRadius: 999,
+  border: "1px solid rgba(77, 163, 255, 0.24)",
+  background: "rgba(77, 163, 255, 0.12)",
+  color: "#c7e0ff",
+  fontSize: 11,
+  fontWeight: 700
+};
+
+const queueProgressTrackStyle: React.CSSProperties = {
+  marginTop: 10,
+  height: 6,
+  width: "100%",
+  borderRadius: 999,
+  background: "rgba(255,255,255,0.08)",
+  overflow: "hidden"
+};
+
+const queueProgressFillStyle: React.CSSProperties = {
+  height: "100%",
+  borderRadius: 999,
+  background: "linear-gradient(90deg, #4da3ff, #7bc4ff)"
+};
+
+const queueThumbnailStyle: React.CSSProperties = {
+  width: 112,
+  aspectRatio: "16 / 10",
+  objectFit: "cover",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  flexShrink: 0
+};
+
+const queueFooterStyle: React.CSSProperties = {
+  marginTop: 12,
+  paddingTop: 12,
+  borderTop: "1px solid rgba(255,255,255,0.08)",
+  display: "flex",
+  gap: 10,
+  flexWrap: "wrap",
+  justifyContent: "space-between",
+  alignItems: "center"
+};
+
+const screenshotSectionCardStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 14,
+  background: "rgba(255,255,255,0.03)",
+  padding: 14,
+  minHeight: "100%",
+  display: "grid",
+  gap: 12,
+  alignContent: "start"
+};
+
+const dropZoneStyle: React.CSSProperties = {
+  border: "1px dashed rgba(77, 163, 255, 0.3)",
+  borderRadius: 14,
+  padding: 18,
+  minHeight: 168,
+  display: "grid",
+  alignContent: "center",
+  justifyItems: "start",
+  gap: 10,
+  transition: "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease"
+};
+
+const screenshotPreviewWrap: React.CSSProperties = {
+  padding: 12,
+  borderRadius: 12,
+  border: "1px solid rgba(255,255,255,0.08)",
+  background: "rgba(255,255,255,0.03)",
+  display: "grid",
+  gap: 12,
+  alignItems: "start"
+};
+
+const screenshotPreviewImage: React.CSSProperties = {
+  width: "100%",
+  maxWidth: "100%",
+  aspectRatio: "16 / 10",
+  objectFit: "cover",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)"
+};
+
+const screenshotPreviewContentStyle: React.CSSProperties = {
+  display: "flex",
+  minHeight: "100%",
+  flexDirection: "column",
+  justifyContent: "space-between",
+  gap: 12
+};
+
+const screenshotPreviewActionsStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 8
+};
+
+const compactDropZoneStyle: React.CSSProperties = {
+  border: "1px dashed rgba(255,255,255,0.12)",
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.03)",
+  padding: 12,
+  display: "grid",
+  gap: 10
+};
+
+const compactDropZoneTopStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "start",
+  justifyContent: "space-between",
+  gap: 12,
+  flexWrap: "wrap"
+};
+
+const compactDropZoneActionsStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 8,
+  flexWrap: "wrap",
+  alignItems: "center"
+};
+
+const compactSetupPreviewStyle: React.CSSProperties = {
+  width: 88,
+  aspectRatio: "16 / 10",
+  objectFit: "cover",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.12)",
+  flexShrink: 0
+};
+
+const dayBreakdownStyle: React.CSSProperties = {
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 12,
+  background: "rgba(255,255,255,0.03)",
+  padding: 12
+};
+
+const dayBreakdownTitleStyle: React.CSSProperties = {
+  fontSize: 12,
+  color: "var(--muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em",
+  marginBottom: 10
+};
+
+const dayBreakdownGridStyle: React.CSSProperties = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))",
+  gap: 10
+};
+
+const dayBreakdownItemStyle: React.CSSProperties = {
+  display: "grid",
+  gap: 4,
+  padding: 10,
+  borderRadius: 10,
+  background: "rgba(8, 15, 29, 0.28)",
+  border: "1px solid rgba(255,255,255,0.05)"
+};
+
+const dayBreakdownLabelStyle: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.03em"
+};
+
+const queueToggleStyle: React.CSSProperties = {
+  display: "flex",
+  alignItems: "flex-start",
+  gap: 10,
+  fontSize: 12,
+  color: "var(--muted)",
+  lineHeight: 1.4,
+  flexWrap: "wrap"
+};
+
+const checkboxStyle: React.CSSProperties = {
+  width: 16,
+  height: 16,
+  minHeight: 16,
+  margin: "1px 0 0",
+  padding: 0,
+  borderRadius: 4,
+  flex: "0 0 auto",
+  accentColor: "var(--accent)"
+};
+
+const previewTitle: React.CSSProperties = {
+  fontWeight: 700,
+  fontSize: 14
+};
+
+const previewItem: React.CSSProperties = {
+  border: "1px solid var(--border)",
+  borderRadius: 10,
+  padding: 10,
+  background: "var(--card)"
+};
+
+const previewLabel: React.CSSProperties = {
+  fontSize: 11,
+  color: "var(--muted)",
+  textTransform: "uppercase",
+  letterSpacing: "0.04em"
+};
+
+const previewValue: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 14,
+  fontWeight: 600
 };
 
 const errorBannerStyle: React.CSSProperties = {
