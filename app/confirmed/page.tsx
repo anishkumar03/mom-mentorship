@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS, PAYMENT_METHODS } from "../../lib/constants";
+import { PAYMENT_METHODS } from "../../lib/constants";
+import { usePrograms } from "../../lib/usePrograms";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -83,6 +84,7 @@ function toLocalInputValue(iso: string | null) {
 }
 
 export default function ConfirmedPage() {
+  const { programs } = usePrograms();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [program, setProgram] = useState<string>("__ALL__");
@@ -417,7 +419,7 @@ export default function ConfirmedPage() {
           />
           <select value={program} onChange={(e) => setProgram(e.target.value)} style={inputSmall}>
             <option value="__ALL__">All Programs</option>
-            {PROGRAMS.map((p) => (
+            {programs.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
           </select>

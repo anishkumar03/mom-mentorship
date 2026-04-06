@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS, CHANNELS } from "../../lib/constants";
+import { CHANNELS } from "../../lib/constants";
+import { usePrograms } from "../../lib/usePrograms";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -246,6 +247,7 @@ function timeAgo(dateStr: string) {
 
 export default function LeadsPage() {
   const router = useRouter();
+  const { programs } = usePrograms();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [leadColumns, setLeadColumns] = useState<string[]>([]);
@@ -264,9 +266,13 @@ export default function LeadsPage() {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
-  const [program, setProgram] = useState<string>("April Group Mentorship");
+  const [program, setProgram] = useState<string>("");
   const [status, setStatus] = useState<string>("New");
   const [formOpen, setFormOpen] = useState(false);
+
+  useEffect(() => {
+    if (programs.length > 0 && !program) setProgram(programs[0]);
+  }, [programs]);
 
   // Follow-up modal
   const [followOpen, setFollowOpen] = useState(false);
@@ -408,7 +414,7 @@ export default function LeadsPage() {
     setPhone("");
     setEmail("");
     setNotes("");
-    setProgram("April Group Mentorship");
+    setProgram(programs[0] || "");
     setStatus("New");
   };
 
@@ -421,7 +427,7 @@ export default function LeadsPage() {
     setPhone(l.phone ?? "");
     setEmail(l.email ?? "");
     setNotes(l.notes ?? "");
-    setProgram(l.program ?? "April Group Mentorship");
+    setProgram(l.program ?? programs[0] ?? "");
     setStatus(stageKey(l.status));
     setFormOpen(true);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1271,7 +1277,7 @@ export default function LeadsPage() {
             <div>
               <label style={label}>Program</label>
               <select value={program} onChange={(e) => setProgram(e.target.value)} style={input}>
-                {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+                {programs.map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
 
@@ -1351,7 +1357,7 @@ export default function LeadsPage() {
 
           <select value={programFilter} onChange={(e) => setProgramFilter(e.target.value)} style={inputSmall}>
             <option value="__ALL__">All Programs</option>
-            {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+            {programs.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
 
           <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={inputSmall}>

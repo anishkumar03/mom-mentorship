@@ -15,6 +15,7 @@ const tabs = [
   { href: "/pipeline", label: "Pipeline" },
   { href: "/discipline", label: "Discipline" },
   { href: "/admin", label: "Admin" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function BottomTabs() {

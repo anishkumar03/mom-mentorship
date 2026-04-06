@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS, CHANNELS } from "../../lib/constants";
+import { CHANNELS } from "../../lib/constants";
+import { usePrograms } from "../../lib/usePrograms";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -10,15 +11,20 @@ const supabase = createClient(
 );
 
 export default function QuickAddPage() {
+  const { programs } = usePrograms();
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [handle, setHandle] = useState("");
   const [source, setSource] = useState("Instagram");
-  const [program, setProgram] = useState<string>(PROGRAMS[0]);
+  const [program, setProgram] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<{ type: "success" | "duplicate" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (programs.length > 0 && !program) setProgram(programs[0]);
+  }, [programs]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,7 +77,7 @@ export default function QuickAddPage() {
       setHandle("");
       setNotes("");
       setSource("Instagram");
-      setProgram(PROGRAMS[0]);
+      setProgram(programs[0] || "");
     }
   }
 
@@ -206,7 +212,7 @@ export default function QuickAddPage() {
             onChange={(e) => setProgram(e.target.value)}
             style={{ ...inputStyle, appearance: "auto" }}
           >
-            {PROGRAMS.map((p) => (
+            {programs.map((p) => (
               <option key={p} value={p}>
                 {p}
               </option>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { CHANNELS } from "../../lib/constants";
+import { usePrograms } from "../../lib/usePrograms";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,7 +33,7 @@ type Lead = {
   created_at?: string | null;
 };
 
-const PROGRAMS = ["April Group Mentorship", "General Lead"] as const;
+// Programs now fetched dynamically via usePrograms hook
 const STAGES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
 
 const STAGE_COLORS: Record<string, { header: string; border: string; count: string }> = {
@@ -198,6 +199,7 @@ END:VCALENDAR`;
 
 export default function PipelinePage() {
   const router = useRouter();
+  const { programs } = usePrograms();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [program, setProgram] = useState<string>("__ALL__");
   const [loading, setLoading] = useState(true);
@@ -691,7 +693,7 @@ export default function PipelinePage() {
         <span style={{ opacity: 0.7, fontSize: 13 }}>Program</span>
         <select value={program} onChange={(e) => setProgram(e.target.value)} style={inputSmall}>
           <option value="__ALL__">All</option>
-          {PROGRAMS.map((p) => <option key={p} value={p}>{p}</option>)}
+          {programs.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
         <div style={{ marginLeft: "auto", opacity: 0.6, fontSize: 12 }}>
           {fetchedUnarchivedCount} total | {leads.length} showing

@@ -16,6 +16,7 @@ const links = [
   { href: "/discipline", label: "Discipline" },
   { href: "/admin", label: "Admin" },
   { href: "/admin/activity", label: "Activity" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function Nav() {

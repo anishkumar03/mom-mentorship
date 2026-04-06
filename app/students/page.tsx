@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS, PAYMENT_METHODS } from "../../lib/constants";
+import { PAYMENT_METHODS } from "../../lib/constants";
+import { usePrograms } from "../../lib/usePrograms";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -173,6 +174,7 @@ function paymentPercentage(totalFee: number, totalPaid: number) {
 
 export default function StudentsPage() {
   const router = useRouter();
+  const { programs } = usePrograms();
   const [students, setStudents] = useState<Student[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -186,7 +188,7 @@ export default function StudentsPage() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [program, setProgram] = useState<string>(PROGRAMS[0]);
+  const [program, setProgram] = useState<string>("");
   const [totalFee, setTotalFee] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [reminderAt, setReminderAt] = useState("");
@@ -359,7 +361,7 @@ export default function StudentsPage() {
     setFullName("");
     setEmail("");
     setPhone("");
-    setProgram(PROGRAMS[0]);
+    setProgram(programs[0] || "");
     setTotalFee("");
     setDueDate("");
     setReminderAt("");
@@ -372,7 +374,7 @@ export default function StudentsPage() {
     setFullName(s.name ?? s.full_name ?? "");
     setEmail(s.email ?? "");
     setPhone(s.phone ?? "");
-    setProgram(s.program ?? PROGRAMS[0]);
+    setProgram(s.program ?? programs[0] ?? "");
     setTotalFee(s.total_fee ? String(s.total_fee) : "");
     setDueDate(s.due_date ?? "");
     setReminderAt(toLocalInputValue(s.reminder_at));
@@ -829,7 +831,7 @@ export default function StudentsPage() {
                 onChange={(e) => setProgram(e.target.value)}
                 style={input}
               >
-                {PROGRAMS.map((p) => (
+                {programs.map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>
@@ -919,7 +921,7 @@ export default function StudentsPage() {
             style={{ ...inputSmall, minWidth: 140 }}
           >
             <option value="All">All Programs</option>
-            {PROGRAMS.map((p) => (
+            {programs.map((p) => (
               <option key={p} value={p}>{p}</option>
             ))}
           </select>
