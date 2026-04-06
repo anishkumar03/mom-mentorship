@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
-import { PROGRAMS } from "../../lib/constants";
+import { usePrograms } from "../../lib/usePrograms";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,6 +39,7 @@ function makeBatchLabel(dateStr: string): string {
 }
 
 export default function BatchesPage() {
+  const { programs } = usePrograms();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

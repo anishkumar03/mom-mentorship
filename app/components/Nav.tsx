@@ -15,6 +15,7 @@ const links = [
   { href: "/roi-dashboard", label: "ROI" },
   { href: "/discipline", label: "Discipline" },
   { href: "/admin", label: "Admin" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export default function Nav() {
