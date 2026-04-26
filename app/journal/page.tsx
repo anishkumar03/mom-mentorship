@@ -835,6 +835,37 @@ export default function JournalPage() {
     void handleScreenshotUpload(file);
   };
 
+  // Paste-from-clipboard support (Ctrl+V / Cmd+V) for trade screenshot
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent) => {
+      // Ignore paste when typing in inputs/textareas
+      const target = event.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable) {
+          return;
+        }
+      }
+      const items = event.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith("image/")) {
+          const file = item.getAsFile();
+          if (file) {
+            event.preventDefault();
+            const ext = file.type.split("/")[1] || "png";
+            const renamed = new File([file], `pasted-screenshot-${Date.now()}.${ext}`, { type: file.type });
+            void handleScreenshotUpload(renamed);
+            return;
+          }
+        }
+      }
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
   const addCustomSetup = () => {
     const value = newSetupValue.trim();
     if (!value) return;
@@ -1688,10 +1719,10 @@ export default function JournalPage() {
                   }}
                 >
                   <div style={{ fontWeight: 700, fontSize: 14 }}>
-                    {isDragActive ? "Drop screenshot to attach" : "Drag and drop a trade screenshot"}
+                    {isDragActive ? "Drop screenshot to attach" : "Drag, drop, or paste a trade screenshot"}
                   </div>
                   <div style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.5 }}>
-                    PNG and JPEG only. You can also browse for a file and extract values after the preview loads.
+                    PNG and JPEG only. You can also press Ctrl+V (Cmd+V on Mac) to paste from clipboard, or browse for a file.
                   </div>
                   <button
                     type="button"
