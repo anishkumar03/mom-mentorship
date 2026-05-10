@@ -25,6 +25,17 @@ type Lead = {
   created_at?: string | null;
 };
 
+type Student = { name: string; email: string };
+
+type BatchGroup = {
+  id: string;
+  batch_name: string;
+  zoom_title_match: string;
+  students: Student[];
+  active: boolean;
+  created_at: string;
+};
+
 function safeName(l: Lead) {
   return (l.full_name ?? l.name ?? "").trim() || "(no name)";
 }
@@ -38,6 +49,267 @@ function makeBatchLabel(dateStr: string): string {
   return `${formatBatchDate(dateStr)} Batch`;
 }
 
+// ── Session Dispatch Groups Section ──────────────────────────────────────────
+function DispatchBatchManager() {
+  const [groups, setGroups] = useState<BatchGroup[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [newBatch, setNewBatch] = useState({ batch_name: "", zoom_title_match: "" });
+  const [studentInput, setStudentInput] = useState<Record<string, { name: string; email: string }>>({});
+  const [saving, setSaving] = useState<Record<string, boolean>>({});
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("batch_groups")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) setErr(error.message);
+    else setGroups((data as BatchGroup[]) ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const createBatch = async () => {
+    if (!newBatch.batch_name.trim() || !newBatch.zoom_title_match.trim()) return;
+    setSaving(s => ({ ...s, new: true }));
+    const { error } = await supabase.from("batch_groups").insert({
+      batch_name: newBatch.batch_name.trim(),
+      zoom_title_match: newBatch.zoom_title_match.trim(),
+      students: [],
+      active: true,
+    });
+    if (error) setErr(error.message);
+    else { setNewBatch({ batch_name: "", zoom_title_match: "" }); setCreating(false); await load(); }
+    setSaving(s => ({ ...s, new: false }));
+  };
+
+  const toggleActive = async (g: BatchGroup) => {
+    await supabase.from("batch_groups").update({ active: !g.active }).eq("id", g.id);
+    setGroups(prev => prev.map(x => x.id === g.id ? { ...x, active: !x.active } : x));
+  };
+
+  const deleteBatch = async (id: string) => {
+    if (!confirm("Delete this dispatch batch?")) return;
+    await supabase.from("batch_groups").delete().eq("id", id);
+    setGroups(prev => prev.filter(x => x.id !== id));
+    if (expanded === id) setExpanded(null);
+  };
+
+  const addStudent = async (g: BatchGroup) => {
+    const si = studentInput[g.id] || { name: "", email: "" };
+    if (!si.email.includes("@")) return;
+    const updated = [...(g.students || []), { name: si.name || si.email.split("@")[0], email: si.email }];
+    setSaving(s => ({ ...s, [g.id]: true }));
+    const { error } = await supabase.from("batch_groups").update({ students: updated }).eq("id", g.id);
+    if (error) setErr(error.message);
+    else {
+      setGroups(prev => prev.map(x => x.id === g.id ? { ...x, students: updated } : x));
+      setStudentInput(s => ({ ...s, [g.id]: { name: "", email: "" } }));
+    }
+    setSaving(s => ({ ...s, [g.id]: false }));
+  };
+
+  const removeStudent = async (g: BatchGroup, email: string) => {
+    const updated = (g.students || []).filter(s => s.email !== email);
+    await supabase.from("batch_groups").update({ students: updated }).eq("id", g.id);
+    setGroups(prev => prev.map(x => x.id === g.id ? { ...x, students: updated } : x));
+  };
+
+  return (
+    <div style={{ ...panel, marginBottom: 28 }}>
+      {/* Section header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#D4A843" }}>📡 Session Auto-Dispatch Groups</div>
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 3 }}>
+            When a group Zoom meeting ends → recordings + notes auto-sent to all students in the batch
+          </div>
+        </div>
+        <button
+          onClick={() => setCreating(c => !c)}
+          style={{ ...btnPrimary, background: creating ? "rgba(255,255,255,0.08)" : "#D4A843", color: creating ? "white" : "#07091A", border: "none" }}
+        >
+          {creating ? "✕ Cancel" : "+ New Batch"}
+        </button>
+      </div>
+
+      {err && (
+        <div style={{ color: "#f87171", background: "rgba(248,113,113,0.1)", borderRadius: 8, padding: "8px 14px", marginBottom: 12, fontSize: 13 }}>
+          ⚠ {err}
+        </div>
+      )}
+
+      {/* Create new batch form */}
+      {creating && (
+        <div style={{ background: "rgba(212,168,67,0.07)", border: "1px solid rgba(212,168,67,0.3)", borderRadius: 12, padding: 16, marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#D4A843", marginBottom: 12 }}>NEW DISPATCH BATCH</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, opacity: 0.6, display: "block", marginBottom: 4 }}>BATCH NAME</label>
+              <input
+                value={newBatch.batch_name}
+                onChange={e => setNewBatch(b => ({ ...b, batch_name: e.target.value }))}
+                placeholder="Monday Batch"
+                style={{ ...inputSmall, width: "100%" }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, opacity: 0.6, display: "block", marginBottom: 4 }}>ZOOM TITLE KEYWORD</label>
+              <input
+                value={newBatch.zoom_title_match}
+                onChange={e => setNewBatch(b => ({ ...b, zoom_title_match: e.target.value }))}
+                placeholder="Monday"
+                style={{ ...inputSmall, width: "100%" }}
+              />
+            </div>
+          </div>
+          <div style={{ fontSize: 12, opacity: 0.55, marginBottom: 12 }}>
+            💡 Zoom Keyword must appear in your Zoom meeting title. E.g. if meeting is "MOM Group Monday" → keyword is <span style={{ color: "#D4A843" }}>Monday</span>
+          </div>
+          <button
+            onClick={createBatch}
+            disabled={saving.new || !newBatch.batch_name || !newBatch.zoom_title_match}
+            style={{ ...btnPrimary, background: "#D4A843", color: "#07091A", border: "none", opacity: saving.new ? 0.6 : 1 }}
+          >
+            {saving.new ? "Creating..." : "Create Batch"}
+          </button>
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && groups.length === 0 && (
+        <div style={{ textAlign: "center", padding: 30, opacity: 0.5 }}>Loading batches...</div>
+      )}
+
+      {/* Empty state */}
+      {!loading && groups.length === 0 && !creating && (
+        <div style={{ textAlign: "center", padding: 30, opacity: 0.5 }}>
+          No dispatch batches yet. Create your first batch above.
+        </div>
+      )}
+
+      {/* Batch list */}
+      <div style={{ display: "grid", gap: 10 }}>
+        {groups.map(g => (
+          <div key={g.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, overflow: "hidden" }}>
+            {/* Batch header */}
+            <div
+              onClick={() => setExpanded(expanded === g.id ? null : g.id)}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", cursor: "pointer", background: "rgba(255,255,255,0.02)" }}
+            >
+              <div style={{ fontSize: 20 }}>👥</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 15 }}>{g.batch_name}</div>
+                <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>
+                  Zoom keyword: <span style={{ color: "#D4A843" }}>{g.zoom_title_match}</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span style={{
+                  padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700,
+                  background: g.active ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.08)",
+                  color: g.active ? "#86efac" : "rgba(255,255,255,0.5)",
+                  border: `1px solid ${g.active ? "rgba(34,197,94,0.3)" : "rgba(255,255,255,0.1)"}`,
+                }}>
+                  {g.active ? "Active" : "Inactive"}
+                </span>
+                <span style={{ padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 700, background: "rgba(79,163,255,0.12)", color: "#93c5fd", border: "1px solid rgba(79,163,255,0.25)" }}>
+                  {(g.students || []).length} students
+                </span>
+                <span style={{ color: "rgba(255,255,255,0.4)", fontSize: 14 }}>{expanded === g.id ? "▲" : "▼"}</span>
+              </div>
+            </div>
+
+            {/* Expanded content */}
+            {expanded === g.id && (
+              <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.2)" }}>
+
+                {/* Student list */}
+                {(g.students || []).length > 0 ? (
+                  <div style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 11, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 8 }}>
+                      Students ({g.students.length})
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 220, overflowY: "auto" }}>
+                      {g.students.map((s, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.06)" }}>
+                          <div style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(212,168,67,0.15)", border: "1px solid rgba(212,168,67,0.3)", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, color: "#D4A843", fontSize: 13, flexShrink: 0 }}>
+                            {s.name?.[0]?.toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 14, fontWeight: 600 }}>{s.name}</div>
+                            <div style={{ fontSize: 12, opacity: 0.6, fontFamily: "monospace" }}>{s.email}</div>
+                          </div>
+                          <button
+                            onClick={() => removeStudent(g, s.email)}
+                            style={{ background: "transparent", border: "none", color: "#f87171", cursor: "pointer", fontSize: 18, padding: "2px 6px", borderRadius: 6 }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ opacity: 0.5, fontSize: 13, marginBottom: 14 }}>No students yet — add the first one below.</div>
+                )}
+
+                {/* Add student */}
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 11, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 8 }}>ADD STUDENT</div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                    <input
+                      value={(studentInput[g.id] || {}).name || ""}
+                      onChange={e => setStudentInput(s => ({ ...s, [g.id]: { ...(s[g.id] || {}), name: e.target.value } }))}
+                      placeholder="Name"
+                      style={{ ...inputSmall, flex: "0 0 130px" }}
+                    />
+                    <input
+                      type="email"
+                      value={(studentInput[g.id] || {}).email || ""}
+                      onChange={e => setStudentInput(s => ({ ...s, [g.id]: { ...(s[g.id] || {}), email: e.target.value } }))}
+                      placeholder="email@example.com"
+                      style={{ ...inputSmall, flex: 1 }}
+                    />
+                    <button
+                      onClick={() => addStudent(g)}
+                      disabled={saving[g.id]}
+                      style={{ ...btnPrimary, background: "#D4A843", color: "#07091A", border: "none", whiteSpace: "nowrap" }}
+                    >
+                      {saving[g.id] ? "..." : "+ Add"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => toggleActive(g)}
+                    style={{ ...btnSecondary, color: g.active ? "rgba(255,255,255,0.7)" : "#86efac", borderColor: g.active ? "rgba(255,255,255,0.15)" : "rgba(34,197,94,0.4)" }}
+                  >
+                    {g.active ? "⏸ Deactivate" : "▶ Activate"}
+                  </button>
+                  <button
+                    onClick={() => deleteBatch(g.id)}
+                    style={{ ...btnSecondary, color: "#f87171", borderColor: "rgba(248,113,113,0.3)" }}
+                  >
+                    🗑 Delete Batch
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function BatchesPage() {
   const { programs } = usePrograms();
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -164,11 +436,20 @@ export default function BatchesPage() {
   return (
     <div style={page}>
       {/* Header */}
-      <div>
+      <div style={{ marginBottom: 20 }}>
         <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Batches</h2>
         <div style={{ opacity: 0.6, fontSize: 13, marginTop: 4 }}>
-          Organize confirmed leads into mentorship batches
+          Manage session dispatch groups and organize confirmed leads into mentorship batches
         </div>
+      </div>
+
+      {/* ── SESSION AUTO-DISPATCH GROUPS ── */}
+      <DispatchBatchManager />
+
+      {/* ── DIVIDER ── */}
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginBottom: 24, paddingTop: 4 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🗂 CRM Lead Batches</div>
+        <div style={{ fontSize: 12, opacity: 0.5 }}>Organize confirmed leads into mentorship cohorts</div>
       </div>
 
       {/* Stats */}
@@ -236,7 +517,6 @@ export default function BatchesPage() {
       <div style={{ ...panel, marginTop: 12 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Assign to Batch</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end" }}>
-          {/* Create new batch */}
           <div>
             <label style={{ fontSize: 11, opacity: 0.6, display: "block", marginBottom: 4 }}>New batch start date</label>
             <div style={{ display: "flex", gap: 6 }}>
@@ -249,17 +529,13 @@ export default function BatchesPage() {
               <button
                 onClick={handleCreateBatch}
                 disabled={!newBatchDate}
-                style={{
-                  ...btnSecondary,
-                  opacity: newBatchDate ? 1 : 0.4,
-                }}
+                style={{ ...btnSecondary, opacity: newBatchDate ? 1 : 0.4 }}
               >
                 + Create
               </button>
             </div>
           </div>
 
-          {/* Batch selector */}
           <div style={{ flex: "1 1 200px" }}>
             <label style={{ fontSize: 11, opacity: 0.6, display: "block", marginBottom: 4 }}>Select batch</label>
             <select
@@ -274,14 +550,10 @@ export default function BatchesPage() {
             </select>
           </div>
 
-          {/* Assign button */}
           <button
             onClick={handleAssign}
             disabled={selectedIds.size === 0 || saving}
-            style={{
-              ...btnPrimary,
-              opacity: selectedIds.size === 0 ? 0.4 : 1,
-            }}
+            style={{ ...btnPrimary, opacity: selectedIds.size === 0 ? 0.4 : 1 }}
           >
             {saving ? "Saving..." : `Move ${selectedIds.size} selected`}
           </button>
@@ -331,7 +603,6 @@ export default function BatchesPage() {
                 }}
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-                  {/* Checkbox */}
                   <div style={{
                     width: 22, height: 22, borderRadius: 6,
                     border: selected ? "2px solid #4fa3ff" : "2px solid rgba(255,255,255,0.2)",
@@ -343,7 +614,6 @@ export default function BatchesPage() {
                     {selected ? "\u2713" : ""}
                   </div>
 
-                  {/* Info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 700, fontSize: 15 }}>{safeName(l)}</span>
