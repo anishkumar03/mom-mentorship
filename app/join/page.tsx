@@ -72,7 +72,7 @@ export default function JoinPage() {
           experience:      form.experience,
           struggling_with:  form.struggling_with.trim() || null,
           how_found:        form.how_found || null,
-          notes:            form.mentorship_type ? `Mentorship type: ${form.mentorship_type}` : null,
+          program:          form.mentorship_type || null,
           source:          form.how_found || 'Join Form',
           status:          'new',
         }])
@@ -373,19 +373,23 @@ export default function JoinPage() {
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                   {[
-                    { value: 'group', label: 'Group Mentorship', icon: '👥', sub: 'Learn with a cohort' },
-                    { value: '1on1',  label: '1-on-1 Mentorship', icon: '🎯', sub: 'Personalised sessions' },
+                    { value: 'Group',           label: 'Group Mentorship', icon: '👥' },
+                    { value: 'Private 1-on-1',  label: '1-on-1 Mentorship', icon: '🎯' },
                   ].map(mt => (
                     <button
                       key={mt.value}
                       type="button"
                       className={`exp-btn${form.mentorship_type === mt.value ? ' selected' : ''}`}
                       onClick={() => set('mentorship_type', mt.value)}
-                      style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4, padding: '14px 16px' }}
+                      style={{ alignItems: 'center', gap: 10, padding: '14px 16px' }}
                     >
-                      <span style={{ fontSize: 22 }}>{mt.icon}</span>
+                      <span style={{ fontSize: 20 }}>{mt.icon}</span>
                       <span style={{ color: form.mentorship_type === mt.value ? '#22c55e' : '#e2e8f0', fontWeight: 600, fontSize: 14 }}>{mt.label}</span>
-                      <span style={{ color: '#475569', fontSize: 12 }}>{mt.sub}</span>
+                      {form.mentorship_type === mt.value && (
+                        <svg style={{ marginLeft: 'auto' }} width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#22c55e">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
                     </button>
                   ))}
                 </div>
