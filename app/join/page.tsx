@@ -9,7 +9,7 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const MARKETS = ['Futures', 'Forex', 'Stocks', 'Crypto', 'Options', 'Multiple']
+const MARKETS = ['Futures', 'Forex', 'Stocks', 'Crypto', 'Options', 'Multiple', "Beginner — Not Sure Yet"]
 
 const EXPERIENCE = [
   { value: 'beginner',     label: 'Beginner',     sub: '0 – 1 year' },
@@ -20,12 +20,13 @@ const EXPERIENCE = [
 const HOW_FOUND = ['Instagram', 'Discord', 'YouTube', 'Referral', 'Google', 'Other']
 
 const MARKET_ICONS: Record<string, string> = {
-  Futures: '📈',
-  Forex:   '💱',
-  Stocks:  '📊',
-  Crypto:  '₿',
-  Options: '⚙️',
-  Multiple:'🌐',
+  Futures:                 '📈',
+  Forex:                   '💱',
+  Stocks:                  '📊',
+  Crypto:                  '₿',
+  Options:                 '⚙️',
+  Multiple:                '🌐',
+  'Beginner — Not Sure Yet': '🌱',
 }
 
 export default function JoinPage() {
@@ -35,6 +36,7 @@ export default function JoinPage() {
     phone: '',
     market: '',
     experience: '',
+    mentorship_type: '',
     struggling_with: '',
     how_found: '',
   })
@@ -55,6 +57,7 @@ export default function JoinPage() {
     if (!form.email.trim())     return setError('Please enter your email.')
     if (!form.market)           return setError('Please select the market you trade.')
     if (!form.experience)       return setError('Please select your experience level.')
+    if (!form.mentorship_type)   return setError('Please select a mentorship type.')
 
     setLoading(true)
     try {
@@ -67,8 +70,9 @@ export default function JoinPage() {
           phone:           form.phone.trim() || null,
           market:          form.market,
           experience:      form.experience,
-          struggling_with: form.struggling_with.trim() || null,
-          how_found:       form.how_found || null,
+          struggling_with:  form.struggling_with.trim() || null,
+          how_found:        form.how_found || null,
+          notes:            form.mentorship_type ? `Mentorship type: ${form.mentorship_type}` : null,
           source:          form.how_found || 'Join Form',
           status:          'new',
         }])
@@ -316,6 +320,7 @@ export default function JoinPage() {
                   Market You Trade <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  {/* Last item spans full width if odd count */}
                   {MARKETS.map(m => (
                     <button
                       key={m}
@@ -361,6 +366,31 @@ export default function JoinPage() {
                 </div>
               </div>
 
+              {/* Mentorship type */}
+              <div>
+                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  Mentorship Type <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[
+                    { value: 'group', label: 'Group Mentorship', icon: '👥', sub: 'Learn with a cohort' },
+                    { value: '1on1',  label: '1-on-1 Mentorship', icon: '🎯', sub: 'Personalised sessions' },
+                  ].map(mt => (
+                    <button
+                      key={mt.value}
+                      type="button"
+                      className={`exp-btn${form.mentorship_type === mt.value ? ' selected' : ''}`}
+                      onClick={() => set('mentorship_type', mt.value)}
+                      style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 4, padding: '14px 16px' }}
+                    >
+                      <span style={{ fontSize: 22 }}>{mt.icon}</span>
+                      <span style={{ color: form.mentorship_type === mt.value ? '#22c55e' : '#e2e8f0', fontWeight: 600, fontSize: 14 }}>{mt.label}</span>
+                      <span style={{ color: '#475569', fontSize: 12 }}>{mt.sub}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Struggling with */}
               <div>
                 <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
@@ -381,19 +411,16 @@ export default function JoinPage() {
                 <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                   How did you find me? <span style={{ color: '#475569', fontWeight: 400, textTransform: 'none', fontSize: 12 }}>(optional)</span>
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                <select
+                  className="input-field"
+                  value={form.how_found}
+                  onChange={e => set('how_found', e.target.value)}
+                >
+                  <option value="">Select an option</option>
                   {HOW_FOUND.map(h => (
-                    <button
-                      key={h}
-                      type="button"
-                      className={`chip-btn${form.how_found === h ? ' selected' : ''}`}
-                      onClick={() => set('how_found', h)}
-                      style={{ fontSize: 13 }}
-                    >
-                      {h}
-                    </button>
+                    <option key={h} value={h}>{h}</option>
                   ))}
-                </div>
+                </select>
               </div>
 
               {/* Divider */}
