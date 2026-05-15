@@ -3,34 +3,30 @@
 import { useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
+// Initialize Supabase client
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-const MARKETS = [
-  'Futures',
-  'Forex',
-  'Stocks',
-  'Crypto',
-  'Options',
-  'Multiple',
-]
+const MARKETS = ['Futures', 'Forex', 'Stocks', 'Crypto', 'Options', 'Multiple']
 
 const EXPERIENCE = [
-  { value: 'beginner', label: 'Beginner — 0 to 1 year' },
-  { value: 'intermediate', label: 'Intermediate — 1 to 3 years' },
-  { value: 'experienced', label: 'Experienced — 3+ years' },
+  { value: 'beginner',     label: 'Beginner',     sub: '0 – 1 year' },
+  { value: 'intermediate', label: 'Intermediate', sub: '1 – 3 years' },
+  { value: 'experienced',  label: 'Experienced',  sub: '3+ years' },
 ]
 
-const HOW_FOUND = [
-  'Instagram',
-  'Discord',
-  'YouTube',
-  'Referral from a friend',
-  'Google',
-  'Other',
-]
+const HOW_FOUND = ['Instagram', 'Discord', 'YouTube', 'Referral', 'Google', 'Other']
+
+const MARKET_ICONS: Record<string, string> = {
+  Futures: '📈',
+  Forex:   '💱',
+  Stocks:  '📊',
+  Crypto:  '₿',
+  Options: '⚙️',
+  Multiple:'🌐',
+}
 
 export default function JoinPage() {
   const [form, setForm] = useState({
@@ -46,12 +42,8 @@ export default function JoinPage() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
 
-  function handleChange(
-    e: React.ChangeEvent<
-      HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
-    >
-  ) {
-    setForm({ ...form, [e.target.name]: e.target.value })
+  function set(field: string, value: string) {
+    setForm(f => ({ ...f, [field]: value }))
     setError('')
   }
 
@@ -60,243 +52,413 @@ export default function JoinPage() {
     setError('')
 
     if (!form.full_name.trim()) return setError('Please enter your full name.')
-    if (!form.email.trim()) return setError('Please enter your email.')
-    if (!form.market) return setError('Please select the market you trade.')
-    if (!form.experience) return setError('Please select your experience level.')
+    if (!form.email.trim())     return setError('Please enter your email.')
+    if (!form.market)           return setError('Please select the market you trade.')
+    if (!form.experience)       return setError('Please select your experience level.')
 
     setLoading(true)
     try {
-      const { error: dbError } = await supabase.from('leads').insert({
-        full_name: form.full_name.trim(),
-        email: form.email.trim().toLowerCase(),
-        phone: form.phone.trim() || null,
-        market: form.market,
-        experience: form.experience,
-        struggling_with: form.struggling_with.trim() || null,
-        how_found: form.how_found || null,
-        status: 'new',
-      })
+      const { error: dbError } = await supabase
+        .from('leads')
+        .insert([{
+          full_name:       form.full_name.trim(),
+          name:            form.full_name.trim(),
+          email:           form.email.trim().toLowerCase(),
+          phone:           form.phone.trim() || null,
+          market:          form.market,
+          experience:      form.experience,
+          struggling_with: form.struggling_with.trim() || null,
+          how_found:       form.how_found || null,
+          source:          form.how_found || 'Join Form',
+          status:          'new',
+        }])
 
-      if (dbError) throw dbError
+      if (dbError) {
+        console.error('Supabase error:', dbError)
+        throw new Error(dbError.message)
+      }
+
       setSubmitted(true)
     } catch (err: any) {
-      setError('Something went wrong. Please try again.')
-      console.error(err)
+      console.error('Submit error:', err)
+      setError(err?.message || 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
   }
 
+  // ── Success screen ────────────────────────────────────────────────────────
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
-        <div className="max-w-md w-full text-center">
-          {/* Success checkmark */}
-          <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <svg className="w-10 h-10 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+      <div style={{
+        minHeight: '100svh',
+        background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1f0d 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '24px',
+        fontFamily: "'DM Sans', sans-serif",
+      }}>
+        <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+        <div style={{ maxWidth: 420, width: '100%', textAlign: 'center' }}>
+          <div style={{
+            width: 80, height: 80,
+            background: 'rgba(34,197,94,0.12)',
+            borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 24px',
+            border: '1px solid rgba(34,197,94,0.3)',
+          }}>
+            <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="#22c55e">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 className="text-2xl font-bold text-white mb-3">
+          <h2 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: "'DM Serif Display', serif" }}>
             Application Received!
           </h2>
-          <p className="text-gray-400 mb-2">
-            Thank you for reaching out. I will review your application and get
-            back to you within 24-48 hours.
+          <p style={{ color: '#94a3b8', lineHeight: 1.6, marginBottom: 8 }}>
+            Thank you for reaching out. I will personally review your application and get back to you within 24–48 hours.
           </p>
-          <p className="text-gray-500 text-sm">
-            Keep an eye on your inbox at{' '}
-            <span className="text-green-400">{form.email}</span>
+          <p style={{ color: '#64748b', fontSize: 14 }}>
+            Check your inbox at <span style={{ color: '#22c55e' }}>{form.email}</span>
           </p>
         </div>
       </div>
     )
   }
 
+  // ── Form ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-950 py-12 px-4">
-      <div className="max-w-lg mx-auto">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 bg-green-500/10 text-green-400 text-sm font-medium px-4 py-1.5 rounded-full mb-4">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
-            Limited spots available
+    <>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0a0f1e; }
+        .input-field {
+          width: 100%;
+          background: rgba(255,255,255,0.04);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 12px;
+          padding: 14px 16px;
+          color: #fff;
+          font-size: 15px;
+          font-family: 'DM Sans', sans-serif;
+          transition: border-color 0.2s, background 0.2s;
+          outline: none;
+        }
+        .input-field::placeholder { color: #475569; }
+        .input-field:focus {
+          border-color: #22c55e;
+          background: rgba(34,197,94,0.04);
+        }
+        .chip-btn {
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.04);
+          color: #94a3b8;
+          font-size: 14px;
+          font-weight: 500;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer;
+          transition: all 0.15s;
+          text-align: center;
+        }
+        .chip-btn:hover { border-color: rgba(255,255,255,0.25); color: #e2e8f0; }
+        .chip-btn.selected {
+          background: rgba(34,197,94,0.1);
+          border-color: #22c55e;
+          color: #22c55e;
+        }
+        .exp-btn {
+          width: 100%;
+          padding: 14px 16px;
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.1);
+          background: rgba(255,255,255,0.04);
+          color: #94a3b8;
+          font-family: 'DM Sans', sans-serif;
+          cursor: pointer;
+          transition: all 0.15s;
+          text-align: left;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+        }
+        .exp-btn:hover { border-color: rgba(255,255,255,0.2); }
+        .exp-btn.selected {
+          background: rgba(34,197,94,0.08);
+          border-color: #22c55e;
+        }
+        .submit-btn {
+          width: 100%;
+          background: #22c55e;
+          color: #021a09;
+          font-size: 16px;
+          font-weight: 700;
+          font-family: 'DM Sans', sans-serif;
+          padding: 16px;
+          border-radius: 14px;
+          border: none;
+          cursor: pointer;
+          transition: all 0.2s;
+          letter-spacing: 0.01em;
+        }
+        .submit-btn:hover { background: #16a34a; transform: translateY(-1px); }
+        .submit-btn:active { transform: translateY(0); }
+        .submit-btn:disabled { background: #14532d; color: #166534; cursor: not-allowed; transform: none; }
+        select option { background: #1e293b; color: #fff; }
+      `}</style>
+
+      <div style={{
+        minHeight: '100svh',
+        background: 'linear-gradient(135deg, #0a0f1e 0%, #0d1a0d 100%)',
+        padding: '32px 16px 60px',
+        fontFamily: "'DM Sans', sans-serif",
+      }}>
+        <div style={{ maxWidth: 520, margin: '0 auto' }}>
+
+          {/* Header */}
+          <div style={{ textAlign: 'center', marginBottom: 36 }}>
+            {/* Badge */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              background: 'rgba(34,197,94,0.1)',
+              border: '1px solid rgba(34,197,94,0.25)',
+              borderRadius: 100,
+              padding: '6px 16px',
+              marginBottom: 20,
+            }}>
+              <span style={{
+                width: 6, height: 6,
+                background: '#22c55e',
+                borderRadius: '50%',
+                display: 'inline-block',
+                animation: 'pulse 2s infinite',
+              }} />
+              <span style={{ color: '#22c55e', fontSize: 13, fontWeight: 600 }}>
+                Limited spots available
+              </span>
+            </div>
+
+            <h1 style={{
+              fontSize: 'clamp(28px, 6vw, 40px)',
+              fontWeight: 700,
+              color: '#fff',
+              lineHeight: 1.15,
+              marginBottom: 12,
+              fontFamily: "'DM Serif Display', serif",
+            }}>
+              Apply for Trading<br />
+              <span style={{ color: '#22c55e' }}>Mentorship</span>
+            </h1>
+            <p style={{ color: '#64748b', lineHeight: 1.65, fontSize: 15, maxWidth: 400, margin: '0 auto' }}>
+              Fill out the form below. I will review every application personally and get back to you within 24–48 hours.
+            </p>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-3">
-            Apply for Mentorship
-          </h1>
-          <p className="text-gray-400">
-            Fill out the form below and I will get back to you within 24-48
-            hours to discuss how we can work together.
-          </p>
+
+          {/* Card */}
+          <div style={{
+            background: 'rgba(255,255,255,0.03)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: 20,
+            padding: 'clamp(20px, 5vw, 32px)',
+          }}>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 22 }}>
+
+              {/* Name + Email row on desktop */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
+                <div>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                    Full Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    className="input-field"
+                    type="text"
+                    placeholder="Your full name"
+                    value={form.full_name}
+                    onChange={e => set('full_name', e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                    Email <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
+                  <input
+                    className="input-field"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={form.email}
+                    onChange={e => set('email', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div>
+                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  Phone <span style={{ color: '#475569', fontWeight: 400, textTransform: 'none', fontSize: 12 }}>(optional)</span>
+                </label>
+                <input
+                  className="input-field"
+                  type="tel"
+                  placeholder="+1 (555) 000-0000"
+                  value={form.phone}
+                  onChange={e => set('phone', e.target.value)}
+                />
+              </div>
+
+              {/* Market */}
+              <div>
+                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  Market You Trade <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  {MARKETS.map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`chip-btn${form.market === m ? ' selected' : ''}`}
+                      onClick={() => set('market', m)}
+                    >
+                      <span style={{ marginRight: 6 }}>{MARKET_ICONS[m]}</span>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Experience */}
+              <div>
+                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  Experience Level <span style={{ color: '#ef4444' }}>*</span>
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {EXPERIENCE.map(exp => (
+                    <button
+                      key={exp.value}
+                      type="button"
+                      className={`exp-btn${form.experience === exp.value ? ' selected' : ''}`}
+                      onClick={() => set('experience', exp.value)}
+                    >
+                      <div>
+                        <span style={{ color: form.experience === exp.value ? '#22c55e' : '#e2e8f0', fontWeight: 600, fontSize: 15 }}>
+                          {exp.label}
+                        </span>
+                        <span style={{ color: '#475569', fontSize: 13, marginLeft: 8 }}>
+                          {exp.sub}
+                        </span>
+                      </div>
+                      {form.experience === exp.value && (
+                        <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="#22c55e">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                        </svg>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Struggling with */}
+              <div>
+                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  What are you struggling with? <span style={{ color: '#475569', fontWeight: 400, textTransform: 'none', fontSize: 12 }}>(optional)</span>
+                </label>
+                <textarea
+                  className="input-field"
+                  rows={3}
+                  placeholder="e.g. Risk management, trading psychology, staying consistent..."
+                  value={form.struggling_with}
+                  onChange={e => set('struggling_with', e.target.value)}
+                  style={{ resize: 'none' }}
+                />
+              </div>
+
+              {/* How found */}
+              <div>
+                <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
+                  How did you find me? <span style={{ color: '#475569', fontWeight: 400, textTransform: 'none', fontSize: 12 }}>(optional)</span>
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                  {HOW_FOUND.map(h => (
+                    <button
+                      key={h}
+                      type="button"
+                      className={`chip-btn${form.how_found === h ? ' selected' : ''}`}
+                      onClick={() => set('how_found', h)}
+                      style={{ fontSize: 13 }}
+                    >
+                      {h}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Divider */}
+              <div style={{ height: 1, background: 'rgba(255,255,255,0.06)' }} />
+
+              {/* Error */}
+              {error && (
+                <div style={{
+                  background: 'rgba(239,68,68,0.08)',
+                  border: '1px solid rgba(239,68,68,0.25)',
+                  borderRadius: 10,
+                  padding: '12px 16px',
+                  color: '#f87171',
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                }}>
+                  ⚠ {error}
+                </div>
+              )}
+
+              {/* Submit */}
+              <button
+                type="submit"
+                className="submit-btn"
+                disabled={loading}
+              >
+                {loading ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" style={{ animation: 'spin 0.8s linear infinite' }}>
+                      <circle cx="12" cy="12" r="10" strokeWidth="3" strokeOpacity="0.25" />
+                      <path d="M12 2a10 10 0 0110 10" strokeWidth="3" strokeLinecap="round" />
+                    </svg>
+                    Submitting...
+                  </span>
+                ) : (
+                  'Submit Application →'
+                )}
+              </button>
+
+              <p style={{ textAlign: 'center', color: '#334155', fontSize: 13 }}>
+                🔒 Your information is private and will never be shared.
+              </p>
+            </form>
+          </div>
+
+          {/* Footer trust signals */}
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 28, flexWrap: 'wrap' }}>
+            {['100+ Students Mentored', 'Personal Response', 'Free Consultation'].map(t => (
+              <span key={t} style={{ color: '#334155', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ color: '#22c55e' }}>✓</span> {t}
+              </span>
+            ))}
+          </div>
         </div>
-
-        {/* Form card */}
-        <form
-          onSubmit={handleSubmit}
-          className="bg-gray-900 rounded-2xl border border-gray-800 p-6 space-y-5"
-        >
-          {/* Full name */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Full Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
-              name="full_name"
-              value={form.full_name}
-              onChange={handleChange}
-              placeholder="Your full name"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-            />
-          </div>
-
-          {/* Email */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Email Address <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              placeholder="you@example.com"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-            />
-          </div>
-
-          {/* Phone */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Phone Number{' '}
-              <span className="text-gray-500 font-normal">(optional)</span>
-            </label>
-            <input
-              type="tel"
-              name="phone"
-              value={form.phone}
-              onChange={handleChange}
-              placeholder="+1 (555) 000-0000"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-            />
-          </div>
-
-          {/* Market */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Which market do you trade?{' '}
-              <span className="text-red-400">*</span>
-            </label>
-            <div className="grid grid-cols-3 gap-2">
-              {MARKETS.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setForm({ ...form, market: m })}
-                  className={`py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                    form.market === m
-                      ? 'bg-green-500/10 border-green-500 text-green-400'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Experience */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              Trading Experience <span className="text-red-400">*</span>
-            </label>
-            <div className="space-y-2">
-              {EXPERIENCE.map((exp) => (
-                <button
-                  key={exp.value}
-                  type="button"
-                  onClick={() => setForm({ ...form, experience: exp.value })}
-                  className={`w-full py-2.5 px-4 rounded-lg text-sm font-medium border text-left transition-all ${
-                    form.experience === exp.value
-                      ? 'bg-green-500/10 border-green-500 text-green-400'
-                      : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  {exp.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Struggling with */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              What are you struggling with most?{' '}
-              <span className="text-gray-500 font-normal">(optional)</span>
-            </label>
-            <textarea
-              name="struggling_with"
-              value={form.struggling_with}
-              onChange={handleChange}
-              rows={3}
-              placeholder="e.g. Risk management, trading psychology, consistency..."
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors resize-none"
-            />
-          </div>
-
-          {/* How found */}
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1.5">
-              How did you find me?{' '}
-              <span className="text-gray-500 font-normal">(optional)</span>
-            </label>
-            <select
-              name="how_found"
-              value={form.how_found}
-              onChange={handleChange}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-colors"
-            >
-              <option value="">Select an option</option>
-              {HOW_FOUND.map((h) => (
-                <option key={h} value={h}>
-                  {h}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-green-500 hover:bg-green-400 disabled:bg-green-500/50 text-gray-950 font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            {loading ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Submitting...
-              </>
-            ) : (
-              'Submit Application →'
-            )}
-          </button>
-
-          <p className="text-center text-gray-600 text-xs">
-            Your information is kept private and will never be shared.
-          </p>
-        </form>
       </div>
-    </div>
+
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.4; }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+    </>
   )
 }
