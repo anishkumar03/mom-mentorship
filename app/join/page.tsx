@@ -117,14 +117,14 @@ export default function JoinPage() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <h2 style={{ fontSize: 28, fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: "'DM Serif Display', serif" }}>
-            Application Received!
+          <h2 style={{ fontSize: 32, fontWeight: 700, color: '#fff', marginBottom: 12, fontFamily: "'DM Serif Display', serif" }}>
+            You're In! 🎉
           </h2>
           <p style={{ color: '#94a3b8', lineHeight: 1.6, marginBottom: 8 }}>
-            Thank you for reaching out. I will personally review your application and get back to you within 24–48 hours.
+            Your spot has been reserved. We will send you all the details and next steps shortly. Welcome to the MOM Mentorship family!
           </p>
           <p style={{ color: '#64748b', fontSize: 14 }}>
-            Check your inbox at <span style={{ color: '#22c55e' }}>{form.email}</span>
+            We will reach out to <span style={{ color: '#22c55e' }}>{form.email}</span>
           </p>
         </div>
       </div>
