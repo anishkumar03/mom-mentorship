@@ -1,5 +1,4 @@
 // app/api/telegram/route.ts
-// Next.js App Router API route
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
@@ -15,7 +14,6 @@ const FROM_NAME       = 'Anish — MOM Mentorship'
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY)
 
-// ── Helpers ───────────────────────────────────────────────────────────────
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC',
@@ -44,7 +42,6 @@ async function sendEmail(to: string, subject: string, html: string) {
   return data
 }
 
-// ── Email Templates ───────────────────────────────────────────────────────
 function groupEmailHtml(vars: {
   firstName: string
   batchName: string
@@ -57,270 +54,163 @@ function groupEmailHtml(vars: {
   sessionTime: string
 }) {
   const { firstName, batchName, startDate, endDate, fee, paymentDeadline, zoomLink, sessionDay, sessionTime } = vars
-  return `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <style>
-    body { margin:0; padding:0; background:#f1f5f9; font-family:Arial,sans-serif; }
-    .wrap { max-width:580px; margin:40px auto; background:#fff; border-radius:14px; overflow:hidden; border:1px solid #e2e8f0; }
-    .eh { background:#0a1628; padding:36px 40px; text-align:center; }
-    .logo { color:#d4a832; font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; margin-bottom:10px; }
-    .eh h1 { color:#fff; font-size:26px; font-weight:700; margin:0; line-height:1.35; }
-    .eh h1 em { color:#d4a832; font-style:normal; }
-    .eh-sub { color:#94a3b8; font-size:13px; margin-top:10px; }
-    .eb { padding:32px 40px; }
-    .greet { font-size:17px; font-weight:700; color:#0a1628; margin-bottom:14px; }
-    p { color:#475569; font-size:14px; line-height:1.75; margin-bottom:14px; }
-    .highlight { background:#fdf8ec; border-left:3px solid #d4a832; border-radius:0 8px 8px 0; padding:14px 18px; margin:20px 0; }
-    .highlight p { color:#78540a; margin:0; font-weight:500; }
-    .sec { font-size:12px; font-weight:700; color:#0a1628; letter-spacing:.08em; text-transform:uppercase; margin:24px 0 10px; border-bottom:1px solid #e2e8f0; padding-bottom:7px; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
-    .cell { background:#f8fafc; border-radius:8px; padding:12px 14px; border:.5px solid #e2e8f0; }
-    .cell-label { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
-    .cell-val { font-size:13px; font-weight:600; color:#0a1628; }
-    .zoom-btn { display:block; background:#0a1628; color:#d4a832; text-align:center; padding:14px; border-radius:8px; font-weight:700; font-size:14px; text-decoration:none; margin:20px 0; letter-spacing:.04em; }
-    ul { margin:0; padding:0; list-style:none; }
-    ul li { font-size:13px; color:#475569; line-height:1.6; padding:6px 0 6px 20px; position:relative; border-bottom:.5px solid #f1f5f9; }
-    ul li:last-child { border-bottom:none; }
-    ul li:before { content:''; position:absolute; left:0; top:13px; width:6px; height:6px; border-radius:50%; background:#d4a832; }
-    ol { margin:0; padding:0; list-style:none; counter-reset:mod; }
-    ol li { counter-increment:mod; font-size:13px; color:#475569; padding:7px 0 7px 34px; position:relative; border-bottom:.5px solid #f1f5f9; }
-    ol li:last-child { border-bottom:none; }
-    ol li:before { content:counter(mod); position:absolute; left:0; top:6px; width:22px; height:22px; background:#0a1628; color:#d4a832; border-radius:50%; font-size:11px; font-weight:700; text-align:center; line-height:22px; }
-    .pay-box { background:#0a1628; border-radius:10px; padding:20px 22px; margin:16px 0; }
-    .pay-box p { color:#cbd5e1; margin-bottom:8px; }
-    .pay-box a { color:#d4a832; }
-    .pay-box .warn { color:#fca5a5; font-size:12px; margin-top:10px; margin-bottom:0; }
-    .sig { margin-top:20px; padding-top:16px; border-top:1px solid #e2e8f0; }
-    .sig p { font-size:13px; color:#475569; margin:0; line-height:1.8; }
-    .ef { background:#0a1628; padding:20px 40px; text-align:center; }
-    .ef p { color:#64748b; font-size:12px; margin:0; line-height:1.8; }
-    .ef a { color:#d4a832; text-decoration:none; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="eh">
-      <div class="logo">Mind Over Markets</div>
-      <h1>Welcome to the<br><em>Group Mentorship!</em></h1>
-      <div class="eh-sub">${startDate} – ${endDate} &nbsp;·&nbsp; 7 Weeks</div>
-    </div>
-    <div class="eb">
-      <div class="greet">Hi ${firstName},</div>
-      <p>Welcome to the <strong>Mind Over Markets Group Mentorship Program!</strong> Great news — our next batch (<strong>${batchName}</strong>) officially starts on <strong>${startDate}</strong> and runs until <strong>${endDate}</strong>. This is a structured 7-week program built for traders who want discipline, clarity, confidence, and a deeper understanding of the markets.</p>
-      <div class="highlight"><p>Your seat is being held. Please complete your payment before <strong>${paymentDeadline}</strong> to confirm your spot. Limited to 10 seats.</p></div>
-
-      <div class="sec">Program Overview</div>
-      <div class="grid">
-        <div class="cell"><div class="cell-label">Duration</div><div class="cell-val">7 Weeks</div></div>
-        <div class="cell"><div class="cell-label">Schedule</div><div class="cell-val">Every ${sessionDay}</div></div>
-        <div class="cell"><div class="cell-label">Time</div><div class="cell-val">${sessionTime}</div></div>
-        <div class="cell"><div class="cell-label">Fee</div><div class="cell-val">${fee}</div></div>
-        <div class="cell" style="grid-column:1/-1"><div class="cell-label">Format</div><div class="cell-val">Live Zoom Sessions + Private Discord Community</div></div>
-      </div>
-
-      <a class="zoom-btn" href="${zoomLink}">Join Zoom Session &rarr;</a>
-
-      <div class="sec">What's Included</div>
-      <ul>
-        <li>7 weeks of structured mentorship with live guidance and community interaction</li>
-        <li>Balanced mix of live classes, recaps, and review sessions</li>
-        <li>Foundational Market Knowledge – understanding how markets operate and price movement</li>
-        <li>Introduction to Futures Trading – mechanics, key concepts, and professional setup</li>
-        <li>Trade Execution Process – discipline before, during, and after each trade</li>
-        <li>My Unique Strategy & Edge – Smart Money Concepts (SMC) adapted to your style</li>
-        <li>Private Discord community for chart sharing, trade discussions, and Q&A</li>
-        <li>Daily trade journal access to track and refine your performance</li>
-        <li>Post-mentorship Q&A support to continue your growth after the program</li>
-      </ul>
-
-      <div class="sec">Mentorship Modules</div>
-      <ol>
-        <li>The Truth About Trading & Mastering the Trading Mindset</li>
-        <li>Understanding Charts, Candlesticks & Market Structure</li>
-        <li>Futures Market Fundamentals & Introduction to Liquidity Concepts</li>
-        <li>Smart Money Concepts – Order Blocks & Fair Value Gaps (FVG)</li>
-        <li>Strategy Deep Dive – FVG Trading Strategy</li>
-        <li>Strategy Deep Dive – Inverse FVG (iFVG) Strategy</li>
-        <li>Risk Management, Position Sizing, Prop Firm Strategies & Trading Psychology</li>
-      </ol>
-
-      <div class="sec">Session Format</div>
-      <p>Each session includes approximately <strong>1 hour 30 minutes</strong> of teaching, followed by a <strong>20–30 minute Q&A</strong>. All sessions are recorded and shared exclusively with enrolled students.</p>
-
-      <div class="sec">How to Prepare</div>
-      <ul>
-        <li>Join from a quiet place with a stable internet connection</li>
-        <li>Bring a notebook and pen for taking notes</li>
-        <li>Join 5 minutes early so we can start on time</li>
-      </ul>
-
-      <div class="sec">Payment</div>
-      <div class="pay-box">
-        <p><strong style="color:#d4a832;">Canada</strong> — Interac e-Transfer to <a href="mailto:${FROM_EMAIL}">${FROM_EMAIL}</a></p>
-        <p><strong style="color:#d4a832;">Outside Canada</strong> — <a href="https://wise.com/pay/me/anishm11">wise.com/pay/me/anishm11</a></p>
-        <p class="warn">⚠ Payment due by ${paymentDeadline}. Include your full name in the transfer. Non-refundable.</p>
-      </div>
-
-      <div class="sig">
-        <p>If you have any questions, simply reply to this email and I'll personally guide you through the next steps.</p>
-        <p>Let's make these 7 weeks a powerful turning point in your trading journey.</p>
-        <p style="margin-top:12px"><strong>Warm regards,<br>Anish Kumar Pillai</strong><br>Mind Over Markets</p>
-      </div>
-    </div>
-    <div class="ef">
-      <p>Mind Over Markets &nbsp;·&nbsp; <a href="mailto:${FROM_EMAIL}">${FROM_EMAIL}</a> &nbsp;·&nbsp; +1 (613) 701-4597</p>
-    </div>
-  </div>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
+<tr><td align="center">
+<table width="580" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+<tr><td style="background:#0a1628;padding:28px 40px;text-align:center;">
+<img src="https://mom-mentorship.vercel.app/logo.png" alt="Mind Over Markets" width="180" style="display:block;margin:0 auto;max-width:180px;"/>
+</td></tr>
+<tr><td style="background:#d4a832;height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:36px 40px;">
+<p style="font-size:16px;font-weight:700;color:#0a1628;margin:0 0 20px;">Hi ${firstName},</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 16px;">Welcome to the <strong>Mind Over Markets Group Mentorship Program!</strong> I am excited to have you join us. Our next batch — <strong>${batchName}</strong> — officially starts on <strong>${startDate}</strong> and runs until <strong>${endDate}</strong>.</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">This is a structured 7-week program designed for traders who want to build discipline, clarity, confidence, and a deeper understanding of the markets.</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:24px;">
+<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;width:40%;">Duration</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">7 Weeks</td></tr>
+<tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Schedule</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">Every ${sessionDay}</td></tr>
+<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Time</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">${sessionTime}</td></tr>
+<tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Format</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">Live Zoom + Private Discord</td></tr>
+<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;">Program Fee</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;">${fee}</td></tr>
+</table>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 6px;"><strong>Zoom Join Link:</strong></p>
+<p style="margin:0 0 24px;"><a href="${zoomLink}" style="color:#d4a832;font-size:14px;">${zoomLink}</a></p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">What's Included</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+&bull; 7 weeks of structured mentorship with live guidance<br/>
+&bull; Foundational Market Knowledge and price movement concepts<br/>
+&bull; Introduction to Futures Trading — mechanics and professional setup<br/>
+&bull; Trade Execution Process — discipline before, during, and after each trade<br/>
+&bull; My Unique Strategy and Edge using Smart Money Concepts (SMC)<br/>
+&bull; Private Discord community for chart sharing, trade discussions, and Q&A<br/>
+&bull; Daily trade journal access to track and refine your performance<br/>
+&bull; Post-mentorship Q&A support to continue your growth<br/>
+&bull; All sessions recorded and shared exclusively with enrolled students
+</p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Mentorship Modules</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+1. The Truth About Trading and Mastering the Trading Mindset<br/>
+2. Understanding Charts, Candlesticks and Market Structure<br/>
+3. Futures Market Fundamentals and Introduction to Liquidity Concepts<br/>
+4. Smart Money Concepts — Order Blocks and Fair Value Gaps (FVG)<br/>
+5. Strategy Deep Dive — FVG Trading Strategy<br/>
+6. Strategy Deep Dive — Inverse FVG (iFVG) Strategy<br/>
+7. Risk Management, Position Sizing, Prop Firm Strategies and Trading Psychology
+</p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Session Format</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">Each session includes approximately 1 hour 30 minutes of teaching, followed by a 20 to 30 minute Q&A. All sessions are recorded and shared exclusively with enrolled students.</p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">How to Prepare</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+&bull; Join from a quiet place with a stable internet connection<br/>
+&bull; Bring a notebook and pen for taking notes<br/>
+&bull; Join 5 minutes early so we can start on time
+</p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Payment</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 6px;"><strong>Canada</strong> — Interac e-Transfer to anish@mindovermarkets.net<br/><strong>Outside Canada</strong> — <a href="https://wise.com/pay/me/anishm11" style="color:#d4a832;">wise.com/pay/me/anishm11</a></p>
+<p style="font-size:13px;color:#dc2626;margin:0 0 24px;">Please complete payment before ${paymentDeadline} and include your full name in the transfer message. Payment is non-refundable. Limited to 10 seats.</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">If you have any questions, simply reply to this email and I will personally guide you through the next steps.</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0;">Let's make these 7 weeks a powerful turning point in your trading journey.<br/><br/>Warm regards,<br/><strong style="color:#0a1628;">Anish Kumar Pillai</strong><br/>Mind Over Markets<br/><a href="mailto:anish@mindovermarkets.net" style="color:#d4a832;">anish@mindovermarkets.net</a><br/>+1 (613) 701-4597</p>
+</td></tr>
+<tr><td style="background:#0a1628;padding:20px 40px;text-align:center;">
+<p style="font-size:12px;color:#64748b;margin:0;">Mind Over Markets &nbsp;&bull;&nbsp; <a href="mailto:anish@mindovermarkets.net" style="color:#d4a832;text-decoration:none;">anish@mindovermarkets.net</a></p>
+</td></tr>
+</table>
+</td></tr>
+</table>
 </body>
 </html>`
 }
 
 function oneOnOneEmailHtml(vars: { firstName: string; fee: string }) {
   const { firstName, fee } = vars
-  return `
-<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <style>
-    body { margin:0; padding:0; background:#f1f5f9; font-family:Arial,sans-serif; }
-    .wrap { max-width:580px; margin:40px auto; background:#fff; border-radius:14px; overflow:hidden; border:1px solid #e2e8f0; }
-    .eh { background:#0a1628; padding:36px 40px; text-align:center; }
-    .logo { color:#d4a832; font-size:11px; font-weight:700; letter-spacing:.18em; text-transform:uppercase; margin-bottom:10px; }
-    .eh h1 { color:#fff; font-size:26px; font-weight:700; margin:0; line-height:1.35; }
-    .eh h1 em { color:#d4a832; font-style:normal; }
-    .eh-sub { color:#94a3b8; font-size:13px; margin-top:10px; }
-    .eb { padding:32px 40px; }
-    .greet { font-size:17px; font-weight:700; color:#0a1628; margin-bottom:14px; }
-    p { color:#475569; font-size:14px; line-height:1.75; margin-bottom:14px; }
-    .highlight { background:#fdf8ec; border-left:3px solid #d4a832; border-radius:0 8px 8px 0; padding:14px 18px; margin:20px 0; }
-    .highlight p { color:#78540a; margin:0; font-weight:500; }
-    .sec { font-size:12px; font-weight:700; color:#0a1628; letter-spacing:.08em; text-transform:uppercase; margin:24px 0 10px; border-bottom:1px solid #e2e8f0; padding-bottom:7px; }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:14px 0; }
-    .cell { background:#f8fafc; border-radius:8px; padding:12px 14px; border:.5px solid #e2e8f0; }
-    .cell-label { font-size:11px; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-bottom:4px; }
-    .cell-val { font-size:13px; font-weight:600; color:#0a1628; }
-    ul { margin:0; padding:0; list-style:none; }
-    ul li { font-size:13px; color:#475569; line-height:1.6; padding:6px 0 6px 20px; position:relative; border-bottom:.5px solid #f1f5f9; }
-    ul li:last-child { border-bottom:none; }
-    ul li:before { content:''; position:absolute; left:0; top:13px; width:6px; height:6px; border-radius:50%; background:#d4a832; }
-    ol { margin:0; padding:0; list-style:none; counter-reset:mod; }
-    ol li { counter-increment:mod; font-size:13px; color:#475569; padding:7px 0 7px 34px; position:relative; border-bottom:.5px solid #f1f5f9; }
-    ol li:last-child { border-bottom:none; }
-    ol li:before { content:counter(mod); position:absolute; left:0; top:6px; width:22px; height:22px; background:#0a1628; color:#d4a832; border-radius:50%; font-size:11px; font-weight:700; text-align:center; line-height:22px; }
-    .sig { margin-top:20px; padding-top:16px; border-top:1px solid #e2e8f0; }
-    .sig p { font-size:13px; color:#475569; margin:0; line-height:1.8; }
-    .ef { background:#0a1628; padding:20px 40px; text-align:center; }
-    .ef p { color:#64748b; font-size:12px; margin:0; line-height:1.8; }
-    .ef a { color:#d4a832; text-decoration:none; }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <div class="eh">
-      <div class="logo">Mind Over Markets</div>
-      <h1>Welcome to Your<br><em>1-on-1 Mentorship!</em></h1>
-      <div class="eh-sub">Personalized · 7 Weeks · Built Around You</div>
-    </div>
-    <div class="eb">
-      <div class="greet">Hi ${firstName},</div>
-      <p>Welcome to the <strong>Mind Over Markets 1-on-1 Mentorship Program!</strong> I'm genuinely excited to work with you personally over the next 7 weeks. This program is fully tailored around your goals, your questions, and your specific challenges as a trader.</p>
-      <div class="highlight"><p>Your spot is confirmed. I'll reach out personally within 24 hours to schedule our first session and get you set up.</p></div>
-
-      <div class="sec">Program Overview</div>
-      <div class="grid">
-        <div class="cell"><div class="cell-label">Duration</div><div class="cell-val">7 Weeks</div></div>
-        <div class="cell"><div class="cell-label">Sessions</div><div class="cell-val">1–2 per Week</div></div>
-        <div class="cell"><div class="cell-label">Fee</div><div class="cell-val">${fee}</div></div>
-        <div class="cell"><div class="cell-label">Format</div><div class="cell-val">Live Zoom + Discord</div></div>
-      </div>
-
-      <div class="sec">What's Included</div>
-      <ul>
-        <li>7 weeks of personalized mentorship built around your specific needs</li>
-        <li>Foundational Market Knowledge – how markets operate and what drives price movement</li>
-        <li>Introduction to Futures – trading mechanics, key concepts, and professional setup</li>
-        <li>Trade Execution Process – step-by-step discipline before, during, and after each trade</li>
-        <li>My Unique Strategy & Edge – Smart Money Concepts (SMC) adapted directly to your style</li>
-        <li>Private Discord group for trade ideas, chart sharing, and direct Q&A with me</li>
-        <li>Feedback and discussion on your charts between sessions</li>
-        <li>Daily trade journal access to track and refine your performance</li>
-        <li>Post-mentorship Q&A support to continue your growth after the program</li>
-      </ul>
-
-      <div class="sec">Mentorship Modules</div>
-      <ol>
-        <li>Understanding Charts, Candlesticks & Market Structure</li>
-        <li>Futures Market Fundamentals & Introduction to Liquidity Concepts</li>
-        <li>Smart Money Concepts – Order Blocks & Fair Value Gaps (FVG)</li>
-        <li>Strategy Deep Dive – FVG Trading Strategy</li>
-        <li>Strategy Deep Dive – Inverse FVG (iFVG) Strategy</li>
-        <li>Risk Management, Position Sizing, Prop Firm Strategies & Trading Psychology</li>
-      </ol>
-
-      <div class="sec">Community & Ongoing Support</div>
-      <ul>
-        <li>Access to a private Discord group for trade ideas, chart sharing, and Q&A</li>
-        <li>Feedback and discussion on your charts between sessions</li>
-        <li>Post-mentorship support to continue your growth after the program ends</li>
-      </ul>
-
-      <div class="sig">
-        <p>I look forward to helping you strengthen your technical and psychological edge in trading.</p>
-        <p>Let's make these 7 weeks a powerful turning point in your trading journey.</p>
-        <p style="margin-top:12px"><strong>Warm regards,<br>Anish Kumar Pillai</strong><br>Mind Over Markets</p>
-      </div>
-    </div>
-    <div class="ef">
-      <p>Mind Over Markets &nbsp;·&nbsp; <a href="mailto:${FROM_EMAIL}">${FROM_EMAIL}</a> &nbsp;·&nbsp; +1 647-687-3758</p>
-    </div>
-  </div>
+<head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:30px 0;">
+<tr><td align="center">
+<table width="580" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">
+<tr><td style="background:#0a1628;padding:28px 40px;text-align:center;">
+<img src="https://mom-mentorship.vercel.app/logo.png" alt="Mind Over Markets" width="180" style="display:block;margin:0 auto;max-width:180px;"/>
+</td></tr>
+<tr><td style="background:#d4a832;height:3px;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:36px 40px;">
+<p style="font-size:16px;font-weight:700;color:#0a1628;margin:0 0 20px;">Hi ${firstName},</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 16px;">Welcome to the <strong>Mind Over Markets 1-on-1 Mentorship Program!</strong> I am genuinely excited to work with you personally over the next 7 weeks. This program is fully tailored around your goals, your questions, and your specific challenges as a trader.</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">I will reach out personally within the next 24 hours to schedule our first session and get you set up.</p>
+<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:24px;">
+<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;width:40%;">Duration</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">7 Weeks</td></tr>
+<tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Sessions</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">1 to 2 per Week</td></tr>
+<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Format</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">Live Zoom + Private Discord</td></tr>
+<tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;">Program Fee</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;">${fee}</td></tr>
+</table>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">What's Included</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+&bull; 7 weeks of personalized mentorship built around your specific needs<br/>
+&bull; Foundational Market Knowledge — how markets operate and price movement<br/>
+&bull; Introduction to Futures — mechanics, key concepts, and professional setup<br/>
+&bull; Trade Execution Process — step-by-step discipline before, during, and after each trade<br/>
+&bull; My Unique Strategy and Edge using Smart Money Concepts (SMC) adapted to your style<br/>
+&bull; Private Discord group for trade ideas, chart sharing, and direct Q&A<br/>
+&bull; Feedback and discussion on your charts between sessions<br/>
+&bull; Daily trade journal access to track and refine your performance<br/>
+&bull; Post-mentorship support to continue your growth after the program
+</p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Mentorship Modules</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+1. Understanding Charts, Candlesticks and Market Structure<br/>
+2. Futures Market Fundamentals and Introduction to Liquidity Concepts<br/>
+3. Smart Money Concepts — Order Blocks and Fair Value Gaps (FVG)<br/>
+4. Strategy Deep Dive — FVG Trading Strategy<br/>
+5. Strategy Deep Dive — Inverse FVG (iFVG) Strategy<br/>
+6. Risk Management, Position Sizing, Prop Firm Strategies and Trading Psychology
+</p>
+<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Community and Ongoing Support</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+&bull; Private Discord group for trade ideas, chart sharing, and Q&A<br/>
+&bull; Chart feedback and discussion between sessions<br/>
+&bull; Post-mentorship support after the program ends
+</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">If you have any questions before we connect, simply reply to this email. I read every message personally and will get back to you quickly.</p>
+<p style="font-size:14px;color:#374151;line-height:1.8;margin:0;">Let's make these 7 weeks a powerful turning point in your trading journey.<br/><br/>Warm regards,<br/><strong style="color:#0a1628;">Anish Kumar Pillai</strong><br/>Mind Over Markets<br/><a href="mailto:anish@mindovermarkets.net" style="color:#d4a832;">anish@mindovermarkets.net</a><br/>+1 647-687-3758</p>
+</td></tr>
+<tr><td style="background:#0a1628;padding:20px 40px;text-align:center;">
+<p style="font-size:12px;color:#64748b;margin:0;">Mind Over Markets &nbsp;&bull;&nbsp; <a href="mailto:anish@mindovermarkets.net" style="color:#d4a832;text-decoration:none;">anish@mindovermarkets.net</a></p>
+</td></tr>
+</table>
+</td></tr>
+</table>
 </body>
 </html>`
 }
 
 // ── Commands ──────────────────────────────────────────────────────────────
-
-// send <batch_key> <email>
 async function handleSend(chatId: number, args: string) {
-  const parts     = args.trim().split(' ')
-  const batchKey  = parts[0]?.toLowerCase()
-  const email     = parts[1]?.toLowerCase()
+  const parts    = args.trim().split(' ')
+  const batchKey = parts[0]?.toLowerCase()
+  const email    = parts[1]?.toLowerCase()
 
-  if (!batchKey || !email) {
+  if (!batchKey || !email)
     return sendTelegram(chatId, '❌ Usage: `send <batch_key> user@email.com`\nExample: `send june10 john@gmail.com`')
-  }
 
-  // Fetch batch template
   const { data: batches, error: batchErr } = await supabase
-    .from('email_batches')
-    .select('*')
-    .eq('batch_key', batchKey)
-    .limit(1)
+    .from('email_batches').select('*').eq('batch_key', batchKey).limit(1)
 
   if (batchErr) return sendTelegram(chatId, `❌ Database error: ${batchErr.message}`)
-  if (!batches || batches.length === 0) {
+  if (!batches || batches.length === 0)
     return sendTelegram(chatId, `❌ No batch found with key: \`${batchKey}\`\nCreate it in the CRM dashboard first.`)
-  }
 
   const batch = batches[0]
 
-  // Fetch lead
   const { data: leads, error: leadErr } = await supabase
-    .from('leads')
-    .select('*')
-    .ilike('email', email)
-    .limit(1)
+    .from('leads').select('*').ilike('email', email).limit(1)
 
   if (leadErr) return sendTelegram(chatId, `❌ Database error: ${leadErr.message}`)
-  if (!leads || leads.length === 0) {
+  if (!leads || leads.length === 0)
     return sendTelegram(chatId, `❌ No lead found with email: \`${email}\``)
-  }
 
   const lead      = leads[0]
   const firstName = (lead.full_name || lead.name || 'there').split(' ')[0]
@@ -332,7 +222,7 @@ async function handleSend(chatId: number, args: string) {
     let subject: string
 
     if (batch.type === 'group') {
-      subject = `Welcome to ${batch.batch_name} — MOM Mentorship 🎉`
+      subject = `Welcome to ${batch.batch_name} — MOM Mentorship`
       html = groupEmailHtml({
         firstName,
         batchName:       batch.batch_name,
@@ -345,15 +235,13 @@ async function handleSend(chatId: number, args: string) {
         sessionTime:     batch.session_time || '7:00 PM – 9:00 PM ET',
       })
     } else {
-      subject = `Welcome to MOM 1-on-1 Mentorship, ${firstName}! 🎉`
+      subject = `Welcome to MOM 1-on-1 Mentorship, ${firstName}`
       html = oneOnOneEmailHtml({ firstName, fee: batch.fee })
     }
 
     await sendEmail(email, subject, html)
 
-    // Update lead status
-    await supabase
-      .from('leads')
+    await supabase.from('leads')
       .update({ status: 'contacted', last_contacted_at: new Date().toISOString() })
       .eq('id', lead.id)
 
@@ -367,16 +255,13 @@ async function handleSend(chatId: number, args: string) {
   }
 }
 
-// list available batch keys
 async function handleBatches(chatId: number) {
   const { data: batches } = await supabase
-    .from('email_batches')
-    .select('batch_key, batch_name, type, start_date')
+    .from('email_batches').select('batch_key, batch_name, type, start_date')
     .order('created_at', { ascending: false })
 
-  if (!batches || batches.length === 0) {
+  if (!batches || batches.length === 0)
     return sendTelegram(chatId, '📭 No batch templates yet. Create one in the CRM dashboard.')
-  }
 
   let msg = `📦 *Available Batches (${batches.length})*\n\n`
   batches.forEach(b => {
@@ -401,10 +286,10 @@ async function handleWelcome(chatId: number, args: string) {
   const name    = lead.full_name || lead.name || 'there'
   const program = lead.program || 'MOM Mentorship'
 
-  await sendTelegram(chatId, `⏳ Sending generic welcome to *${name}*...`)
+  await sendTelegram(chatId, `⏳ Sending welcome to *${name}*...`)
 
   try {
-    const subject = `Welcome to MOM Mentorship, ${name.split(' ')[0]}! 🎉`
+    const subject = `Welcome to MOM Mentorship, ${name.split(' ')[0]}!`
     const html    = oneOnOneEmailHtml({ firstName: name.split(' ')[0], fee: program })
     await sendEmail(email, subject, html)
     await supabase.from('leads')
@@ -495,15 +380,15 @@ export async function POST(req: NextRequest) {
     const args    = parts.slice(1).join(' ')
 
     switch (command) {
-      case 'send':    await handleSend(chatId, args);             break
-      case 'batches': await handleBatches(chatId);                break
-      case 'welcome': await handleWelcome(chatId, args);          break
+      case 'send':    await handleSend(chatId, args);            break
+      case 'batches': await handleBatches(chatId);               break
+      case 'welcome': await handleWelcome(chatId, args);         break
       case 'leads':
-      case 'today':   await handleLeads(chatId);                  break
-      case 'all':     await handleAll(chatId, args || undefined);  break
-      case 'status':  await handleStatus(chatId, args);           break
+      case 'today':   await handleLeads(chatId);                 break
+      case 'all':     await handleAll(chatId, args || undefined); break
+      case 'status':  await handleStatus(chatId, args);          break
       case 'help':
-      case 'start':   await handleHelp(chatId);                   break
+      case 'start':   await handleHelp(chatId);                  break
       default:
         await sendTelegram(chatId, `❓ Unknown command. Send \`help\` to see all commands.`)
     }
