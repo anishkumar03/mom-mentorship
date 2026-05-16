@@ -13,8 +13,8 @@ interface Batch {
   batch_key: string
   batch_name: string
   type: 'group' | '1on1'
-  start_date: string
-  end_date: string
+  start_date: string | null
+  end_date: string | null
   fee: string
   payment_deadline: string | null
   zoom_link: string | null
@@ -30,7 +30,7 @@ const empty = {
   session_day: 'Wednesday', session_time: '7:00 PM – 9:00 PM ET',
 }
 
-export default function BatchesPage() {
+export default function EmailBatchesPage() {
   const [batches, setBatches]   = useState<Batch[]>([])
   const [loading, setLoading]   = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -65,37 +65,43 @@ export default function BatchesPage() {
   function openEdit(b: Batch) {
     setEditing(b)
     setForm({
-      batch_key:       b.batch_key,
-      batch_name:      b.batch_name,
-      type:            b.type,
-      start_date:      b.start_date,
-      end_date:        b.end_date,
-      fee:             b.fee,
+      batch_key:        b.batch_key,
+      batch_name:       b.batch_name,
+      type:             b.type,
+      start_date:       b.start_date || '',
+      end_date:         b.end_date || '',
+      fee:              b.fee,
       payment_deadline: b.payment_deadline || '',
-      zoom_link:       b.zoom_link || '',
-      session_day:     b.session_day || 'Wednesday',
-      session_time:    b.session_time || '7:00 PM – 9:00 PM ET',
+      zoom_link:        b.zoom_link || '',
+      session_day:      b.session_day || 'Wednesday',
+      session_time:     b.session_time || '7:00 PM – 9:00 PM ET',
     })
     setShowForm(true)
   }
 
   async function saveBatch() {
-    if (!form.batch_key || !form.batch_name || !form.start_date || !form.end_date || !form.fee) {
-      showToast('Please fill in all required fields.')
+    // dates only required for group
+    if (!form.batch_key || !form.batch_name || !form.fee) {
+      showToast('Please fill in Batch Key, Name and Fee.')
       return
     }
+    if (form.type === 'group' && (!form.start_date || !form.end_date)) {
+      showToast('Start and End date are required for Group batches.')
+      return
+    }
+
     setSaving(true)
     const payload = {
-      batch_key:       form.batch_key.toLowerCase().replace(/\s+/g, ''),
-      batch_name:      form.batch_name,
-      type:            form.type,
-      start_date:      form.start_date,
-      end_date:        form.end_date,
-      fee:             form.fee,
+      batch_key:        form.batch_key.toLowerCase().replace(/\s+/g, ''),
+      batch_name:       form.batch_name,
+      type:             form.type,
+      start_date:       form.start_date || null,
+      end_date:         form.end_date   || null,
+      fee:              form.fee,
       payment_deadline: form.payment_deadline || null,
-      zoom_link:       form.zoom_link || null,
-      session_day:     form.type === 'group' ? form.session_day : null,
-      session_time:    form.type === 'group' ? form.session_time : null,
+      zoom_link:        form.zoom_link   || null,
+      session_day:      form.type === 'group' ? form.session_day  : null,
+      session_time:     form.type === 'group' ? form.session_time : null,
     }
 
     if (editing) {
@@ -118,7 +124,7 @@ export default function BatchesPage() {
     loadBatches()
   }
 
-  function formatDate(d: string) {
+  function formatDate(d: string | null) {
     if (!d) return '—'
     return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
   }
@@ -131,7 +137,7 @@ export default function BatchesPage() {
         <div style={{
           position: 'fixed', top: '20px', right: '20px', background: '#0a1628',
           color: '#d4a832', padding: '12px 20px', borderRadius: '10px',
-          fontSize: '14px', fontWeight: 600, zIndex: 1000, boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
+          fontSize: '14px', fontWeight: 600, zIndex: 1000,
         }}>{toast}</div>
       )}
 
@@ -140,17 +146,14 @@ export default function BatchesPage() {
         <div>
           <h1 style={{ fontSize: '22px', fontWeight: 700, color: '#0a1628', margin: 0 }}>Email Batches</h1>
           <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
-            Create and manage batch templates. Use <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>send &lt;key&gt; email@x.com</code> in your Telegram bot to send.
+            Create batch templates. Use <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>send &lt;key&gt; email@x.com</code> in Telegram to send.
           </p>
         </div>
-        <button
-          onClick={openCreate}
-          style={{
-            background: '#0a1628', color: '#d4a832', border: 'none',
-            padding: '10px 20px', borderRadius: '8px', fontSize: '14px',
-            fontWeight: 700, cursor: 'pointer',
-          }}
-        >
+        <button onClick={openCreate} style={{
+          background: '#0a1628', color: '#d4a832', border: 'none',
+          padding: '10px 20px', borderRadius: '8px', fontSize: '14px',
+          fontWeight: 700, cursor: 'pointer',
+        }}>
           + New Batch
         </button>
       </div>
@@ -164,7 +167,6 @@ export default function BatchesPage() {
           <div style={{
             background: '#fff', borderRadius: '14px', padding: '32px',
             width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
           }}>
             <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0a1628', margin: '0 0 24px' }}>
               {editing ? 'Edit Batch' : 'Create New Batch'}
@@ -172,7 +174,7 @@ export default function BatchesPage() {
 
             <div style={{ display: 'grid', gap: '16px' }}>
 
-              {/* Type */}
+              {/* Type toggle */}
               <div>
                 <label style={labelStyle}>Type *</label>
                 <div style={{ display: 'flex', gap: '10px' }}>
@@ -196,11 +198,11 @@ export default function BatchesPage() {
 
               {/* Batch Key */}
               <div>
-                <label style={labelStyle}>Batch Key * <span style={{ color: '#94a3b8', fontWeight: 400 }}>(used in Telegram command, no spaces)</span></label>
+                <label style={labelStyle}>Batch Key * <span style={{ color: '#94a3b8', fontWeight: 400 }}>(no spaces — used in Telegram)</span></label>
                 <input
                   value={form.batch_key}
                   onChange={e => setForm(f => ({ ...f, batch_key: e.target.value }))}
-                  placeholder="e.g. june10"
+                  placeholder={form.type === 'group' ? 'e.g. june10' : 'e.g. 1on1'}
                   style={inputStyle}
                 />
               </div>
@@ -211,21 +213,25 @@ export default function BatchesPage() {
                 <input
                   value={form.batch_name}
                   onChange={e => setForm(f => ({ ...f, batch_name: e.target.value }))}
-                  placeholder="e.g. June 10 Group Mentorship"
+                  placeholder={form.type === 'group' ? 'e.g. June 10 Group Mentorship' : 'e.g. 1-on-1 Mentorship'}
                   style={inputStyle}
                 />
               </div>
 
-              {/* Dates */}
+              {/* Dates — only required for group, optional hint for 1-on-1 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
-                  <label style={labelStyle}>Start Date *</label>
+                  <label style={labelStyle}>
+                    Start Date {form.type === 'group' ? '*' : <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>}
+                  </label>
                   <input type="date" value={form.start_date}
                     onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
                     style={inputStyle} />
                 </div>
                 <div>
-                  <label style={labelStyle}>End Date *</label>
+                  <label style={labelStyle}>
+                    End Date {form.type === 'group' ? '*' : <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span>}
+                  </label>
                   <input type="date" value={form.end_date}
                     onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
                     style={inputStyle} />
@@ -238,22 +244,20 @@ export default function BatchesPage() {
                 <input
                   value={form.fee}
                   onChange={e => setForm(f => ({ ...f, fee: e.target.value }))}
-                  placeholder="e.g. $625 CAD"
+                  placeholder={form.type === 'group' ? '$625 CAD' : '$1,500 CAD'}
                   style={inputStyle}
                 />
-              </div>
-
-              {/* Payment Deadline */}
-              <div>
-                <label style={labelStyle}>Payment Deadline</label>
-                <input type="date" value={form.payment_deadline}
-                  onChange={e => setForm(f => ({ ...f, payment_deadline: e.target.value }))}
-                  style={inputStyle} />
               </div>
 
               {/* Group-only fields */}
               {form.type === 'group' && (
                 <>
+                  <div>
+                    <label style={labelStyle}>Payment Deadline</label>
+                    <input type="date" value={form.payment_deadline}
+                      onChange={e => setForm(f => ({ ...f, payment_deadline: e.target.value }))}
+                      style={inputStyle} />
+                  </div>
                   <div>
                     <label style={labelStyle}>Zoom Link</label>
                     <input
@@ -335,7 +339,8 @@ export default function BatchesPage() {
                 <div style={{ fontWeight: 700, color: '#0a1628', fontSize: '15px' }}>{b.batch_name}</div>
                 <div style={{ fontSize: '13px', color: '#64748b', marginTop: '3px' }}>
                   <code style={{ background: '#f1f5f9', padding: '1px 6px', borderRadius: '4px', marginRight: '10px' }}>{b.batch_key}</code>
-                  {formatDate(b.start_date)} – {formatDate(b.end_date)} &nbsp;·&nbsp; {b.fee}
+                  {b.start_date ? `${formatDate(b.start_date)} – ${formatDate(b.end_date)}` : 'Flexible dates'}
+                  &nbsp;·&nbsp; {b.fee}
                   {b.payment_deadline && ` · Due ${formatDate(b.payment_deadline)}`}
                 </div>
               </div>
