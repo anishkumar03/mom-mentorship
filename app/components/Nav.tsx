@@ -11,6 +11,7 @@ const links = [
   { href: "/students", label: "Students" },
   { href: "/confirmed", label: "Confirmed" },
   { href: "/batches", label: "Batches" },
+  { href: "/email-batches", label: "Email Batches" },
   { href: "/archive", label: "Archive" },
   { href: "/roi-dashboard", label: "ROI" },
   { href: "/discipline", label: "Discipline" },
