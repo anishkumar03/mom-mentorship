@@ -319,6 +319,8 @@ export default function BatchesPage() {
   const [assignBatch, setAssignBatch] = useState<string>("__NONE__");
   const [saving, setSaving] = useState(false);
   const [activeBatchTab, setActiveBatchTab] = useState<string>("__ALL__");
+  // FIX: persist manually-created batch labels until leads are saved
+  const [localBatches, setLocalBatches] = useState<string[]>([]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -377,14 +379,15 @@ export default function BatchesPage() {
     return batchGroups[activeBatchTab] ?? [];
   }, [confirmed, activeBatchTab, batchGroups]);
 
+  // FIX: include localBatches so newly created labels survive the date input being cleared
   const allBatchOptions = useMemo(() => {
-    const opts = [...batches];
+    const opts = [...new Set([...batches, ...localBatches])];
     if (newBatchDate) {
       const label = makeBatchLabel(newBatchDate);
       if (!opts.includes(label)) opts.push(label);
     }
     return opts.sort();
-  }, [batches, newBatchDate]);
+  }, [batches, newBatchDate, localBatches]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -421,14 +424,18 @@ export default function BatchesPage() {
     } else {
       setSelectedIds(new Set());
       setAssignBatch("__NONE__");
+      // FIX: clear local batches — they're now persisted on leads in Supabase
+      setLocalBatches([]);
       await fetchAll();
     }
     setSaving(false);
   };
 
+  // FIX: store the new label in localBatches so it persists after clearing the date input
   const handleCreateBatch = () => {
     if (!newBatchDate) return;
     const label = makeBatchLabel(newBatchDate);
+    setLocalBatches((prev) => (prev.includes(label) ? prev : [...prev, label]));
     setAssignBatch(label);
     setNewBatchDate("");
   };
