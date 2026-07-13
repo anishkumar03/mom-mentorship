@@ -49,6 +49,20 @@ function makeBatchLabel(dateStr: string): string {
   return `${formatBatchDate(dateStr)} Batch`;
 }
 
+function dayOfWeekName(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { weekday: "long" });
+}
+
+function monthName(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "long" });
+}
+
+function makeDispatchGroupName(dateStr: string): string {
+  return `${monthName(dateStr)} Mentorship-${dayOfWeekName(dateStr)}`;
+}
+
 // ── Session Dispatch Groups Section ──────────────────────────────────────────
 function DispatchBatchManager() {
   const [groups, setGroups] = useState<BatchGroup[]>([]);
@@ -406,12 +420,74 @@ export default function BatchesPage() {
     }
   };
 
+  // Finds (or creates) the Session Auto-Dispatch group for the batch's weekday,
+  // and remembers the link so students assigned to this batch later can be synced into it.
+  const ensureDispatchGroup = async (dateStr: string, batchLabel: string) => {
+    const dispatchName = makeDispatchGroupName(dateStr);
+    const weekday = dayOfWeekName(dateStr);
+
+    const { data: existing, error: findError } = await supabase
+      .from("batch_groups")
+      .select("id")
+      .ilike("batch_name", dispatchName)
+      .maybeSingle();
+    if (findError) { console.error(findError); return; }
+
+    let groupId = existing?.id as string | undefined;
+
+    if (!groupId) {
+      const { data: created, error: createError } = await supabase
+        .from("batch_groups")
+        .insert({ batch_name: dispatchName, zoom_title_match: weekday, students: [], active: true })
+        .select("id")
+        .single();
+      if (createError) { console.error(createError); return; }
+      groupId = created.id as string;
+    }
+
+    const { error: linkError } = await supabase
+      .from("crm_batch_dispatch_links")
+      .upsert({ batch_label: batchLabel, batch_group_id: groupId }, { onConflict: "batch_label" });
+    if (linkError) console.error(linkError);
+  };
+
+  // Adds/updates the assigned leads (name + email) in the dispatch group linked to this batch, if any.
+  const syncStudentsToDispatchGroup = async (batchLabel: string, assignedLeads: Lead[]) => {
+    const { data: link, error: linkError } = await supabase
+      .from("crm_batch_dispatch_links")
+      .select("batch_group_id")
+      .eq("batch_label", batchLabel)
+      .maybeSingle();
+    if (linkError || !link?.batch_group_id) return;
+
+    const { data: group, error: groupError } = await supabase
+      .from("batch_groups")
+      .select("students")
+      .eq("id", link.batch_group_id)
+      .maybeSingle();
+    if (groupError || !group) return;
+
+    const students: Student[] = Array.isArray(group.students) ? group.students : [];
+    const byEmail = new Map(students.map((s) => [s.email.toLowerCase(), s]));
+    for (const l of assignedLeads) {
+      if (!l.email) continue;
+      byEmail.set(l.email.toLowerCase(), { name: safeName(l), email: l.email });
+    }
+
+    const { error: updateError } = await supabase
+      .from("batch_groups")
+      .update({ students: Array.from(byEmail.values()) })
+      .eq("id", link.batch_group_id);
+    if (updateError) console.error(updateError);
+  };
+
   const handleAssign = async () => {
     if (selectedIds.size === 0) return;
     const batchValue = assignBatch === "__NONE__" ? null : assignBatch;
 
     setSaving(true);
     const ids = Array.from(selectedIds);
+    const assignedLeads = leads.filter((l) => ids.includes(l.id));
 
     const { error } = await supabase
       .from("leads")
@@ -426,18 +502,21 @@ export default function BatchesPage() {
       setAssignBatch("__NONE__");
       // FIX: clear local batches — they're now persisted on leads in Supabase
       setLocalBatches([]);
+      if (batchValue) await syncStudentsToDispatchGroup(batchValue, assignedLeads);
       await fetchAll();
     }
     setSaving(false);
   };
 
   // FIX: store the new label in localBatches so it persists after clearing the date input
-  const handleCreateBatch = () => {
+  const handleCreateBatch = async () => {
     if (!newBatchDate) return;
-    const label = makeBatchLabel(newBatchDate);
+    const dateStr = newBatchDate;
+    const label = makeBatchLabel(dateStr);
     setLocalBatches((prev) => (prev.includes(label) ? prev : [...prev, label]));
     setAssignBatch(label);
     setNewBatchDate("");
+    await ensureDispatchGroup(dateStr, label);
   };
 
   return (
