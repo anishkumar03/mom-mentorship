@@ -63,6 +63,21 @@ function makeDispatchGroupName(dateStr: string): string {
   return `${monthName(dateStr)} Mentorship-${dayOfWeekName(dateStr)}`;
 }
 
+// Recovers an approximate ISO date from a "<Month> <Day> Batch" label (year isn't stored on
+// the label) so batches created before dispatch-group linking existed can still be backfilled.
+function parseBatchLabelDate(label: string): string | null {
+  const cleaned = label.replace(/\s*Batch$/i, "").trim();
+  const now = new Date();
+  let year = now.getFullYear();
+  let d = new Date(`${cleaned}, ${year} 00:00:00`);
+  if (isNaN(d.getTime())) return null;
+  if ((now.getTime() - d.getTime()) / 86400000 > 180) {
+    year += 1;
+    d = new Date(`${cleaned}, ${year} 00:00:00`);
+  }
+  return d.toISOString().slice(0, 10);
+}
+
 // ── Session Dispatch Groups Section ──────────────────────────────────────────
 function DispatchBatchManager() {
   const [groups, setGroups] = useState<BatchGroup[]>([]);
@@ -451,14 +466,29 @@ export default function BatchesPage() {
     if (linkError) console.error(linkError);
   };
 
-  // Adds/updates the assigned leads (name + email) in the dispatch group linked to this batch, if any.
+  // Adds/updates the assigned leads (name + email) in the dispatch group linked to this batch.
+  // If this batch predates dispatch-group linking, lazily creates/links one first (backfill).
   const syncStudentsToDispatchGroup = async (batchLabel: string, assignedLeads: Lead[]) => {
-    const { data: link, error: linkError } = await supabase
+    const { data: initialLink, error: linkError } = await supabase
       .from("crm_batch_dispatch_links")
       .select("batch_group_id")
       .eq("batch_label", batchLabel)
       .maybeSingle();
-    if (linkError || !link?.batch_group_id) return;
+    if (linkError) return;
+    let link = initialLink;
+
+    if (!link?.batch_group_id) {
+      const dateStr = parseBatchLabelDate(batchLabel);
+      if (!dateStr) return;
+      await ensureDispatchGroup(dateStr, batchLabel);
+      const retry = await supabase
+        .from("crm_batch_dispatch_links")
+        .select("batch_group_id")
+        .eq("batch_label", batchLabel)
+        .maybeSingle();
+      if (retry.error || !retry.data?.batch_group_id) return;
+      link = retry.data;
+    }
 
     const { data: group, error: groupError } = await supabase
       .from("batch_groups")
