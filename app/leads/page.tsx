@@ -31,6 +31,9 @@ type Lead = {
   last_note?: string | null;
   last_contacted_at?: string | null;
 
+  welcome_email_status?: string | null;
+  welcome_email_error?: string | null;
+
   archived?: boolean | null;
   created_at?: string | null;
 };
@@ -928,6 +931,27 @@ export default function LeadsPage() {
     );
   };
 
+  // Stays quiet for successful sends — only surfaces when a lead didn't get their welcome email.
+  const WelcomeEmailBadge = ({ l }: { l: Lead }) => {
+    const status = l.welcome_email_status;
+    if (!status || status === "sent") return null;
+    const label = status === "failed" ? "⚠ Welcome email failed" : status === "skipped_duplicate" ? "Welcome email skipped (duplicate)" : status;
+    const title = status === "failed" && l.welcome_email_error ? l.welcome_email_error : undefined;
+    return (
+      <span title={title} style={{
+        display: "inline-block",
+        padding: "3px 10px",
+        borderRadius: 999,
+        background: status === "failed" ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.08)",
+        color: status === "failed" ? "#fca5a5" : "rgba(255,255,255,0.6)",
+        fontSize: 11,
+        fontWeight: 700,
+      }}>
+        {label}
+      </span>
+    );
+  };
+
   const followButtons = (l: Lead) => {
     const followMs = l.follow_up_at ? new Date(l.follow_up_at).getTime() : NaN;
     const isFuture = Number.isFinite(followMs) && followMs > Date.now();
@@ -1036,6 +1060,7 @@ export default function LeadsPage() {
               <span style={{ fontWeight: 700, fontSize: 15 }}>{name}</span>
               <StatusBadge status={l.status ?? "New"} />
               <ChannelBadge source={l.source} />
+              <WelcomeEmailBadge l={l} />
             </div>
 
             {/* Contact info row */}
