@@ -24,7 +24,7 @@ function programLabel(program: string | null | undefined): string {
 }
 
 function welcomeEmailHtml(firstName: string, programName: string): string {
-  return `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f0f5;font-family:Arial,sans-serif">
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;padding:0;background:#f0f0f5;font-family:Arial,sans-serif">
 <div style="max-width:560px;margin:32px auto;border-radius:14px;overflow:hidden">
   <div style="background:linear-gradient(135deg,#07091A,#1a1f3e);padding:36px 32px;text-align:center">
     <p style="color:#D4A843;font-size:11px;letter-spacing:3px;margin:0 0 10px">MIND OVER MARKETS</p>
