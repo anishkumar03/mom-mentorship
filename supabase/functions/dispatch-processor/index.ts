@@ -86,47 +86,116 @@ async function gToken(): Promise<string> {
 }
 
 // ── Drive: find recording ─────────────────────────────────────────────────────
-async function findRecording(tok: string, sessionName: string, date: string): Promise<string|null> {
-  const studentName = sessionName.split(" and ")[0].trim().replace(/'/g, "\\'");
-  const folderQ = `mimeType='application/vnd.google-apps.folder' and name contains '${studentName}' and trashed=false`;
-  const folderRes  = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQ)}&fields=files(id,name)&orderBy=createdTime desc&pageSize=5`, { headers:{Authorization:`Bearer ${tok}`} });
+type RecordingDebug = {
+  searchStrategy: "date" | "student_name";
+  searchTerm: string;
+  folderQuery: string;
+  foldersFound: string[];
+  chosenFolder: string | null;
+  fileQuery: string | null;
+  filesFound: string[];
+  matched: string | null;
+};
+
+async function findRecording(tok: string, dispatch: any, sessionType: "group" | "one_on_one"): Promise<{ url: string | null; debug: RecordingDebug }> {
+  const sessionName = dispatch.session_name ?? "";
+  const date = dispatch.meeting_date ?? "";
+
+  // Group recordings live wherever Zoom's own auto-sync drops them, named
+  // "YYYY-MM-DD HH.MM.SS <Zoom meeting topic>" — that topic text is whatever the Zoom
+  // meeting itself is titled and has no guaranteed relationship to our batch_name/session_name,
+  // so the date is the only reliably matchable anchor. One-on-one recordings are manually
+  // organized into per-student folders, so the student-name heuristic still applies there.
+  const useDateStrategy = sessionType === "group";
+  const searchTerm = useDateStrategy ? date : sessionName.split(" and ")[0].trim();
+  const safeTerm = searchTerm.replace(/'/g, "\\'");
+
+  const debug: RecordingDebug = {
+    searchStrategy: useDateStrategy ? "date" : "student_name",
+    searchTerm: safeTerm, folderQuery: "", foldersFound: [],
+    chosenFolder: null, fileQuery: null, filesFound: [], matched: null,
+  };
+
+  if (!safeTerm) return { url: null, debug };
+
+  const folderQuery = `mimeType='application/vnd.google-apps.folder' and name contains '${safeTerm}' and trashed=false`;
+  debug.folderQuery = folderQuery;
+  const folderRes  = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,name)&orderBy=createdTime desc&pageSize=5`, { headers:{Authorization:`Bearer ${tok}`} });
   const folders: any[] = (await folderRes.json()).files ?? [];
-  console.log(`Recording folder search "${studentName}": ${folders.length} found`);
-  if (!folders.length) return null;
-  let folderId = folders[0].id;
+  debug.foldersFound = folders.map(f => f.name);
+  console.log(`Recording folder search (${debug.searchStrategy}) "${safeTerm}": ${folders.length} found [${debug.foldersFound.join(", ")}]`);
+  if (!folders.length) return { url: null, debug };
+
+  let folder = folders[0];
   if (folders.length > 1 && date) {
     const dateFolder = folders.find(f => f.name.includes(date));
-    if (dateFolder) folderId = dateFolder.id;
+    if (dateFolder) folder = dateFolder;
   }
-  const mp4Res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`mimeType='video/mp4' and '${folderId}' in parents and trashed=false`)}&fields=files(id,name,webViewLink)&pageSize=3`, { headers:{Authorization:`Bearer ${tok}`} });
-  const mp4s: any[] = (await mp4Res.json()).files ?? [];
-  return mp4s[0]?.webViewLink ?? null;
+  debug.chosenFolder = folder.name;
+
+  // Broadened from an exact 'video/mp4' match — Drive doesn't always detect that exact
+  // mimeType for a synced Zoom recording (.mov, generic video/*, etc. also show up here).
+  const fileQuery = `mimeType contains 'video/' and '${folder.id}' in parents and trashed=false`;
+  debug.fileQuery = fileQuery;
+  const videoRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(fileQuery)}&fields=files(id,name,webViewLink,mimeType)&pageSize=5`, { headers:{Authorization:`Bearer ${tok}`} });
+  const videos: any[] = (await videoRes.json()).files ?? [];
+  debug.filesFound = videos.map(f => `${f.name} (${f.mimeType})`);
+  console.log(`Video files in "${folder.name}": ${debug.filesFound.join(", ") || "none"}`);
+
+  const match = videos[0] ?? null;
+  debug.matched = match?.name ?? null;
+  return { url: match?.webViewLink ?? null, debug };
 }
 
 // ── Drive: find notes for ONE topic ──────────────────────────────────────────
-async function findNotesForTopic(tok: string, topic: string): Promise<{label:string;url:string}[]> {
+type NotesDebug = {
+  topic: string;
+  directFileQuery: string;
+  directFilesFound: string[];
+  folderQuery: string | null;
+  foldersFound: string[];
+  chosenFolder: string | null;
+  folderFileQuery: string | null;
+  folderFilesFound: string[];
+};
+
+async function findNotesForTopic(tok: string, topic: string): Promise<{ links: {label:string;url:string}[]; debug: NotesDebug }> {
   const safe   = topic.trim().replace(/'/g, "\\'");
   const safeUs = safe.replace(/\s+/g, "_"); // space→underscore
 
+  const debug: NotesDebug = {
+    topic: safe, directFileQuery: "", directFilesFound: [],
+    folderQuery: null, foldersFound: [], chosenFolder: null,
+    folderFileQuery: null, folderFilesFound: [],
+  };
+
   // Step 1: Search for PDF files directly (space and underscore variants)
   const fileQ = `(name contains '${safe}' or name contains '${safeUs}') and (mimeType='application/pdf' or mimeType contains 'document') and trashed=false`;
+  debug.directFileQuery = fileQ;
   const fileRes  = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(fileQ)}&fields=files(id,name,webViewLink)&orderBy=modifiedTime desc&pageSize=10`, { headers:{Authorization:`Bearer ${tok}`} });
   const files: any[] = (await fileRes.json()).files ?? [];
+  debug.directFilesFound = files.map(f => f.name);
   console.log(`Notes file search "${safe}": ${files.length} found`);
-  if (files.length) return files.map(f => ({ label: f.name.replace(/\.[^.]+$/, "").replace(/_/g, " "), url: f.webViewLink }));
+  if (files.length) return { links: files.map(f => ({ label: f.name.replace(/\.[^.]+$/, "").replace(/_/g, " "), url: f.webViewLink })), debug };
 
   // Step 2: Search for a folder by topic name, return ALL PDFs inside
   const folderQ   = `(name contains '${safe}' or name contains '${safeUs}') and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+  debug.folderQuery = folderQ;
   const folderRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQ)}&fields=files(id,name)&pageSize=5`, { headers:{Authorization:`Bearer ${tok}`} });
   const folders: any[] = (await folderRes.json()).files ?? [];
+  debug.foldersFound = folders.map(f => f.name);
   console.log(`Notes folder search "${safe}": ${folders.length} found`);
-  if (!folders.length) return [];
+  if (!folders.length) return { links: [], debug };
 
+  debug.chosenFolder = folders[0].name;
   const folderId = folders[0].id;
-  const pdfRes   = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${folderId}' in parents and (mimeType='application/pdf' or mimeType contains 'document') and trashed=false`)}&fields=files(id,name,webViewLink)&orderBy=modifiedTime desc&pageSize=20`, { headers:{Authorization:`Bearer ${tok}`} });
+  const folderFileQuery = `'${folderId}' in parents and (mimeType='application/pdf' or mimeType contains 'document') and trashed=false`;
+  debug.folderFileQuery = folderFileQuery;
+  const pdfRes   = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderFileQuery)}&fields=files(id,name,webViewLink)&orderBy=modifiedTime desc&pageSize=20`, { headers:{Authorization:`Bearer ${tok}`} });
   const pdfs: any[] = (await pdfRes.json()).files ?? [];
+  debug.folderFilesFound = pdfs.map(f => f.name);
   console.log(`PDFs in folder "${folders[0].name}": ${pdfs.map(f=>f.name).join(", ")}`);
-  return pdfs.map(f => ({ label: f.name.replace(/\.[^.]+$/, "").replace(/_/g, " "), url: f.webViewLink }));
+  return { links: pdfs.map(f => ({ label: f.name.replace(/\.[^.]+$/, "").replace(/_/g, " "), url: f.webViewLink })), debug };
 }
 
 // ── Recipient resolution ──────────────────────────────────────────────────────
@@ -315,8 +384,10 @@ type DispatchResult = {
   sessionType: "group" | "one_on_one";
   recipients: Recipient[];
   recording: string | null;
+  recordingDebug: RecordingDebug;
   topics: string[];
   notesLinks: { label: string; url: string }[];
+  notesDebug: NotesDebug[];
   isFinalSession: boolean;
   emails: { to: string; name: string; subject: string; html: string; result: { ok: boolean; error?: string } }[];
 };
@@ -324,15 +395,17 @@ type DispatchResult = {
 async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }): Promise<DispatchResult> {
   const { sessionType, recipients } = await resolveRecipients(dispatch);
 
-  const rec = await findRecording(tok, dispatch.session_name, dispatch.meeting_date);
+  const { url: rec, debug: recordingDebug } = await findRecording(tok, dispatch, sessionType);
 
   const topicStr = (dispatch.notes_topic ?? "").trim();
   const topics   = topicStr ? topicStr.split(",").map((t:string) => t.trim()).filter(Boolean) : [];
 
   let allNotesLinks: {label:string;url:string}[] = [];
+  const notesDebug: NotesDebug[] = [];
   for (const topic of topics) {
-    const links = await findNotesForTopic(tok, topic);
+    const { links, debug } = await findNotesForTopic(tok, topic);
     allNotesLinks = [...allNotesLinks, ...links];
+    notesDebug.push(debug);
   }
   allNotesLinks = allNotesLinks.filter((n, i, arr) => arr.findIndex(x => x.url === n.url) === i);
 
@@ -389,7 +462,7 @@ async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }
     if (!sent) throw new Error("All emails failed to send (see dispatch_logs for per-recipient errors).");
   }
 
-  return { sessionType, recipients, recording: rec, topics, notesLinks: allNotesLinks, isFinalSession, emails };
+  return { sessionType, recipients, recording: rec, recordingDebug, topics, notesLinks: allNotesLinks, notesDebug, isFinalSession, emails };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
