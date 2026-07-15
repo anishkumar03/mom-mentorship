@@ -89,15 +89,19 @@ async function gToken(): Promise<string> {
 type RecordingDebug = {
   searchStrategy: "date" | "student_name";
   searchTerm: string;
+  groupIdentifier: string | null;
   folderQuery: string;
-  foldersFound: string[];
+  rawFoldersFound: string[];   // whatever Drive's `contains` returned — may include false positives
+  verifiedFolders: string[];   // survivors after a real client-side substring re-check
+  scopedCandidates: string[];  // survivors after the group-identifier / one-on-one naming check
   chosenFolder: string | null;
+  rejected: string | null;     // why we refused to pick, when we refused
   fileQuery: string | null;
   filesFound: string[];
   matched: string | null;
 };
 
-async function findRecording(tok: string, dispatch: any, sessionType: "group" | "one_on_one"): Promise<{ url: string | null; debug: RecordingDebug }> {
+async function findRecording(tok: string, dispatch: any, sessionType: "group" | "one_on_one", groupIdentifier: string | null): Promise<{ url: string | null; debug: RecordingDebug }> {
   const sessionName = dispatch.session_name ?? "";
   const date = dispatch.meeting_date ?? "";
 
@@ -112,25 +116,63 @@ async function findRecording(tok: string, dispatch: any, sessionType: "group" | 
 
   const debug: RecordingDebug = {
     searchStrategy: useDateStrategy ? "date" : "student_name",
-    searchTerm: safeTerm, folderQuery: "", foldersFound: [],
-    chosenFolder: null, fileQuery: null, filesFound: [], matched: null,
+    searchTerm: safeTerm, groupIdentifier: useDateStrategy ? groupIdentifier : null,
+    folderQuery: "", rawFoldersFound: [], verifiedFolders: [], scopedCandidates: [],
+    chosenFolder: null, rejected: null, fileQuery: null, filesFound: [], matched: null,
   };
 
-  if (!safeTerm) return { url: null, debug };
+  if (!safeTerm) { debug.rejected = "No search term available (missing meeting_date/session_name)."; return { url: null, debug }; }
 
+  // Drive's `name contains` operator tokenizes on non-alphanumeric characters instead of doing
+  // a true contiguous substring match — a hyphenated date like "2026-07-14" can spuriously match
+  // an unrelated folder that happens to contain "2026", "07" and "14" scattered anywhere in its
+  // name (this is exactly how a stray April folder matched a July 14 date search: 2026 from the
+  // year, 07 from "04-07", 14 from the "20.28.14" timestamp — coincidence, not a real match).
+  // Drive's query is only used to narrow candidates; every one is re-verified below with a real
+  // JS substring check before it's trusted.
   const folderQuery = `mimeType='application/vnd.google-apps.folder' and name contains '${safeTerm}' and trashed=false`;
   debug.folderQuery = folderQuery;
-  const folderRes  = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,name)&orderBy=createdTime desc&pageSize=5`, { headers:{Authorization:`Bearer ${tok}`} });
-  const folders: any[] = (await folderRes.json()).files ?? [];
-  debug.foldersFound = folders.map(f => f.name);
-  console.log(`Recording folder search (${debug.searchStrategy}) "${safeTerm}": ${folders.length} found [${debug.foldersFound.join(", ")}]`);
-  if (!folders.length) return { url: null, debug };
+  const folderRes  = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(folderQuery)}&fields=files(id,name)&orderBy=createdTime desc&pageSize=20`, { headers:{Authorization:`Bearer ${tok}`} });
+  const rawFolders: any[] = (await folderRes.json()).files ?? [];
+  debug.rawFoldersFound = rawFolders.map(f => f.name);
 
-  let folder = folders[0];
-  if (folders.length > 1 && date) {
-    const dateFolder = folders.find(f => f.name.includes(date));
-    if (dateFolder) folder = dateFolder;
+  let candidates = rawFolders.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  debug.verifiedFolders = candidates.map(f => f.name);
+
+  if (useDateStrategy) {
+    // A date match alone isn't enough to prove a folder belongs to THIS batch — require the
+    // Zoom title keyword too, so a same-day unrelated recording (e.g. a 1-on-1) can never be
+    // picked for a group send.
+    if (!groupIdentifier) {
+      debug.rejected = "No zoom_title_match/batch_name configured on this batch — cannot confirm which same-date folder belongs to it.";
+      candidates = [];
+    } else {
+      candidates = candidates.filter(f => f.name.toLowerCase().includes(groupIdentifier.toLowerCase()));
+    }
+  } else {
+    // Zoom's own one-on-one recordings are named "<Student> and Anish ..." — require that
+    // literal marker so a coincidentally name-matching group folder can never be picked here.
+    candidates = candidates.filter(f => / and /i.test(f.name));
   }
+  debug.scopedCandidates = candidates.map(f => f.name);
+
+  console.log(`Recording folder search (${debug.searchStrategy}) "${safeTerm}": raw=${debug.rawFoldersFound.length} verified=${debug.verifiedFolders.length} scoped=${debug.scopedCandidates.length}`);
+
+  if (!debug.verifiedFolders.length) {
+    // Nothing at all for this date/name yet — most likely still syncing, not an error.
+    return { url: null, debug };
+  }
+
+  if (!candidates.length) {
+    if (!debug.rejected) debug.rejected = `${debug.verifiedFolders.length} folder(s) matched "${safeTerm}" but none matched the required ${useDateStrategy ? `group identifier "${groupIdentifier}"` : "one-on-one naming pattern"} — refusing to guess.`;
+    throw new Error(`Recording folder lookup for "${dispatch.session_name}" is unsafe: ${debug.rejected}`);
+  }
+  if (candidates.length > 1) {
+    debug.rejected = `${candidates.length} folders all matched (${debug.scopedCandidates.join(" | ")}) — refusing to guess which one is correct.`;
+    throw new Error(`Recording folder lookup for "${dispatch.session_name}" is ambiguous: ${debug.rejected}`);
+  }
+
+  const folder = candidates[0];
   debug.chosenFolder = folder.name;
 
   // Broadened from an exact 'video/mp4' match — Drive doesn't always detect that exact
@@ -209,14 +251,14 @@ function normalizeSessionType(raw: unknown): "group" | "one_on_one" | null {
   return null;
 }
 
-async function resolveGroupRecipients(dispatch: any): Promise<Recipient[]> {
+async function resolveGroupRecipients(dispatch: any): Promise<{ recipients: Recipient[]; zoomTitleMatch: string | null }> {
   if (!dispatch.batch_name) {
     throw new Error(`Group dispatch "${dispatch.session_name}" has no batch_name set — refusing to guess a batch.`);
   }
 
   const { data: batch, error } = await sb
     .from("batch_groups")
-    .select("batch_name,students,active")
+    .select("batch_name,students,active,zoom_title_match")
     .eq("batch_name", dispatch.batch_name)
     .maybeSingle();
 
@@ -230,7 +272,7 @@ async function resolveGroupRecipients(dispatch: any): Promise<Recipient[]> {
     throw new Error(`batch_groups "${dispatch.batch_name}" is marked inactive — refusing to dispatch to a deactivated batch (looks like leftover/stale config).`);
   }
 
-  return (batch.students as Recipient[]) ?? [];
+  return { recipients: (batch.students as Recipient[]) ?? [], zoomTitleMatch: batch.zoom_title_match ?? null };
 }
 
 async function resolveOneOnOneRecipients(dispatch: any): Promise<Recipient[]> {
@@ -277,18 +319,28 @@ async function resolveOneOnOneRecipients(dispatch: any): Promise<Recipient[]> {
   return [{ name: nearest.invitee_name, email: nearest.invitee_email }];
 }
 
-async function resolveRecipients(dispatch: any): Promise<{ sessionType: "group" | "one_on_one"; recipients: Recipient[] }> {
+async function resolveRecipients(dispatch: any): Promise<{ sessionType: "group" | "one_on_one"; recipients: Recipient[]; groupIdentifier: string | null }> {
   const sessionType = normalizeSessionType(dispatch.session_type);
   if (!sessionType) {
     throw new Error(`Unknown session_type "${dispatch.session_type}" on dispatch "${dispatch.session_name}" — expected "group" or "one_on_one". Refusing to guess recipients.`);
   }
 
-  const recipients = sessionType === "group"
-    ? await resolveGroupRecipients(dispatch)
-    : await resolveOneOnOneRecipients(dispatch);
+  let recipients: Recipient[];
+  let groupIdentifier: string | null = null;
+  if (sessionType === "group") {
+    const resolved = await resolveGroupRecipients(dispatch);
+    recipients = resolved.recipients;
+    // zoom_title_match is the field this CRM already asks for specifically because it's
+    // "the keyword that appears in the Zoom meeting title" — the same identifier a synced
+    // recording folder's name is built from, so it's what confirms a folder actually belongs
+    // to this batch rather than just happening to fall on the same date.
+    groupIdentifier = resolved.zoomTitleMatch || dispatch.batch_name || null;
+  } else {
+    recipients = await resolveOneOnOneRecipients(dispatch);
+  }
 
   validateRecipients(dispatch, sessionType, recipients);
-  return { sessionType, recipients };
+  return { sessionType, recipients, groupIdentifier };
 }
 
 // ── Guardrails ─────────────────────────────────────────────────────────────────
@@ -345,7 +397,7 @@ function buildEmailContent(name: string, session: string, topics: string[], rec:
     ? finalSessionThankYouHtml()
     : `<p style="color:#777;font-size:13px;margin-top:24px">Keep showing up. Every rep compounds.<br><br>— Anish<br><span style="color:#aaa;font-size:12px">Mind Over Markets</span></p>`;
 
-  const html = `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f0f0f5;font-family:Arial,sans-serif">
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /></head><body style="margin:0;padding:0;background:#f0f0f5;font-family:Arial,sans-serif">
 <div style="max-width:560px;margin:32px auto;border-radius:14px;overflow:hidden">
   <div style="background:linear-gradient(135deg,#07091A,#1a1f3e);padding:36px 32px;text-align:center">
     <p style="color:#D4A843;font-size:11px;letter-spacing:3px;margin:0 0 10px">MIND OVER MARKETS</p>
@@ -393,9 +445,9 @@ type DispatchResult = {
 };
 
 async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }): Promise<DispatchResult> {
-  const { sessionType, recipients } = await resolveRecipients(dispatch);
+  const { sessionType, recipients, groupIdentifier } = await resolveRecipients(dispatch);
 
-  const { url: rec, debug: recordingDebug } = await findRecording(tok, dispatch, sessionType);
+  const { url: rec, debug: recordingDebug } = await findRecording(tok, dispatch, sessionType, groupIdentifier);
 
   const topicStr = (dispatch.notes_topic ?? "").trim();
   const topics   = topicStr ? topicStr.split(",").map((t:string) => t.trim()).filter(Boolean) : [];
