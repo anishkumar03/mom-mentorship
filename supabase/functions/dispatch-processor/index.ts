@@ -137,6 +137,15 @@ async function findRecording(tok: string, dispatch: any, sessionType: "group" | 
   debug.rawFoldersFound = rawFolders.map(f => f.name);
 
   let candidates = rawFolders.filter(f => f.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  // One-on-one folders accumulate per student across every session they've ever had — the
+  // student-name term alone is only unique on someone's very first session. Requiring the
+  // meeting date too (same as group requires it) is what actually disambiguates "which of
+  // this student's recordings is today's" (confirmed live: searching "Manu Sadasivan" alone
+  // matched two folders from different dates and correctly refused to guess between them).
+  if (!useDateStrategy && date) {
+    candidates = candidates.filter(f => f.name.includes(date));
+  }
   debug.verifiedFolders = candidates.map(f => f.name);
 
   if (useDateStrategy) {
