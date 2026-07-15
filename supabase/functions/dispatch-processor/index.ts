@@ -431,15 +431,57 @@ async function sendResendEmail(to: string, subject: string, html: string): Promi
   } catch(e:any) { return { ok:false, error:e.message }; }
 }
 
+// ── Duplicate-send protection ─────────────────────────────────────────────────
+// Guards against the same session being emailed twice (e.g. a manual ad-hoc live send racing
+// a queued pending_dispatches run for the same session). Keyed on whatever uniquely identifies
+// "this session" for each type: group -> (batch_name, meeting_date); one-on-one -> zoom_meeting_id,
+// or (session_name, meeting_date) when no zoom_meeting_id is available.
+async function checkAlreadyDispatched(dispatch: any, sessionType: "group" | "one_on_one"): Promise<{ alreadySent: boolean; logId?: string; sentAt?: string }> {
+  let query = sb.from("dispatch_logs").select("id,created_at").eq("session_type", sessionType).in("status", ["success", "partial"]).order("created_at", { ascending: false }).limit(1);
+
+  if (sessionType === "group") {
+    if (!dispatch.batch_name || !dispatch.meeting_date) return { alreadySent: false };
+    query = query.eq("batch_name", dispatch.batch_name).eq("meeting_date", dispatch.meeting_date);
+  } else if (dispatch.zoom_meeting_id) {
+    query = query.eq("zoom_meeting_id", dispatch.zoom_meeting_id);
+  } else if (dispatch.meeting_date && dispatch.session_name) {
+    query = query.eq("meeting_date", dispatch.meeting_date).eq("session_name", dispatch.session_name);
+  } else {
+    return { alreadySent: false };
+  }
+
+  const { data, error } = await query;
+  if (error || !data?.length) return { alreadySent: false };
+  return { alreadySent: true, logId: data[0].id, sentAt: data[0].created_at };
+}
+
+// ── Manual recording/notes overrides ──────────────────────────────────────────
+// dispatch.recording_url / dispatch.notes_url let a one-off case (e.g. a folder created before
+// a rename, or Drive search just being wrong for some reason) bypass the Drive search entirely.
+function normalizeNotesOverride(raw: unknown): { label: string; url: string }[] {
+  if (typeof raw === "string" && raw.trim()) return [{ label: "Notes", url: raw.trim() }];
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item, i) => {
+        if (typeof item === "string") return { label: `Notes ${i + 1}`, url: item };
+        if (item && typeof item === "object" && "url" in item) return { label: String((item as any).label ?? `Notes ${i + 1}`), url: String((item as any).url) };
+        return null;
+      })
+      .filter((x): x is { label: string; url: string } => !!x);
+  }
+  return [];
+}
+
 // ── Process one dispatch ──────────────────────────────────────────────────────
 type DispatchResult = {
+  skipped?: "duplicate";
   sessionType: "group" | "one_on_one";
   recipients: Recipient[];
   recording: string | null;
-  recordingDebug: RecordingDebug;
+  recordingDebug?: RecordingDebug | { overridden: true; url: string };
   topics: string[];
   notesLinks: { label: string; url: string }[];
-  notesDebug: NotesDebug[];
+  notesDebug?: NotesDebug[] | { overridden: true; count: number };
   isFinalSession: boolean;
   emails: { to: string; name: string; subject: string; html: string; result: { ok: boolean; error?: string } }[];
 };
@@ -447,19 +489,46 @@ type DispatchResult = {
 async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }): Promise<DispatchResult> {
   const { sessionType, recipients, groupIdentifier } = await resolveRecipients(dispatch);
 
-  const { url: rec, debug: recordingDebug } = await findRecording(tok, dispatch, sessionType, groupIdentifier);
+  if (!opts.dryRun) {
+    const dupe = await checkAlreadyDispatched(dispatch, sessionType);
+    if (dupe.alreadySent) {
+      await sendTelegram(
+        `⚠️ <b>Duplicate dispatch skipped</b>\n\n📛 ${dispatch.session_name}\n` +
+        `Already successfully sent at ${dupe.sentAt} (dispatch_logs id ${dupe.logId}) — no emails sent this run.`
+      );
+      return { skipped: "duplicate", sessionType, recipients, recording: null, topics: [], notesLinks: [], isFinalSession: false, emails: [] };
+    }
+  }
+
+  let rec: string | null;
+  let recordingDebug: DispatchResult["recordingDebug"];
+  if (dispatch.recording_url) {
+    rec = String(dispatch.recording_url);
+    recordingDebug = { overridden: true, url: rec };
+  } else {
+    const found = await findRecording(tok, dispatch, sessionType, groupIdentifier);
+    rec = found.url;
+    recordingDebug = found.debug;
+  }
 
   const topicStr = (dispatch.notes_topic ?? "").trim();
   const topics   = topicStr ? topicStr.split(",").map((t:string) => t.trim()).filter(Boolean) : [];
 
   let allNotesLinks: {label:string;url:string}[] = [];
-  const notesDebug: NotesDebug[] = [];
-  for (const topic of topics) {
-    const { links, debug } = await findNotesForTopic(tok, topic);
-    allNotesLinks = [...allNotesLinks, ...links];
-    notesDebug.push(debug);
+  let notesDebug: DispatchResult["notesDebug"];
+  if (dispatch.notes_url) {
+    allNotesLinks = normalizeNotesOverride(dispatch.notes_url);
+    notesDebug = { overridden: true, count: allNotesLinks.length };
+  } else {
+    const collectedDebug: NotesDebug[] = [];
+    for (const topic of topics) {
+      const { links, debug } = await findNotesForTopic(tok, topic);
+      allNotesLinks = [...allNotesLinks, ...links];
+      collectedDebug.push(debug);
+    }
+    allNotesLinks = allNotesLinks.filter((n, i, arr) => arr.findIndex(x => x.url === n.url) === i);
+    notesDebug = collectedDebug;
   }
-  allNotesLinks = allNotesLinks.filter((n, i, arr) => arr.findIndex(x => x.url === n.url) === i);
 
   const isFinalSession = isFinalSessionDispatch(dispatch.session_name ?? "", topics);
 
@@ -492,7 +561,7 @@ async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }
     await sb.from("dispatch_logs").insert({
       pending_dispatch_id: dispatch.id ?? null,
       session_name: dispatch.session_name, zoom_meeting_id: dispatch.zoom_meeting_id,
-      session_type: dispatch.session_type,
+      session_type: dispatch.session_type, batch_name: dispatch.batch_name ?? null, meeting_date: dispatch.meeting_date ?? null,
       recording_url: rec,
       notes_url: allNotesLinks[0]?.url ?? null,
       recipients: emails.map(e => ({ name: e.name, email: e.to, status: e.result.ok ? "sent" : "failed", error: e.result.error })),
@@ -518,7 +587,24 @@ async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
+// Dry-run responses always use HTTP 200 with an `ok`/`error` field, even when the outcome is
+// a guardrail rejection — that's an expected, structured answer, not a server failure, and a
+// non-2xx status makes plenty of HTTP clients (PowerShell's Invoke-RestMethod included) hide
+// the response body by default, which is exactly what made an earlier guardrail rejection look
+// like a silent crash. Live-run failures keep a non-2xx status since that's real signal for
+// anything monitoring the endpoint itself. The whole handler is also wrapped in a top-level
+// try/catch so a genuinely unexpected exception still comes back as JSON instead of a bare
+// Deno error page with no diagnostic value at all.
 serve(async (req) => {
+  try {
+    return await handleRequest(req);
+  } catch (e: any) {
+    await notifyFailure("unhandled exception in serve()", e);
+    return new Response(JSON.stringify({ ok: false, error: `Unhandled: ${e.message}` }), { status: 500, headers: { "Content-Type": "application/json" } });
+  }
+});
+
+async function handleRequest(req: Request): Promise<Response> {
   let body: any = {};
   try { body = await req.json(); } catch { /* no/empty body is fine — e.g. cron invocation */ }
   const url    = new URL(req.url);
@@ -532,14 +618,14 @@ serve(async (req) => {
     try { tok = await gToken(); }
     catch (e: any) {
       await notifyFailure("ad-hoc test: Google auth", e);
-      return new Response(JSON.stringify({ ok:false, error:"Google auth failed: "+e.message }), { status:500 });
+      return new Response(JSON.stringify({ ok:false, error:"Google auth failed: "+e.message }), { status: dryRun ? 200 : 500, headers:{"Content-Type":"application/json"} });
     }
     try {
       const result = await runDispatch(body.dispatch, tok, { dryRun });
       return new Response(JSON.stringify({ ok:true, dryRun, ...result }, null, 2), { status:200, headers:{"Content-Type":"application/json"} });
     } catch (e: any) {
       if (!dryRun) await notifyFailure(`ad-hoc dispatch "${body.dispatch?.session_name}"`, e);
-      return new Response(JSON.stringify({ ok:false, dryRun, error: e.message }), { status:500 });
+      return new Response(JSON.stringify({ ok:false, dryRun, error: e.message }), { status: dryRun ? 200 : 500, headers:{"Content-Type":"application/json"} });
     }
   }
 
@@ -548,30 +634,31 @@ serve(async (req) => {
   const { data: pending, error } = await sb.from("pending_dispatches").select("*").eq("status","pending").lte("scheduled_at", new Date().toISOString()).limit(10);
   if (error) {
     await notifyFailure("fetching pending_dispatches", error);
-    return new Response(JSON.stringify({error:error.message}), {status:500});
+    return new Response(JSON.stringify({ok:false, error:error.message}), {status: dryRun ? 200 : 500, headers:{"Content-Type":"application/json"}});
   }
-  if (!pending?.length) return new Response(JSON.stringify({ok:true,pending:0}), {status:200});
+  if (!pending?.length) return new Response(JSON.stringify({ok:true,pending:0}), {status:200, headers:{"Content-Type":"application/json"}});
 
   let tok: string;
   try { tok = await gToken(); }
   catch(e:any) {
     await notifyFailure("Google auth (blocks all pending dispatches this run)", e);
-    return new Response("Google auth failed: "+e.message, {status:500});
+    return new Response(JSON.stringify({ok:false, error:"Google auth failed: "+e.message}), {status: dryRun ? 200 : 500, headers:{"Content-Type":"application/json"}});
   }
 
-  const results: { id: string; session_name: string; ok: boolean; error?: string }[] = [];
+  const results: { id: string; session_name: string; ok: boolean; skipped?: string; error?: string }[] = [];
   for (const d of pending) {
     if (!dryRun) await sb.from("pending_dispatches").update({status:"processing"}).eq("id", d.id);
     try {
-      await runDispatch(d, tok, { dryRun });
-      if (!dryRun) await sb.from("pending_dispatches").update({status:"done"}).eq("id", d.id);
-      results.push({ id: d.id, session_name: d.session_name, ok: true });
+      const result = await runDispatch(d, tok, { dryRun });
+      if (!dryRun) await sb.from("pending_dispatches").update({status: result.skipped ? "skipped_duplicate" : "done"}).eq("id", d.id);
+      results.push({ id: d.id, session_name: d.session_name, ok: true, skipped: result.skipped });
     } catch(e:any) {
       if (!dryRun) {
         await sb.from("pending_dispatches").update({status:"failed", error:e.message}).eq("id", d.id);
         await sb.from("dispatch_logs").insert({
           pending_dispatch_id: d.id, session_name: d.session_name, zoom_meeting_id: d.zoom_meeting_id,
-          session_type: d.session_type, recording_url: null, notes_url: null,
+          session_type: d.session_type, batch_name: d.batch_name ?? null, meeting_date: d.meeting_date ?? null,
+          recording_url: null, notes_url: null,
           recipients: [], sent_count: 0, total_count: 0, status: "failed", error: e.message,
         });
       }
@@ -580,4 +667,4 @@ serve(async (req) => {
     }
   }
   return new Response(JSON.stringify({processed:pending.length, dryRun, results}, null, 2), {status:200, headers:{"Content-Type":"application/json"}});
-});
+}
