@@ -17,8 +17,9 @@ const SA        = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON")!;
 const BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
 const CHAT_ID   = Deno.env.get("TELEGRAM_CHAT_ID")!;
 
-const RECORDING_LOOKBACK_DAYS = Number(Deno.env.get("HEALTH_CHECK_LOOKBACK_DAYS") ?? "2");
-const STALE_BATCH_DAYS        = Number(Deno.env.get("STALE_BATCH_DAYS") ?? "7");
+const RECORDING_LOOKBACK_DAYS  = Number(Deno.env.get("HEALTH_CHECK_LOOKBACK_DAYS") ?? "2");
+const STALE_BATCH_DAYS         = Number(Deno.env.get("STALE_BATCH_DAYS") ?? "7");
+const WAITING_TOPIC_STALE_HOURS = Number(Deno.env.get("WAITING_TOPIC_STALE_HOURS") ?? "3");
 
 async function sendTelegram(text: string): Promise<void> {
   try {
@@ -138,6 +139,39 @@ async function checkStaleBatches(dryRun: boolean): Promise<{ batches: string[]; 
   return { batches: (batches ?? []).map(b => b.batch_name), stale, alerted };
 }
 
+// ── Check 3: dispatches stuck waiting for a topic to be texted in ─────────────
+// telegram-bot inserts a row with status "waiting_topic" when a recording is ready, then flips
+// it to "pending" once the topic is texted in. If that text never happens (or the bot silently
+// fails), dispatch-processor never sees the row at all — it only ever queries status="pending".
+// This is a faster, more specific signal than the 7-day stale-batch check for that exact failure.
+async function checkStuckWaitingTopic(dryRun: boolean): Promise<{ stuck: string[]; alerted: string[] }> {
+  const cutoff = new Date(Date.now() - WAITING_TOPIC_STALE_HOURS * 3600000).toISOString();
+  const { data } = await sb
+    .from("pending_dispatches")
+    .select("id,session_name,created_at")
+    .eq("status", "waiting_topic")
+    .lte("created_at", cutoff);
+
+  const stuck: string[] = [];
+  const alerted: string[] = [];
+
+  for (const d of data ?? []) {
+    stuck.push(d.session_name);
+    const alertKey = `waiting_topic_stuck:${d.id}`;
+    if (dryRun) continue;
+    if (await alreadyAlerted(alertKey)) continue;
+    await sendTelegram(
+      `⏳ <b>Session stuck waiting for a topic</b>\n\n📛 ${d.session_name}\n` +
+      `Created ${d.created_at}, still no topic texted in after ${WAITING_TOPIC_STALE_HOURS}h. ` +
+      `Text the topic to the bot (or use /correct) to let it go out, or check /status.`
+    );
+    await recordAlert(alertKey);
+    alerted.push(d.session_name);
+  }
+
+  return { stuck, alerted };
+}
+
 serve(async (req) => {
   try {
     let body: any = {};
@@ -145,11 +179,22 @@ serve(async (req) => {
     const url = new URL(req.url);
     const dryRun = body?.dry_run === true || url.searchParams.get("dry_run") === "true";
 
-    const tok = await gToken();
-    const recordings = await checkUnmatchedRecordings(tok, dryRun);
-    const staleBatches = await checkStaleBatches(dryRun);
+    // The Drive-dependent recording scan is isolated so a Google auth failure doesn't also
+    // block the two checks below, which only need the database.
+    let recordings: Awaited<ReturnType<typeof checkUnmatchedRecordings>> | { error: string };
+    try {
+      const tok = await gToken();
+      recordings = await checkUnmatchedRecordings(tok, dryRun);
+    } catch (e: any) {
+      console.error("Recording scan skipped:", e.message);
+      await sendTelegram(`🚨 dispatch-health-check: Google auth failed, recording scan skipped this run\n${e.message}`);
+      recordings = { error: e.message };
+    }
 
-    return new Response(JSON.stringify({ ok: true, dryRun, recordings, staleBatches }, null, 2), { status: 200, headers: { "Content-Type": "application/json" } });
+    const staleBatches = await checkStaleBatches(dryRun);
+    const stuckTopics = await checkStuckWaitingTopic(dryRun);
+
+    return new Response(JSON.stringify({ ok: true, dryRun, recordings, staleBatches, stuckTopics }, null, 2), { status: 200, headers: { "Content-Type": "application/json" } });
   } catch (e: any) {
     console.error("dispatch-health-check failed:", e.message);
     await sendTelegram(`🚨 <b>dispatch-health-check itself failed</b>\n❌ ${e.message}`);
