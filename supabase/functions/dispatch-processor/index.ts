@@ -12,12 +12,30 @@ const CALENDLY_USER  = Deno.env.get("CALENDLY_USER_URI")!;
 const BOT_TOKEN      = Deno.env.get("TELEGRAM_BOT_TOKEN")!;
 const CHAT_ID        = Deno.env.get("TELEGRAM_CHAT_ID")!;
 
+// A one-on-one dispatch with no zoom_meeting_id match falls back to "nearest invitee by
+// start_time on that date." Without a sanity window, a busy day can match a completely
+// unrelated student's session (this is what sent the July 14 group email to Tincy).
+const MAX_ONE_ON_ONE_DRIFT_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+type Recipient = { name: string; email: string };
+
 async function sendTelegram(text: string): Promise<void> {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: "HTML" }),
-  });
+  try {
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: CHAT_ID, text, parse_mode: "HTML" }),
+    });
+  } catch (e: any) {
+    // Notification failing must never mask the original error in the caller.
+    console.error("Telegram notify failed:", e.message);
+  }
+}
+
+async function notifyFailure(context: string, err: any): Promise<void> {
+  const message = err?.message ?? String(err);
+  console.error(`[dispatch-processor] ${context}:`, message);
+  await sendTelegram(`🚨 <b>Dispatch-processor failure</b>\n📍 ${context}\n❌ ${message}`);
 }
 
 // ── Calendly sync ─────────────────────────────────────────────────────────────
@@ -111,6 +129,113 @@ async function findNotesForTopic(tok: string, topic: string): Promise<{label:str
   return pdfs.map(f => ({ label: f.name.replace(/\.[^.]+$/, "").replace(/_/g, " "), url: f.webViewLink }));
 }
 
+// ── Recipient resolution ──────────────────────────────────────────────────────
+// Normalizes session_type so a typo/casing mismatch (e.g. "Group" instead of "group")
+// can never silently fall through to the one-on-one lookup — that fallthrough is what
+// sent the July 14 group-session email to a one-on-one student (Tincy).
+function normalizeSessionType(raw: unknown): "group" | "one_on_one" | null {
+  const s = String(raw ?? "").trim().toLowerCase();
+  if (s === "group") return "group";
+  if (s === "one_on_one" || s === "1on1" || s === "1-on-1" || s === "individual" || s === "private") return "one_on_one";
+  return null;
+}
+
+async function resolveGroupRecipients(dispatch: any): Promise<Recipient[]> {
+  if (!dispatch.batch_name) {
+    throw new Error(`Group dispatch "${dispatch.session_name}" has no batch_name set — refusing to guess a batch.`);
+  }
+
+  const { data: batch, error } = await sb
+    .from("batch_groups")
+    .select("batch_name,students,active")
+    .eq("batch_name", dispatch.batch_name)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`batch_groups lookup failed for "${dispatch.batch_name}": ${error.message}`);
+  }
+  if (!batch) {
+    throw new Error(`No batch_groups row found with batch_name "${dispatch.batch_name}" — a group session must never fall back to a different recipient source.`);
+  }
+  if (batch.active === false) {
+    throw new Error(`batch_groups "${dispatch.batch_name}" is marked inactive — refusing to dispatch to a deactivated batch (looks like leftover/stale config).`);
+  }
+
+  return (batch.students as Recipient[]) ?? [];
+}
+
+async function resolveOneOnOneRecipients(dispatch: any): Promise<Recipient[]> {
+  if (dispatch.zoom_meeting_id) {
+    const { data: byZoom, error } = await sb
+      .from("session_invitees")
+      .select("invitee_name,invitee_email")
+      .eq("zoom_meeting_id", dispatch.zoom_meeting_id)
+      .eq("event_type", "one_on_one");
+    if (error) throw new Error(`session_invitees lookup by zoom_meeting_id failed: ${error.message}`);
+    if (byZoom?.length) return byZoom.map(i => ({ name: i.invitee_name, email: i.invitee_email }));
+  }
+
+  if (!dispatch.meeting_date) {
+    throw new Error(`One-on-one dispatch "${dispatch.session_name}" has no zoom_meeting_id match and no meeting_date to fall back on.`);
+  }
+
+  const { data: byDate, error } = await sb
+    .from("session_invitees")
+    .select("invitee_name,invitee_email,start_time")
+    .gte("start_time", `${dispatch.meeting_date}T00:00:00Z`)
+    .lte("start_time", `${dispatch.meeting_date}T23:59:59Z`)
+    .eq("event_type", "one_on_one");
+  if (error) throw new Error(`session_invitees lookup by date failed: ${error.message}`);
+  if (!byDate?.length) return [];
+  if (!dispatch.meeting_start_time) {
+    // Multiple candidates on the date and nothing to disambiguate with — do not guess.
+    if (byDate.length > 1) {
+      throw new Error(`${byDate.length} one-on-one invitees on ${dispatch.meeting_date} and no meeting_start_time to disambiguate — refusing to pick one at random.`);
+    }
+    return [{ name: byDate[0].invitee_name, email: byDate[0].invitee_email }];
+  }
+
+  const mt = new Date(dispatch.meeting_start_time).getTime();
+  const sorted = [...byDate].sort((a, b) =>
+    Math.abs(new Date(a.start_time).getTime() - mt) - Math.abs(new Date(b.start_time).getTime() - mt)
+  );
+  const nearest = sorted[0];
+  const drift = Math.abs(new Date(nearest.start_time).getTime() - mt);
+  if (drift > MAX_ONE_ON_ONE_DRIFT_MS) {
+    throw new Error(`Nearest one-on-one invitee (${nearest.invitee_name}) on ${dispatch.meeting_date} is ${Math.round(drift / 60000)} min from the dispatched meeting time — outside the ${MAX_ONE_ON_ONE_DRIFT_MS / 3600000}h match window, refusing to guess.`);
+  }
+
+  return [{ name: nearest.invitee_name, email: nearest.invitee_email }];
+}
+
+async function resolveRecipients(dispatch: any): Promise<{ sessionType: "group" | "one_on_one"; recipients: Recipient[] }> {
+  const sessionType = normalizeSessionType(dispatch.session_type);
+  if (!sessionType) {
+    throw new Error(`Unknown session_type "${dispatch.session_type}" on dispatch "${dispatch.session_name}" — expected "group" or "one_on_one". Refusing to guess recipients.`);
+  }
+
+  const recipients = sessionType === "group"
+    ? await resolveGroupRecipients(dispatch)
+    : await resolveOneOnOneRecipients(dispatch);
+
+  validateRecipients(dispatch, sessionType, recipients);
+  return { sessionType, recipients };
+}
+
+// ── Guardrails ─────────────────────────────────────────────────────────────────
+function validateRecipients(dispatch: any, sessionType: "group" | "one_on_one", recipients: Recipient[]): void {
+  if (!recipients.length) {
+    throw new Error(`Resolved 0 recipients for "${dispatch.session_name}" (session_type=${sessionType}) — aborting rather than sending nothing silently.`);
+  }
+  const missingEmail = recipients.find(r => !r.email || !r.email.includes("@"));
+  if (missingEmail) {
+    throw new Error(`Recipient "${missingEmail.name ?? "unknown"}" for "${dispatch.session_name}" has no valid email — aborting.`);
+  }
+  if (sessionType === "one_on_one" && recipients.length > 1) {
+    throw new Error(`One-on-one dispatch "${dispatch.session_name}" resolved ${recipients.length} recipients — expected exactly 1. Aborting rather than guessing which is correct.`);
+  }
+}
+
 // ── Final-session detection ───────────────────────────────────────────────────
 // The dispatch schema has no session-number/total-sessions column to compare against,
 // so the reliable signal is the topic/folder name — "Trade Management" is the last
@@ -131,8 +256,8 @@ function finalSessionThankYouHtml(): string {
 </div>`;
 }
 
-// ── Send email (supports multiple notes) ─────────────────────────────────────
-async function mail(to: string, name: string, session: string, topics: string[], rec: string|null, notesLinks: {label:string;url:string}[], isFinalSession: boolean): Promise<{ok:boolean;error?:string}> {
+// ── Email content (pure — no network call) ────────────────────────────────────
+function buildEmailContent(name: string, session: string, topics: string[], rec: string|null, notesLinks: {label:string;url:string}[], isFinalSession: boolean): { subject: string; html: string } {
   const rb = rec
     ? `<div style="text-align:center;margin:22px 0"><a href="${rec}" style="background:#D4A843;color:#07091A;padding:13px 30px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px">📹 Watch Recording</a></div>`
     : `<p style="color:#999;text-align:center;font-size:13px">Recording is still syncing — available shortly.</p>`;
@@ -167,12 +292,17 @@ async function mail(to: string, name: string, session: string, topics: string[],
   </div>
 </div></body></html>`;
 
+  const subjectTopics = topics.length ? ` – ${topics.join(" & ")}` : "";
+  const subject = `[Mind Over Markets] ${session}${subjectTopics} – Recording & Notes`;
+  return { subject, html };
+}
+
+async function sendResendEmail(to: string, subject: string, html: string): Promise<{ok:boolean;error?:string}> {
   try {
-    const subjectTopics = topics.length ? ` – ${topics.join(" & ")}` : "";
     const r = await fetch("https://api.resend.com/emails", {
       method:"POST",
       headers:{Authorization:`Bearer ${RESEND}`,"Content-Type":"application/json"},
-      body:JSON.stringify({ from:`${FROM_NAME} <${FROM_EMAIL}>`, to:[to], subject:`[Mind Over Markets] ${session}${subjectTopics} – Recording & Notes`, html })
+      body:JSON.stringify({ from:`${FROM_NAME} <${FROM_EMAIL}>`, to:[to], subject, html })
     });
     const d = await r.json();
     if (!r.ok) return { ok:false, error: d.message };
@@ -181,36 +311,21 @@ async function mail(to: string, name: string, session: string, topics: string[],
 }
 
 // ── Process one dispatch ──────────────────────────────────────────────────────
-async function runDispatch(dispatch: any, tok: string): Promise<void> {
-  let recips: {name:string;email:string}[] = [];
+type DispatchResult = {
+  sessionType: "group" | "one_on_one";
+  recipients: Recipient[];
+  recording: string | null;
+  topics: string[];
+  notesLinks: { label: string; url: string }[];
+  isFinalSession: boolean;
+  emails: { to: string; name: string; subject: string; html: string; result: { ok: boolean; error?: string } }[];
+};
 
-  if (dispatch.session_type === "group") {
-    const { data: b } = await sb.from("batch_groups").select("students").eq("batch_name", dispatch.batch_name).single();
-    recips = (b?.students as any[]) ?? [];
-  } else {
-    if (dispatch.zoom_meeting_id) {
-      const { data: byZoom } = await sb.from("session_invitees").select("invitee_name,invitee_email").eq("zoom_meeting_id", dispatch.zoom_meeting_id);
-      recips = (byZoom ?? []).map(i => ({ name: i.invitee_name, email: i.invitee_email }));
-    }
-    if (!recips.length) {
-      const { data: byDate } = await sb.from("session_invitees").select("invitee_name,invitee_email,start_time")
-        .gte("start_time", `${dispatch.meeting_date}T00:00:00Z`)
-        .lte("start_time", `${dispatch.meeting_date}T23:59:59Z`)
-        .eq("event_type", "one_on_one");
-      if (byDate?.length && dispatch.meeting_start_time) {
-        const mt = new Date(dispatch.meeting_start_time).getTime();
-        const sorted = byDate.sort((a,b) => Math.abs(new Date(a.start_time).getTime()-mt) - Math.abs(new Date(b.start_time).getTime()-mt));
-        recips = [{ name: sorted[0].invitee_name, email: sorted[0].invitee_email }];
-      }
-    }
-  }
+async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }): Promise<DispatchResult> {
+  const { sessionType, recipients } = await resolveRecipients(dispatch);
 
-  if (!recips.length) throw new Error(`No recipients for "${dispatch.session_name}"`);
-
-  // Recording
   const rec = await findRecording(tok, dispatch.session_name, dispatch.meeting_date);
 
-  // Notes — parse comma-separated topics, find ALL PDFs for each
   const topicStr = (dispatch.notes_topic ?? "").trim();
   const topics   = topicStr ? topicStr.split(",").map((t:string) => t.trim()).filter(Boolean) : [];
 
@@ -219,55 +334,125 @@ async function runDispatch(dispatch: any, tok: string): Promise<void> {
     const links = await findNotesForTopic(tok, topic);
     allNotesLinks = [...allNotesLinks, ...links];
   }
-
-  // Remove duplicate URLs
   allNotesLinks = allNotesLinks.filter((n, i, arr) => arr.findIndex(x => x.url === n.url) === i);
 
   const isFinalSession = isFinalSessionDispatch(dispatch.session_name ?? "", topics);
 
-  console.log(`Topics: [${topics.join(", ")}] | Notes found: ${allNotesLinks.length} | Recording: ${rec ?? "not found"} | Final session: ${isFinalSession}`);
+  console.log(`[${opts.dryRun ? "DRY RUN" : "LIVE"}] session_type=${sessionType} recipients=[${recipients.map(r=>`${r.name}<${r.email}>`).join(", ")}] | Topics: [${topics.join(", ")}] | Notes found: ${allNotesLinks.length} | Recording: ${rec ?? "not found"} | Final session: ${isFinalSession}`);
 
-  const log: {name:string;email:string;status:string;error?:string}[] = [];
-  for (const r of recips) {
-    const result = await mail(r.email, r.name, dispatch.session_name, topics, rec, allNotesLinks, isFinalSession);
-    log.push({ name:r.name, email:r.email, status: result.ok?"sent":"failed", error: result.error });
-    await new Promise(resolve => setTimeout(resolve, 2500));
+  const emails: DispatchResult["emails"] = [];
+  for (const r of recipients) {
+    const { subject, html } = buildEmailContent(r.name, dispatch.session_name, topics, rec, allNotesLinks, isFinalSession);
+    if (opts.dryRun) {
+      console.log(`[DRY RUN] Would send to ${r.name} <${r.email}>\nSubject: ${subject}`);
+      emails.push({ to: r.email, name: r.name, subject, html, result: { ok: true } });
+    } else {
+      const result = await sendResendEmail(r.email, subject, html);
+      emails.push({ to: r.email, name: r.name, subject, html, result });
+      await new Promise(resolve => setTimeout(resolve, 2500));
+    }
   }
 
-  const sent = log.filter(r => r.status==="sent").length;
-  await sb.from("dispatch_logs").insert({
-    session_name: dispatch.session_name, zoom_meeting_id: dispatch.zoom_meeting_id,
-    session_type: dispatch.session_type,
-    recording_url: rec,
-    notes_url: allNotesLinks[0]?.url ?? null,
-    recipients: log, sent_count: sent, total_count: recips.length,
-    status: sent===recips.length?"success":sent>0?"partial":"failed",
-  });
+  if (opts.dryRun) {
+    await sendTelegram(
+      `🧪 <b>DRY RUN — no emails sent</b>\n\n` +
+      `📛 ${dispatch.session_name}\n` +
+      `🏷 session_type: ${sessionType}${sessionType === "group" ? ` (batch: ${dispatch.batch_name})` : ""}\n` +
+      `👤 Would send to: ${recipients.map(r=>`${r.name} <${r.email}>`).join(", ")}\n` +
+      `📹 Recording: ${rec ? "Found ✅" : "Not found ❌"}\n` +
+      `📝 Notes (${topics.join(", ") || "no topic"}): ${allNotesLinks.length > 0 ? `${allNotesLinks.length} file(s) ✅` : "Not found ❌"}`
+    );
+  } else {
+    const sent = emails.filter(e => e.result.ok).length;
+    await sb.from("dispatch_logs").insert({
+      pending_dispatch_id: dispatch.id ?? null,
+      session_name: dispatch.session_name, zoom_meeting_id: dispatch.zoom_meeting_id,
+      session_type: dispatch.session_type,
+      recording_url: rec,
+      notes_url: allNotesLinks[0]?.url ?? null,
+      recipients: emails.map(e => ({ name: e.name, email: e.to, status: e.result.ok ? "sent" : "failed", error: e.result.error })),
+      sent_count: sent, total_count: recipients.length,
+      status: sent===recipients.length?"success":sent>0?"partial":"failed",
+    });
 
-  await sendTelegram(
-    `✅ <b>Emails sent!</b>\n\n` +
-    `👤 ${recips.map(r=>r.name).join(", ")}\n` +
-    `📹 Recording: ${rec ? "Found ✅" : "Not found ❌"}\n` +
-    `📝 Notes (${topics.join(", ") || "no topic"}): ${allNotesLinks.length > 0 ? `${allNotesLinks.length} file(s) ✅` : "Not found ❌"}\n` +
-    `📧 ${sent}/${recips.length} emails sent` +
-    (isFinalSession ? `\n🎓 Final-session thank-you note included` : "")
-  );
+    await sendTelegram(
+      `✅ <b>Emails sent!</b>\n\n` +
+      `📛 ${dispatch.session_name}\n` +
+      `🏷 session_type: ${sessionType}${sessionType === "group" ? ` (batch: ${dispatch.batch_name})` : ""}\n` +
+      `👤 ${recipients.map(r=>r.name).join(", ")}\n` +
+      `📹 Recording: ${rec ? "Found ✅" : "Not found ❌"}\n` +
+      `📝 Notes (${topics.join(", ") || "no topic"}): ${allNotesLinks.length > 0 ? `${allNotesLinks.length} file(s) ✅` : "Not found ❌"}\n` +
+      `📧 ${sent}/${recipients.length} emails sent` +
+      (isFinalSession ? `\n🎓 Final-session thank-you note included` : "")
+    );
 
-  if (!sent) throw new Error("All emails failed");
+    if (!sent) throw new Error("All emails failed to send (see dispatch_logs for per-recipient errors).");
+  }
+
+  return { sessionType, recipients, recording: rec, topics, notesLinks: allNotesLinks, isFinalSession, emails };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-serve(async () => {
-  await syncCalendlyInvitees();
-  const { data: pending, error } = await sb.from("pending_dispatches").select("*").eq("status","pending").lte("scheduled_at", new Date().toISOString()).limit(10);
-  if (error) return new Response(JSON.stringify({error:error.message}), {status:500});
-  if (!pending?.length) return new Response(JSON.stringify({ok:true,pending:0}), {status:200});
-  let tok: string;
-  try { tok = await gToken(); } catch(e:any) { return new Response("Google auth failed: "+e.message, {status:500}); }
-  for (const d of pending) {
-    await sb.from("pending_dispatches").update({status:"processing"}).eq("id", d.id);
-    try { await runDispatch(d, tok); await sb.from("pending_dispatches").update({status:"done"}).eq("id", d.id); }
-    catch(e:any) { console.error(`Failed: ${e.message}`); await sb.from("pending_dispatches").update({status:"failed", error:e.message}).eq("id", d.id); }
+serve(async (req) => {
+  let body: any = {};
+  try { body = await req.json(); } catch { /* no/empty body is fine — e.g. cron invocation */ }
+  const url    = new URL(req.url);
+  const dryRun = body?.dry_run === true || url.searchParams.get("dry_run") === "true";
+
+  // Ad-hoc test mode: POST { dispatch: {...}, dry_run: true } to resolve recipients and
+  // render the email for a hand-built dispatch WITHOUT touching pending_dispatches at all.
+  // This is the safe way to test group vs one-on-one recipient resolution before a live session.
+  if (body?.dispatch) {
+    let tok: string;
+    try { tok = await gToken(); }
+    catch (e: any) {
+      await notifyFailure("ad-hoc test: Google auth", e);
+      return new Response(JSON.stringify({ ok:false, error:"Google auth failed: "+e.message }), { status:500 });
+    }
+    try {
+      const result = await runDispatch(body.dispatch, tok, { dryRun });
+      return new Response(JSON.stringify({ ok:true, dryRun, ...result }, null, 2), { status:200, headers:{"Content-Type":"application/json"} });
+    } catch (e: any) {
+      if (!dryRun) await notifyFailure(`ad-hoc dispatch "${body.dispatch?.session_name}"`, e);
+      return new Response(JSON.stringify({ ok:false, dryRun, error: e.message }), { status:500 });
+    }
   }
-  return new Response(JSON.stringify({processed:pending.length}), {status:200});
+
+  await syncCalendlyInvitees();
+
+  const { data: pending, error } = await sb.from("pending_dispatches").select("*").eq("status","pending").lte("scheduled_at", new Date().toISOString()).limit(10);
+  if (error) {
+    await notifyFailure("fetching pending_dispatches", error);
+    return new Response(JSON.stringify({error:error.message}), {status:500});
+  }
+  if (!pending?.length) return new Response(JSON.stringify({ok:true,pending:0}), {status:200});
+
+  let tok: string;
+  try { tok = await gToken(); }
+  catch(e:any) {
+    await notifyFailure("Google auth (blocks all pending dispatches this run)", e);
+    return new Response("Google auth failed: "+e.message, {status:500});
+  }
+
+  const results: { id: string; session_name: string; ok: boolean; error?: string }[] = [];
+  for (const d of pending) {
+    if (!dryRun) await sb.from("pending_dispatches").update({status:"processing"}).eq("id", d.id);
+    try {
+      await runDispatch(d, tok, { dryRun });
+      if (!dryRun) await sb.from("pending_dispatches").update({status:"done"}).eq("id", d.id);
+      results.push({ id: d.id, session_name: d.session_name, ok: true });
+    } catch(e:any) {
+      if (!dryRun) {
+        await sb.from("pending_dispatches").update({status:"failed", error:e.message}).eq("id", d.id);
+        await sb.from("dispatch_logs").insert({
+          pending_dispatch_id: d.id, session_name: d.session_name, zoom_meeting_id: d.zoom_meeting_id,
+          session_type: d.session_type, recording_url: null, notes_url: null,
+          recipients: [], sent_count: 0, total_count: 0, status: "failed", error: e.message,
+        });
+      }
+      if (!dryRun) await notifyFailure(`dispatch "${d.session_name}" (id ${d.id})`, e);
+      results.push({ id: d.id, session_name: d.session_name, ok: false, error: e.message });
+    }
+  }
+  return new Response(JSON.stringify({processed:pending.length, dryRun, results}, null, 2), {status:200, headers:{"Content-Type":"application/json"}});
 });
