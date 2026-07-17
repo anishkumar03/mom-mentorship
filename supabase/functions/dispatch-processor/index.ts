@@ -89,6 +89,7 @@ async function gToken(): Promise<string> {
 type RecordingDebug = {
   searchStrategy: "date" | "student_name";
   searchTerm: string;
+  nameSource?: "resolved_recipient" | "session_name";
   groupIdentifier: string | null;
   folderQuery: string;
   rawFoldersFound: string[];   // whatever Drive's `contains` returned — may include false positives
@@ -101,7 +102,7 @@ type RecordingDebug = {
   matched: string | null;
 };
 
-async function findRecording(tok: string, dispatch: any, sessionType: "group" | "one_on_one", groupIdentifier: string | null): Promise<{ url: string | null; debug: RecordingDebug }> {
+async function findRecording(tok: string, dispatch: any, sessionType: "group" | "one_on_one", groupIdentifier: string | null, recipients: Recipient[]): Promise<{ url: string | null; debug: RecordingDebug }> {
   const sessionName = dispatch.session_name ?? "";
   const date = dispatch.meeting_date ?? "";
 
@@ -109,14 +110,22 @@ async function findRecording(tok: string, dispatch: any, sessionType: "group" | 
   // "YYYY-MM-DD HH.MM.SS <Zoom meeting topic>" — that topic text is whatever the Zoom
   // meeting itself is titled and has no guaranteed relationship to our batch_name/session_name,
   // so the date is the only reliably matchable anchor. One-on-one recordings are manually
-  // organized into per-student folders, so the student-name heuristic still applies there.
+  // organized into per-student folders, so the student-name heuristic still applies there —
+  // but the resolved recipient's actual name (already looked up from session_invitees, by the
+  // time this runs) is authoritative and preferred over re-parsing session_name, which only
+  // works when session_name happens to follow the "<Student> and Anish" convention (confirmed
+  // live: a generic session_name like "1-on-1 Session" broke the parse entirely and searched
+  // Drive for that literal string instead of the student's name).
   const useDateStrategy = sessionType === "group";
-  const searchTerm = useDateStrategy ? date : sessionName.split(" and ")[0].trim();
+  const resolvedName = recipients[0]?.name?.trim();
+  const nameSource: "resolved_recipient" | "session_name" = resolvedName ? "resolved_recipient" : "session_name";
+  const searchTerm = useDateStrategy ? date : (resolvedName || sessionName.split(" and ")[0].trim());
   const safeTerm = searchTerm.replace(/'/g, "\\'");
 
   const debug: RecordingDebug = {
     searchStrategy: useDateStrategy ? "date" : "student_name",
-    searchTerm: safeTerm, groupIdentifier: useDateStrategy ? groupIdentifier : null,
+    searchTerm: safeTerm, nameSource: useDateStrategy ? undefined : nameSource,
+    groupIdentifier: useDateStrategy ? groupIdentifier : null,
     folderQuery: "", rawFoldersFound: [], verifiedFolders: [], scopedCandidates: [],
     chosenFolder: null, rejected: null, fileQuery: null, filesFound: [], matched: null,
   };
@@ -284,6 +293,10 @@ async function resolveGroupRecipients(dispatch: any): Promise<{ recipients: Reci
   return { recipients: (batch.students as Recipient[]) ?? [], zoomTitleMatch: batch.zoom_title_match ?? null };
 }
 
+function extractOneOnOneStudentName(sessionName: string): string {
+  return sessionName.split(" and ")[0].trim();
+}
+
 async function resolveOneOnOneRecipients(dispatch: any): Promise<Recipient[]> {
   if (dispatch.zoom_meeting_id) {
     const { data: byZoom, error } = await sb
@@ -299,20 +312,40 @@ async function resolveOneOnOneRecipients(dispatch: any): Promise<Recipient[]> {
     throw new Error(`One-on-one dispatch "${dispatch.session_name}" has no zoom_meeting_id match and no meeting_date to fall back on.`);
   }
 
-  const { data: byDate, error } = await sb
+  const { data: byDateRaw, error } = await sb
     .from("session_invitees")
     .select("invitee_name,invitee_email,start_time")
     .gte("start_time", `${dispatch.meeting_date}T00:00:00Z`)
     .lte("start_time", `${dispatch.meeting_date}T23:59:59Z`)
     .eq("event_type", "one_on_one");
   if (error) throw new Error(`session_invitees lookup by date failed: ${error.message}`);
-  if (!byDate?.length) return [];
+  if (!byDateRaw?.length) return [];
+
+  // The student's name is already encoded in session_name ("<Student> and Anish") — narrow to
+  // it BEFORE ever falling back to time-based guessing. Without this, two back-to-back bookings
+  // on the same day can have Calendly-*scheduled* start_times closer to each other than either
+  // is to the dispatch's actual (possibly delayed) meeting_start_time — confirmed live: this is
+  // exactly what sent Melvin Shaji's session to Abin K Abraham during testing, because Abin's
+  // booked slot happened to sit numerically closer to Melvin's real (delayed) start time than
+  // Melvin's own booked slot did. zoom_meeting_id-based lookup above never has this problem —
+  // it has no time-guessing step at all — so this brings the fallback path in line with it.
+  const studentHint = extractOneOnOneStudentName(dispatch.session_name ?? "").toLowerCase();
+  let byDate = byDateRaw;
+  if (studentHint) {
+    const nameFiltered = byDateRaw.filter(i => {
+      const n = (i.invitee_name ?? "").toLowerCase().trim();
+      return n && (n.includes(studentHint) || studentHint.includes(n));
+    });
+    if (nameFiltered.length) byDate = nameFiltered;
+  }
+
+  if (byDate.length === 1) {
+    return [{ name: byDate[0].invitee_name, email: byDate[0].invitee_email }];
+  }
+
   if (!dispatch.meeting_start_time) {
     // Multiple candidates on the date and nothing to disambiguate with — do not guess.
-    if (byDate.length > 1) {
-      throw new Error(`${byDate.length} one-on-one invitees on ${dispatch.meeting_date} and no meeting_start_time to disambiguate — refusing to pick one at random.`);
-    }
-    return [{ name: byDate[0].invitee_name, email: byDate[0].invitee_email }];
+    throw new Error(`${byDate.length} one-on-one invitees on ${dispatch.meeting_date}${studentHint ? ` matching "${studentHint}"` : ""} and no meeting_start_time to disambiguate — refusing to pick one at random.`);
   }
 
   const mt = new Date(dispatch.meeting_start_time).getTime();
@@ -515,7 +548,7 @@ async function runDispatch(dispatch: any, tok: string, opts: { dryRun: boolean }
     rec = String(dispatch.recording_url);
     recordingDebug = { overridden: true, url: rec };
   } else {
-    const found = await findRecording(tok, dispatch, sessionType, groupIdentifier);
+    const found = await findRecording(tok, dispatch, sessionType, groupIdentifier, recipients);
     rec = found.url;
     recordingDebug = found.debug;
   }
