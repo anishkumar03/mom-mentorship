@@ -216,7 +216,6 @@ export default function PipelinePage() {
   const [contactedHint, setContactedHint] = useState<string | null>(null);
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [disableMarkContacted, setDisableMarkContacted] = useState(false);
-  const [convertError, setConvertError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<string>("__NONE__");
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -428,17 +427,30 @@ export default function PipelinePage() {
 
   const convertToStudent = async (l: Lead) => {
     if (l.student_id) return;
-    setConvertError(null);
 
-    const email = (l.email ?? "").trim();
+    const email = (l.email ?? "").trim().toLowerCase();
     if (email) {
       const existing = await supabase
         .from("students")
-        .select("id")
-        .eq("email", email)
-        .maybeSingle();
-      if (existing.data?.id) {
-        alert("A student already exists with this email.");
+        .select("id,email")
+        .ilike("email", email)
+        .limit(1);
+      if (existing.error) {
+        alert(existing.error.message);
+        return;
+      }
+      if (existing.data && existing.data.length > 0) {
+        const { error } = await supabase
+          .from("leads")
+          .update({ student_id: existing.data[0].id, converted_at: new Date().toISOString() })
+          .eq("id", l.id);
+        if (error) {
+          alert(error.message);
+          return;
+        }
+        setLeads((prev) => prev.filter((lead) => lead.id !== l.id));
+        fetchAll();
+        router.refresh();
         return;
       }
     }
@@ -463,17 +475,17 @@ export default function PipelinePage() {
       .single();
 
     if (inserted.error) {
-      setConvertError(inserted.error.message);
+      alert(inserted.error.message);
       return;
     }
 
     const { error } = await supabase
       .from("leads")
-      .delete()
+      .update({ student_id: inserted.data.id, converted_at: new Date().toISOString() })
       .eq("id", l.id);
 
     if (error) {
-      setConvertError(error.message);
+      alert(error.message);
       return;
     }
 
@@ -656,12 +668,11 @@ export default function PipelinePage() {
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button onClick={() => setStatusOnly(l, "Confirmed")} style={{
+          <button onClick={() => convertToStudent(l)} style={{
             ...btnSecondary,
             background: "rgba(34,197,94,0.1)", borderColor: "rgba(34,197,94,0.2)",
-          }}>Confirmed</button>
-          <button onClick={() => convertToStudent(l)} style={btnSecondary} disabled={!!l.student_id}>
-            {l.student_id ? "Converted" : "Student"}
+          }} disabled={!!l.student_id}>
+            {l.student_id ? "Converted" : "Convert to Student"}
           </button>
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
