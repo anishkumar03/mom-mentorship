@@ -38,7 +38,10 @@ type Lead = {
   created_at?: string | null;
 };
 
-const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
+// "Confirmed" is no longer a status you set manually — converting a lead to a student
+// (student_id) is the only signal for that now. Left out of the selectable list, but
+// STATUS_COLORS/stageKey below still render it correctly for any older lead that has it.
+const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Lost"] as const;
 const LEAD_SOURCES = ["Instagram", "WhatsApp", "Referral", "YouTube", "Manual"] as const;
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -822,7 +825,7 @@ export default function LeadsPage() {
       if (existing.data && existing.data.length > 0) {
         const { error } = await supabase
           .from("leads")
-          .update({ student_id: existing.data[0].id, status: "Confirmed", converted_at: new Date().toISOString() })
+          .update({ student_id: existing.data[0].id, converted_at: new Date().toISOString() })
           .eq("id", l.id);
         if (error) {
           setConvertError(error.message);
@@ -866,7 +869,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data.id, status: "Confirmed", converted_at: new Date().toISOString() })
+      .update({ student_id: inserted.data.id, converted_at: new Date().toISOString() })
       .eq("id", l.id);
 
     if (error) {
