@@ -23,11 +23,43 @@ interface Batch {
   created_at: string
 }
 
+interface BatchSession {
+  id: string
+  batch_id: string
+  session_number: number
+  session_date: string
+  status: 'scheduled' | 'skipped' | 'completed'
+  topic: string | null
+  notes: string | null
+}
+
 const empty = {
   batch_key: '', batch_name: '', type: 'group' as 'group' | '1on1',
   start_date: '', end_date: '', fee: '',
   payment_deadline: '', zoom_link: '',
   session_day: 'Wednesday', session_time: '7:00 PM – 9:00 PM ET',
+}
+
+// UTC-safe date math — session_date is a plain date column, no timezone to worry about.
+function addDays(iso: string, days: number): string {
+  const d = new Date(iso + 'T00:00:00Z')
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+function daysBetween(fromIso: string, toIso: string): number {
+  const a = new Date(fromIso + 'T00:00:00Z').getTime()
+  const b = new Date(toIso + 'T00:00:00Z').getTime()
+  return Math.round((b - a) / 86400000)
+}
+
+function generateSessionRows(batchId: string, startDate: string) {
+  return Array.from({ length: 7 }, (_, i) => ({
+    batch_id: batchId,
+    session_number: i + 1,
+    session_date: addDays(startDate, i * 7),
+    status: 'scheduled' as const,
+  }))
 }
 
 export default function EmailBatchesPage() {
@@ -38,6 +70,14 @@ export default function EmailBatchesPage() {
   const [form, setForm]         = useState(empty)
   const [saving, setSaving]     = useState(false)
   const [toast, setToast]       = useState('')
+
+  // Session schedule modal
+  const [sessionsModal, setSessionsModal]   = useState<Batch | null>(null)
+  const [sessions, setSessions]             = useState<BatchSession[]>([])
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [sessionBusy, setSessionBusy]       = useState<Record<string, boolean>>({})
+  const [editingDateFor, setEditingDateFor] = useState<string | null>(null)
+  const [dateEditValue, setDateEditValue]   = useState('')
 
   useEffect(() => { loadBatches() }, [])
 
@@ -108,7 +148,10 @@ export default function EmailBatchesPage() {
       await supabase.from('email_batches').update(payload).eq('id', editing.id)
       showToast('Batch updated!')
     } else {
-      await supabase.from('email_batches').insert(payload)
+      const { data: created, error } = await supabase.from('email_batches').insert(payload).select().single()
+      if (!error && created && payload.type === 'group' && payload.start_date) {
+        await supabase.from('batch_sessions').insert(generateSessionRows(created.id, payload.start_date))
+      }
       showToast('Batch created!')
     }
 
@@ -127,6 +170,107 @@ export default function EmailBatchesPage() {
   function formatDate(d: string | null) {
     if (!d) return '—'
     return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })
+  }
+
+  // ── Session schedule ──────────────────────────────────────────────────────
+  async function loadSessions(batchId: string) {
+    setSessionsLoading(true)
+    const { data } = await supabase
+      .from('batch_sessions').select('*').eq('batch_id', batchId).order('session_number')
+    setSessions((data || []) as BatchSession[])
+    setSessionsLoading(false)
+  }
+
+  function openSessions(b: Batch) {
+    setSessionsModal(b)
+    setEditingDateFor(null)
+    loadSessions(b.id)
+  }
+
+  async function generateSessions(b: Batch) {
+    if (!b.start_date) { showToast('Set a start date first.'); return }
+    setSessionsLoading(true)
+    await supabase.from('batch_sessions').insert(generateSessionRows(b.id, b.start_date))
+    await syncEndDateAndReload(b.id)
+    setSessionsLoading(false)
+  }
+
+  // Keeps email_batches.end_date matching the last session's actual date, so the list view's
+  // start–end summary never goes stale once a batch has skips/manual edits.
+  async function syncEndDateAndReload(batchId: string) {
+    const { data } = await supabase
+      .from('batch_sessions').select('*').eq('batch_id', batchId).order('session_number')
+    const list = (data || []) as BatchSession[]
+    setSessions(list)
+    const last = list[list.length - 1]
+    if (last) {
+      await supabase.from('email_batches').update({ end_date: last.session_date }).eq('id', batchId)
+      setBatches(prev => prev.map(b => b.id === batchId ? { ...b, end_date: last.session_date } : b))
+      setSessionsModal(prev => prev && prev.id === batchId ? { ...prev, end_date: last.session_date } : prev)
+    }
+  }
+
+  async function skipSession(s: BatchSession) {
+    setSessionBusy(prev => ({ ...prev, [s.id]: true }))
+    const toShift = sessions.filter(x => x.session_number >= s.session_number)
+    for (const x of toShift) {
+      await supabase.from('batch_sessions').update({
+        session_date: addDays(x.session_date, 7),
+        status: x.id === s.id ? 'skipped' : x.status,
+      }).eq('id', x.id)
+    }
+    await syncEndDateAndReload(s.batch_id)
+    setSessionBusy(prev => ({ ...prev, [s.id]: false }))
+  }
+
+  async function undoSkip(s: BatchSession) {
+    setSessionBusy(prev => ({ ...prev, [s.id]: true }))
+    const toShift = sessions.filter(x => x.session_number >= s.session_number)
+    for (const x of toShift) {
+      await supabase.from('batch_sessions').update({
+        session_date: addDays(x.session_date, -7),
+        status: x.id === s.id ? 'scheduled' : x.status,
+      }).eq('id', x.id)
+    }
+    await syncEndDateAndReload(s.batch_id)
+    setSessionBusy(prev => ({ ...prev, [s.id]: false }))
+  }
+
+  async function toggleCompleted(s: BatchSession) {
+    setSessionBusy(prev => ({ ...prev, [s.id]: true }))
+    const nextStatus = s.status === 'completed' ? 'scheduled' : 'completed'
+    await supabase.from('batch_sessions').update({ status: nextStatus }).eq('id', s.id)
+    await loadSessions(s.batch_id)
+    setSessionBusy(prev => ({ ...prev, [s.id]: false }))
+  }
+
+  function startDateEdit(s: BatchSession) {
+    setEditingDateFor(s.id)
+    setDateEditValue(s.session_date)
+  }
+
+  async function saveDateEdit(s: BatchSession) {
+    if (!dateEditValue || dateEditValue === s.session_date) { setEditingDateFor(null); return }
+    const delta = daysBetween(s.session_date, dateEditValue)
+    const shiftLater = confirm(
+      `Move session ${s.session_number} to ${formatDate(dateEditValue)}?\n\n` +
+      `OK — also shift every session after it by the same ${delta > 0 ? '+' : ''}${delta} day(s).\n` +
+      `Cancel — only change this session's date, leave the rest where they are.`
+    )
+    setSessionBusy(prev => ({ ...prev, [s.id]: true }))
+    if (shiftLater) {
+      const toShift = sessions.filter(x => x.session_number >= s.session_number)
+      for (const x of toShift) {
+        await supabase.from('batch_sessions')
+          .update({ session_date: x.id === s.id ? dateEditValue : addDays(x.session_date, delta) })
+          .eq('id', x.id)
+      }
+    } else {
+      await supabase.from('batch_sessions').update({ session_date: dateEditValue }).eq('id', s.id)
+    }
+    await syncEndDateAndReload(s.batch_id)
+    setSessionBusy(prev => ({ ...prev, [s.id]: false }))
+    setEditingDateFor(null)
   }
 
   return (
@@ -310,6 +454,127 @@ export default function EmailBatchesPage() {
         </div>
       )}
 
+      {/* Session Schedule Modal */}
+      {sessionsModal && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999,
+        }}>
+          <div style={{
+            background: '#fff', borderRadius: '14px', padding: '32px',
+            width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '4px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: 700, color: '#0a1628', margin: 0 }}>
+                Session Schedule
+              </h2>
+              <button
+                onClick={() => setSessionsModal(null)}
+                style={{ border: 'none', background: 'transparent', color: '#94a3b8', fontSize: '20px', cursor: 'pointer', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <p style={{ fontSize: '13px', color: '#64748b', margin: '0 0 20px' }}>{sessionsModal.batch_name}</p>
+
+            {sessionsLoading ? (
+              <p style={{ color: '#94a3b8', fontSize: '14px' }}>Loading...</p>
+            ) : sessions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 20px', border: '1.5px dashed #e2e8f0', borderRadius: '12px' }}>
+                <p style={{ color: '#94a3b8', fontSize: '14px', margin: '0 0 14px' }}>
+                  No sessions generated yet for this batch.
+                </p>
+                <button
+                  onClick={() => generateSessions(sessionsModal)}
+                  style={{ padding: '9px 18px', background: '#0a1628', color: '#d4a832', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Generate 7 Sessions
+                </button>
+              </div>
+            ) : (
+              <>
+                <div style={{
+                  background: '#f0f7ff', border: '0.5px solid #bfdbfe', borderRadius: '10px',
+                  padding: '12px 16px', marginBottom: '16px', fontSize: '13px', color: '#1d4ed8',
+                }}>
+                  Batch runs through <strong>{formatDate(sessions[sessions.length - 1].session_date)}</strong>
+                  {sessions.some(s => s.status === 'skipped') && ' (extended by skipped week(s))'}
+                </div>
+
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {sessions.map(s => {
+                    const busy = !!sessionBusy[s.id]
+                    return (
+                      <div key={s.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        padding: '10px 14px', border: '0.5px solid #e2e8f0', borderRadius: '10px',
+                        opacity: busy ? 0.6 : 1,
+                      }}>
+                        <div style={{
+                          width: '26px', height: '26px', borderRadius: '999px', flexShrink: 0,
+                          background: '#f1f5f9', color: '#0a1628', fontSize: '12px', fontWeight: 700,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {s.session_number}
+                        </div>
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {editingDateFor === s.id ? (
+                            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                              <input
+                                type="date"
+                                value={dateEditValue}
+                                onChange={e => setDateEditValue(e.target.value)}
+                                style={{ ...inputStyle, width: 'auto' }}
+                              />
+                              <button onClick={() => saveDateEdit(s)} style={smallBtnPrimary}>Save</button>
+                              <button onClick={() => setEditingDateFor(null)} style={smallBtnGhost}>Cancel</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                              <span style={{ fontSize: '14px', fontWeight: 600, color: '#0a1628' }}>
+                                {formatDate(s.session_date)}
+                              </span>
+                              <span style={{ ...statusBadgeStyle(s.status) }}>{s.status}</span>
+                              {s.topic && <span style={{ fontSize: '12px', color: '#94a3b8' }}>{s.topic}</span>}
+                            </div>
+                          )}
+                        </div>
+
+                        {editingDateFor !== s.id && (
+                          <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                            <button
+                              onClick={() => startDateEdit(s)}
+                              disabled={busy}
+                              title="Edit date"
+                              style={smallBtnGhost}
+                            >
+                              ✎
+                            </button>
+                            {s.status === 'skipped' ? (
+                              <button onClick={() => undoSkip(s)} disabled={busy} style={smallBtnGhost}>
+                                Undo skip
+                              </button>
+                            ) : (
+                              <button onClick={() => skipSession(s)} disabled={busy} style={smallBtnGhost}>
+                                Skip this week
+                              </button>
+                            )}
+                            <button onClick={() => toggleCompleted(s)} disabled={busy} style={smallBtnGhost}>
+                              {s.status === 'completed' ? 'Unmark' : 'Mark done'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Batch List */}
       {loading ? (
         <p style={{ color: '#94a3b8', fontSize: '14px' }}>Loading batches...</p>
@@ -347,6 +612,14 @@ export default function EmailBatchesPage() {
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: '8px' }}>
+                {b.type === 'group' && (
+                  <button
+                    onClick={() => openSessions(b)}
+                    style={{ padding: '7px 14px', border: '0.5px solid #bfdbfe', background: '#eff6ff', borderRadius: '7px', fontSize: '13px', cursor: 'pointer', color: '#1d4ed8', fontWeight: 600 }}
+                  >
+                    📅 Sessions
+                  </button>
+                )}
                 <button
                   onClick={() => openEdit(b)}
                   style={{ padding: '7px 14px', border: '0.5px solid #e2e8f0', background: '#fff', borderRadius: '7px', fontSize: '13px', cursor: 'pointer', color: '#374151' }}
@@ -377,4 +650,28 @@ const inputStyle: React.CSSProperties = {
   width: '100%', padding: '10px 12px', border: '0.5px solid #e2e8f0',
   borderRadius: '8px', fontSize: '14px', color: '#0a1628',
   boxSizing: 'border-box', outline: 'none',
+}
+
+const smallBtnGhost: React.CSSProperties = {
+  padding: '6px 10px', border: '0.5px solid #e2e8f0', background: '#fff',
+  borderRadius: '6px', fontSize: '12px', cursor: 'pointer', color: '#374151', whiteSpace: 'nowrap',
+}
+
+const smallBtnPrimary: React.CSSProperties = {
+  padding: '6px 12px', border: 'none', background: '#0a1628',
+  borderRadius: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer', color: '#d4a832', whiteSpace: 'nowrap',
+}
+
+function statusBadgeStyle(status: BatchSession['status']): React.CSSProperties {
+  const map: Record<BatchSession['status'], { bg: string; color: string }> = {
+    scheduled: { bg: '#f1f5f9', color: '#475569' },
+    skipped:   { bg: '#fef3c7', color: '#92400e' },
+    completed: { bg: '#f0fdf4', color: '#16a34a' },
+  }
+  const c = map[status]
+  return {
+    display: 'inline-block', padding: '2px 8px', borderRadius: '999px',
+    fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em',
+    background: c.bg, color: c.color,
+  }
 }
