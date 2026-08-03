@@ -20,6 +20,12 @@ function formatDate(dateStr: string) {
   })
 }
 
+// Matches the same normalization the Batches page uses to decide who counts as "confirmed" —
+// keeps this file from silently demoting a lead that's already confirmed/converted.
+function normalizeStatus(s: unknown): string {
+  return (s ?? '').toString().trim().toLowerCase().replace(/\s+/g, '')
+}
+
 async function sendTelegram(chatId: number, text: string) {
   await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: 'POST',
@@ -52,8 +58,22 @@ function groupEmailHtml(vars: {
   zoomLink: string
   sessionDay: string
   sessionTime: string
+  sessions: { session_number: number; session_date: string; status: string }[]
 }) {
-  const { firstName, batchName, startDate, endDate, fee, paymentDeadline, zoomLink, sessionDay, sessionTime } = vars
+  const { firstName, batchName, startDate, endDate, fee, paymentDeadline, zoomLink, sessionDay, sessionTime, sessions } = vars
+  // Skipped weeks (holidays, travel) don't get a line — session_number/dates for everything
+  // else already reflect any accumulated skip, since batch_sessions is kept live-synced.
+  const activeSessions = sessions.filter(s => s.status !== 'skipped')
+  const durationLabel = activeSessions.length ? `${activeSessions.length} Sessions` : '7 Weeks'
+  const scheduleTableRow = activeSessions.length
+    ? ''
+    : `<tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Schedule</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">Every ${sessionDay}</td></tr>`
+  const sessionScheduleBlock = activeSessions.length
+    ? `<p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Session Schedule</p>
+<p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
+${activeSessions.map(s => `Session ${s.session_number} — ${formatDate(s.session_date)}`).join('<br/>\n')}
+</p>`
+    : ''
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/></head>
@@ -70,14 +90,15 @@ function groupEmailHtml(vars: {
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 16px;">Welcome to the <strong>Mind Over Markets Group Mentorship Program!</strong> I am excited to have you join us. Our next batch — <strong>${batchName}</strong> — officially starts on <strong>${startDate}</strong> and runs until <strong>${endDate}</strong>.</p>
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">This is a structured 7-week program designed for traders who want to build discipline, clarity, confidence, and a deeper understanding of the markets.</p>
 <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:24px;">
-<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;width:40%;">Duration</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">7 Weeks</td></tr>
-<tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Schedule</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">Every ${sessionDay}</td></tr>
+<tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;width:40%;">Duration</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">${durationLabel}</td></tr>
+${scheduleTableRow}
 <tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Time</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">${sessionTime}</td></tr>
 <tr><td style="padding:10px 16px;font-size:13px;color:#6b7280;border-bottom:1px solid #e5e7eb;">Format</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;border-bottom:1px solid #e5e7eb;">Live Zoom + Private Discord</td></tr>
 <tr style="background:#fafafa;"><td style="padding:10px 16px;font-size:13px;color:#6b7280;">Program Fee</td><td style="padding:10px 16px;font-size:13px;color:#111827;font-weight:600;">${fee}</td></tr>
 </table>
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 6px;"><strong>Zoom Join Link:</strong></p>
 <p style="margin:0 0 24px;"><a href="${zoomLink}" style="color:#d4a832;font-size:14px;">${zoomLink}</a></p>
+${sessionScheduleBlock}
 <p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">What's Included</p>
 <p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
 &bull; 7 weeks of structured mentorship with live guidance<br/>
@@ -222,6 +243,14 @@ async function handleSend(chatId: number, args: string) {
     let subject: string
 
     if (batch.type === 'group') {
+      // Fetched fresh at send time (not cached anywhere) so a skip/date-edit made minutes
+      // before sending is always reflected — never a schedule baked in at batch creation.
+      const { data: batchSessions } = await supabase
+        .from('batch_sessions')
+        .select('session_number, session_date, status')
+        .eq('batch_id', batch.id)
+        .order('session_number')
+
       subject = `Welcome to ${batch.batch_name} — MOM Mentorship`
       html = groupEmailHtml({
         firstName,
@@ -233,6 +262,7 @@ async function handleSend(chatId: number, args: string) {
         zoomLink:        batch.zoom_link || '#',
         sessionDay:      batch.session_day || 'Wednesday',
         sessionTime:     batch.session_time || '7:00 PM – 9:00 PM ET',
+        sessions:        batchSessions || [],
       })
     } else {
       subject = `Welcome to MOM 1-on-1 Mentorship, ${firstName}`
@@ -241,15 +271,21 @@ async function handleSend(chatId: number, args: string) {
 
     await sendEmail(email, subject, html)
 
+    // Never downgrade a lead that's already confirmed/converted — resending a batch email
+    // (a reminder, a re-send to double-check, etc.) must not silently knock them out of the
+    // CRM's confirmed-batch view, which filters on status === "Confirmed".
+    const alreadyConfirmed = !!lead.student_id || normalizeStatus(lead.status) === 'confirmed'
     await supabase.from('leads')
-      .update({ status: 'contacted', last_contacted_at: new Date().toISOString() })
+      .update(alreadyConfirmed
+        ? { last_contacted_at: new Date().toISOString() }
+        : { status: 'Contacted', last_contacted_at: new Date().toISOString() })
       .eq('id', lead.id)
 
     await sendTelegram(chatId,
       `✅ *${batch.batch_name}* email sent!\n` +
       `👤 *${firstName}*\n📧 ${email}\n` +
       `📋 Type: ${batch.type === 'group' ? 'Group' : '1-on-1'}\n` +
-      `🔄 Status → *Contacted*`)
+      (alreadyConfirmed ? `🔄 Status unchanged (already Confirmed)` : `🔄 Status → *Contacted*`))
   } catch (err: any) {
     await sendTelegram(chatId, `❌ Email failed: ${err.message}`)
   }
@@ -292,10 +328,16 @@ async function handleWelcome(chatId: number, args: string) {
     const subject = `Welcome to MOM Mentorship, ${name.split(' ')[0]}!`
     const html    = oneOnOneEmailHtml({ firstName: name.split(' ')[0], fee: program })
     await sendEmail(email, subject, html)
+
+    const alreadyConfirmed = !!lead.student_id || normalizeStatus(lead.status) === 'confirmed'
     await supabase.from('leads')
-      .update({ status: 'contacted', last_contacted_at: new Date().toISOString() })
+      .update(alreadyConfirmed
+        ? { last_contacted_at: new Date().toISOString() }
+        : { status: 'Contacted', last_contacted_at: new Date().toISOString() })
       .eq('id', lead.id)
-    await sendTelegram(chatId, `✅ Welcome email sent to *${name}*!\n📧 ${email}\n🔄 Status → *Contacted*`)
+    await sendTelegram(chatId,
+      `✅ Welcome email sent to *${name}*!\n📧 ${email}\n` +
+      (alreadyConfirmed ? `🔄 Status unchanged (already Confirmed)` : `🔄 Status → *Contacted*`))
   } catch (err: any) {
     await sendTelegram(chatId, `❌ Email failed: ${err.message}`)
   }

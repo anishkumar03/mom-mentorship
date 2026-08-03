@@ -38,7 +38,10 @@ type Lead = {
   created_at?: string | null;
 };
 
-const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
+// "Confirmed" is no longer a status you set manually — converting a lead to a student
+// (student_id) is the only signal for that now. Left out of the selectable list, but
+// STATUS_COLORS/stageKey below still render it correctly for any older lead that has it.
+const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Lost"] as const;
 const LEAD_SOURCES = ["Instagram", "WhatsApp", "Referral", "YouTube", "Manual"] as const;
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -822,7 +825,7 @@ export default function LeadsPage() {
       if (existing.data && existing.data.length > 0) {
         const { error } = await supabase
           .from("leads")
-          .update({ student_id: existing.data[0].id, status: "Confirmed", converted_at: new Date().toISOString() })
+          .update({ student_id: existing.data[0].id, converted_at: new Date().toISOString() })
           .eq("id", l.id);
         if (error) {
           setConvertError(error.message);
@@ -866,7 +869,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data.id, status: "Confirmed", converted_at: new Date().toISOString() })
+      .update({ student_id: inserted.data.id, converted_at: new Date().toISOString() })
       .eq("id", l.id);
 
     if (error) {
@@ -1132,24 +1135,17 @@ export default function LeadsPage() {
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button onClick={() => setStatusOnly(l, "Confirmed")} style={{
-            ...btnSecondary,
-            background: "rgba(34,197,94,0.12)",
-            borderColor: "rgba(34,197,94,0.25)",
-          }}>Confirmed</button>
-          {stageKey(l.status) === "Confirmed" && (
-            <button
-              onClick={() => convertToStudent(l)}
-              style={{
-                ...btnSecondary,
-                background: "rgba(34,197,94,0.15)",
-                borderColor: "rgba(34,197,94,0.3)",
-              }}
-              disabled={!!l.student_id}
-            >
-              {l.student_id ? "Converted" : "Convert to Student"}
-            </button>
-          )}
+          <button
+            onClick={() => convertToStudent(l)}
+            style={{
+              ...btnSecondary,
+              background: "rgba(34,197,94,0.15)",
+              borderColor: "rgba(34,197,94,0.3)",
+            }}
+            disabled={!!l.student_id}
+          >
+            {l.student_id ? "Converted" : "Convert to Student"}
+          </button>
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
           <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>

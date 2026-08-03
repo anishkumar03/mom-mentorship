@@ -21,6 +21,7 @@ type Lead = {
   program: string | null;
   status: string | null;
   batch: string | null;
+  student_id?: string | null;
   archived?: boolean | null;
   created_at?: string | null;
 };
@@ -372,11 +373,10 @@ export default function BatchesPage() {
     fetchAll();
   }, []);
 
+  // "Confirmed" as a status is gone — a lead counts here once it's been converted to a
+  // student (student_id set via the Leads page), not based on any status label.
   const confirmed = useMemo(() => {
-    return leads.filter((l) => {
-      const v = (l.status ?? "").toString().trim().toLowerCase().replace(/\s+/g, "");
-      return v === "confirmed";
-    });
+    return leads.filter((l) => !!l.student_id);
   }, [leads]);
 
   const batches = useMemo(() => {
@@ -555,7 +555,7 @@ export default function BatchesPage() {
       <div style={{ marginBottom: 20 }}>
         <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700 }}>Batches</h2>
         <div style={{ opacity: 0.6, fontSize: 13, marginTop: 4 }}>
-          Manage session dispatch groups and organize confirmed leads into mentorship batches
+          Manage session dispatch groups and organize students into mentorship batches
         </div>
       </div>
 
@@ -565,14 +565,14 @@ export default function BatchesPage() {
       {/* ── DIVIDER ── */}
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.08)", marginBottom: 24, paddingTop: 4 }}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🗂 CRM Lead Batches</div>
-        <div style={{ fontSize: 12, opacity: 0.5 }}>Organize confirmed leads into mentorship cohorts</div>
+        <div style={{ fontSize: 12, opacity: 0.5 }}>Organize converted students into mentorship cohorts</div>
       </div>
 
       {/* Stats */}
       <div style={{ ...grid, marginTop: 16 }}>
         <div style={statCard}>
           <div style={{ fontSize: 28, fontWeight: 800, color: "#86efac" }}>{confirmed.length}</div>
-          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>Total Confirmed</div>
+          <div style={{ fontSize: 12, opacity: 0.6, marginTop: 2 }}>Total Students</div>
         </div>
         <div style={statCard}>
           <div style={{ fontSize: 28, fontWeight: 800, color: "#93c5fd" }}>{batches.length}</div>
