@@ -1132,24 +1132,17 @@ export default function LeadsPage() {
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button onClick={() => setStatusOnly(l, "Confirmed")} style={{
-            ...btnSecondary,
-            background: "rgba(34,197,94,0.12)",
-            borderColor: "rgba(34,197,94,0.25)",
-          }}>Confirmed</button>
-          {stageKey(l.status) === "Confirmed" && (
-            <button
-              onClick={() => convertToStudent(l)}
-              style={{
-                ...btnSecondary,
-                background: "rgba(34,197,94,0.15)",
-                borderColor: "rgba(34,197,94,0.3)",
-              }}
-              disabled={!!l.student_id}
-            >
-              {l.student_id ? "Converted" : "Convert to Student"}
-            </button>
-          )}
+          <button
+            onClick={() => convertToStudent(l)}
+            style={{
+              ...btnSecondary,
+              background: "rgba(34,197,94,0.15)",
+              borderColor: "rgba(34,197,94,0.3)",
+            }}
+            disabled={!!l.student_id}
+          >
+            {l.student_id ? "Converted" : "Convert to Student"}
+          </button>
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
           <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>
