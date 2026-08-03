@@ -20,6 +20,12 @@ function formatDate(dateStr: string) {
   })
 }
 
+// Matches the same normalization the Batches page uses to decide who counts as "confirmed" —
+// keeps this file from silently demoting a lead that's already confirmed/converted.
+function normalizeStatus(s: unknown): string {
+  return (s ?? '').toString().trim().toLowerCase().replace(/\s+/g, '')
+}
+
 async function sendTelegram(chatId: number, text: string) {
   await fetch(`${TELEGRAM_API}/sendMessage`, {
     method: 'POST',
@@ -265,15 +271,21 @@ async function handleSend(chatId: number, args: string) {
 
     await sendEmail(email, subject, html)
 
+    // Never downgrade a lead that's already confirmed/converted — resending a batch email
+    // (a reminder, a re-send to double-check, etc.) must not silently knock them out of the
+    // CRM's confirmed-batch view, which filters on status === "Confirmed".
+    const alreadyConfirmed = !!lead.student_id || normalizeStatus(lead.status) === 'confirmed'
     await supabase.from('leads')
-      .update({ status: 'contacted', last_contacted_at: new Date().toISOString() })
+      .update(alreadyConfirmed
+        ? { last_contacted_at: new Date().toISOString() }
+        : { status: 'Contacted', last_contacted_at: new Date().toISOString() })
       .eq('id', lead.id)
 
     await sendTelegram(chatId,
       `✅ *${batch.batch_name}* email sent!\n` +
       `👤 *${firstName}*\n📧 ${email}\n` +
       `📋 Type: ${batch.type === 'group' ? 'Group' : '1-on-1'}\n` +
-      `🔄 Status → *Contacted*`)
+      (alreadyConfirmed ? `🔄 Status unchanged (already Confirmed)` : `🔄 Status → *Contacted*`))
   } catch (err: any) {
     await sendTelegram(chatId, `❌ Email failed: ${err.message}`)
   }
@@ -316,10 +328,16 @@ async function handleWelcome(chatId: number, args: string) {
     const subject = `Welcome to MOM Mentorship, ${name.split(' ')[0]}!`
     const html    = oneOnOneEmailHtml({ firstName: name.split(' ')[0], fee: program })
     await sendEmail(email, subject, html)
+
+    const alreadyConfirmed = !!lead.student_id || normalizeStatus(lead.status) === 'confirmed'
     await supabase.from('leads')
-      .update({ status: 'contacted', last_contacted_at: new Date().toISOString() })
+      .update(alreadyConfirmed
+        ? { last_contacted_at: new Date().toISOString() }
+        : { status: 'Contacted', last_contacted_at: new Date().toISOString() })
       .eq('id', lead.id)
-    await sendTelegram(chatId, `✅ Welcome email sent to *${name}*!\n📧 ${email}\n🔄 Status → *Contacted*`)
+    await sendTelegram(chatId,
+      `✅ Welcome email sent to *${name}*!\n📧 ${email}\n` +
+      (alreadyConfirmed ? `🔄 Status unchanged (already Confirmed)` : `🔄 Status → *Contacted*`))
   } catch (err: any) {
     await sendTelegram(chatId, `❌ Email failed: ${err.message}`)
   }
