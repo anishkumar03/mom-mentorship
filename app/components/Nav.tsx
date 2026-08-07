@@ -9,6 +9,7 @@ const links = [
   { href: "/applications", label: "Applications" },
   { href: "/journal", label: "Journal" },
   { href: "/students", label: "Students" },
+  { href: "/notes", label: "Notes" },
   { href: "/batches", label: "Batches" },
   { href: "/email-batches", label: "Email Batches" },
   { href: "/archive", label: "Archive" },

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { PAYMENT_METHODS } from "../../lib/constants";
 import { usePrograms } from "../../lib/usePrograms";
@@ -34,6 +35,11 @@ type Payment = {
   method?: string | null;
   note?: string | null;
   created_at: string | null;
+};
+
+type LeadBatchRow = {
+  student_id: string | null;
+  batch: string | null;
 };
 
 
@@ -183,6 +189,8 @@ export default function StudentsPage() {
   const [studentColumns, setStudentColumns] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [programFilter, setProgramFilter] = useState<string>("All");
+  const [leadBatches, setLeadBatches] = useState<LeadBatchRow[]>([]);
+  const [activeBatchTab, setActiveBatchTab] = useState<string>("__ALL__");
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
@@ -267,9 +275,23 @@ export default function StudentsPage() {
     }
   };
 
+  const fetchLeadBatches = async () => {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("student_id,batch")
+      .not("student_id", "is", null);
+    if (error) {
+      console.error(error);
+      setLeadBatches([]);
+    } else {
+      setLeadBatches(Array.isArray(data) ? (data as LeadBatchRow[]) : []);
+    }
+  };
+
   useEffect(() => {
     fetchStudents();
     fetchPayments();
+    fetchLeadBatches();
   }, []);
 
   useEffect(() => {
@@ -298,10 +320,45 @@ export default function StudentsPage() {
     return map;
   }, [payments]);
 
+  // A student's batch tag comes from the lead that converted into them (leads.batch),
+  // matched via leads.student_id — the same source of truth the Batches tab uses.
+  const batchByStudentId = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const l of leadBatches) {
+      if (l.student_id) map.set(l.student_id, l.batch);
+    }
+    return map;
+  }, [leadBatches]);
+
+  const studentBatchGroups = useMemo(() => {
+    const groups: Record<string, Student[]> = { __UNASSIGNED__: [] };
+    for (const s of students) {
+      const b = batchByStudentId.get(s.id) || null;
+      if (b) {
+        if (!groups[b]) groups[b] = [];
+        groups[b].push(s);
+      } else {
+        groups.__UNASSIGNED__.push(s);
+      }
+    }
+    return groups;
+  }, [students, batchByStudentId]);
+
+  const batchTags = useMemo(() => {
+    return Object.keys(studentBatchGroups)
+      .filter((k) => k !== "__UNASSIGNED__")
+      .sort();
+  }, [studentBatchGroups]);
+
   const filteredStudents = useMemo(() => {
     let result = students;
     if (programFilter !== "All") {
       result = result.filter((s) => s.program === programFilter);
+    }
+    if (activeBatchTab === "__UNASSIGNED__") {
+      result = result.filter((s) => !batchByStudentId.get(s.id));
+    } else if (activeBatchTab !== "__ALL__") {
+      result = result.filter((s) => batchByStudentId.get(s.id) === activeBatchTab);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -312,7 +369,7 @@ export default function StudentsPage() {
       });
     }
     return result;
-  }, [students, searchQuery, programFilter]);
+  }, [students, searchQuery, programFilter, activeBatchTab, batchByStudentId]);
 
   const dueSoon = useMemo(() => {
     const now = new Date();
@@ -930,6 +987,42 @@ export default function StudentsPage() {
           </div>
         </div>
 
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 12 }}>
+          <button
+            onClick={() => setActiveBatchTab("__ALL__")}
+            style={{
+              ...tabBtn,
+              background: activeBatchTab === "__ALL__" ? "rgba(79,163,255,0.2)" : "rgba(255,255,255,0.06)",
+              borderColor: activeBatchTab === "__ALL__" ? "rgba(79,163,255,0.4)" : "rgba(255,255,255,0.12)",
+            }}
+          >
+            All ({students.length})
+          </button>
+          <button
+            onClick={() => setActiveBatchTab("__UNASSIGNED__")}
+            style={{
+              ...tabBtn,
+              background: activeBatchTab === "__UNASSIGNED__" ? "rgba(251,191,36,0.2)" : "rgba(255,255,255,0.06)",
+              borderColor: activeBatchTab === "__UNASSIGNED__" ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.12)",
+            }}
+          >
+            Unassigned ({studentBatchGroups.__UNASSIGNED__?.length ?? 0})
+          </button>
+          {batchTags.map((b) => (
+            <button
+              key={b}
+              onClick={() => setActiveBatchTab(b)}
+              style={{
+                ...tabBtn,
+                background: activeBatchTab === b ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.06)",
+                borderColor: activeBatchTab === b ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)",
+              }}
+            >
+              {b} ({studentBatchGroups[b]?.length ?? 0})
+            </button>
+          ))}
+        </div>
+
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
           {filteredStudents.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
@@ -1003,6 +1096,9 @@ export default function StudentsPage() {
                     <button onClick={() => loadEdit(s)} style={btnSecondary}>Edit</button>
                     <button onClick={() => openPayments(s)} style={btnPrimary}>Add Payment</button>
                     <button onClick={() => openReminder(s)} style={btnSecondary}>Reminder</button>
+                    <Link href={`/notes?student=${s.id}`} style={{ ...btnSecondary, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                      Notes
+                    </Link>
                     <button
                       onClick={() => deleteStudent(s)}
                       style={btnDanger}
@@ -1204,6 +1300,16 @@ const inputSmall: React.CSSProperties = {
   color: "white",
   fontSize: 13,
   outline: "none",
+};
+
+const tabBtn: React.CSSProperties = {
+  padding: "7px 14px",
+  borderRadius: 10,
+  border: "1px solid rgba(255,255,255,0.12)",
+  color: "white",
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: 600,
 };
 
 const statCard: React.CSSProperties = {

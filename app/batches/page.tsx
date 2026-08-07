@@ -549,6 +549,28 @@ export default function BatchesPage() {
     await ensureDispatchGroup(dateStr, label);
   };
 
+  // Deletes a stale CRM batch tag entirely: unassigns every lead carrying it (they stay
+  // students, just untagged) and drops the dispatch-group link for the label. Doesn't touch
+  // the actual Session Auto-Dispatch group, which has its own delete control.
+  const deleteBatchTag = async (b: string) => {
+    const count = batchGroups[b]?.length ?? 0;
+    const ok = confirm(
+      `Delete the "${b}" tag? This unassigns ${count} student${count === 1 ? "" : "s"} from this batch (they remain students, just untagged). This cannot be undone.`
+    );
+    if (!ok) return;
+
+    const { error } = await supabase.from("leads").update({ batch: null }).eq("batch", b);
+    if (error) {
+      alert("Failed to delete tag: " + error.message);
+      return;
+    }
+    await supabase.from("crm_batch_dispatch_links").delete().eq("batch_label", b);
+
+    if (activeBatchTab === b) setActiveBatchTab("__ALL__");
+    setSelectedIds(new Set());
+    await fetchAll();
+  };
+
   return (
     <div style={page}>
       {/* Header */}
@@ -614,17 +636,31 @@ export default function BatchesPage() {
             Unassigned ({batchGroups.__UNASSIGNED__?.length ?? 0})
           </button>
           {batches.map((b) => (
-            <button
-              key={b}
-              onClick={() => { setActiveBatchTab(b); setSelectedIds(new Set()); }}
-              style={{
-                ...tabBtn,
-                background: activeBatchTab === b ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.06)",
-                borderColor: activeBatchTab === b ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)",
-              }}
-            >
-              {b} ({batchGroups[b]?.length ?? 0})
-            </button>
+            <div key={b} style={{ position: "relative", display: "inline-flex" }}>
+              <button
+                onClick={() => { setActiveBatchTab(b); setSelectedIds(new Set()); }}
+                style={{
+                  ...tabBtn,
+                  paddingRight: 26,
+                  background: activeBatchTab === b ? "rgba(34,197,94,0.2)" : "rgba(255,255,255,0.06)",
+                  borderColor: activeBatchTab === b ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)",
+                }}
+              >
+                {b} ({batchGroups[b]?.length ?? 0})
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteBatchTag(b); }}
+                title={`Delete "${b}" tag`}
+                style={{
+                  position: "absolute", right: 5, top: "50%", transform: "translateY(-50%)",
+                  width: 16, height: 16, borderRadius: 999, border: "none", padding: 0,
+                  background: "rgba(255,59,48,0.25)", color: "#fca5a5",
+                  fontSize: 11, lineHeight: "16px", cursor: "pointer",
+                }}
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
       </div>
