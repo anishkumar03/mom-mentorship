@@ -330,35 +330,13 @@ export default function StudentsPage() {
     return map;
   }, [leadBatches]);
 
-  const studentBatchGroups = useMemo(() => {
-    const groups: Record<string, Student[]> = { __UNASSIGNED__: [] };
-    for (const s of students) {
-      const b = batchByStudentId.get(s.id) || null;
-      if (b) {
-        if (!groups[b]) groups[b] = [];
-        groups[b].push(s);
-      } else {
-        groups.__UNASSIGNED__.push(s);
-      }
-    }
-    return groups;
-  }, [students, batchByStudentId]);
-
-  const batchTags = useMemo(() => {
-    return Object.keys(studentBatchGroups)
-      .filter((k) => k !== "__UNASSIGNED__")
-      .sort();
-  }, [studentBatchGroups]);
-
-  const filteredStudents = useMemo(() => {
+  // Everything the batch tag pills should reflect: program + search, but not the batch tab
+  // itself (that's what each pill's count varies by). Keeps pill counts in sync with what
+  // clicking that pill actually shows, instead of counting across all programs.
+  const preBatchFilteredStudents = useMemo(() => {
     let result = students;
     if (programFilter !== "All") {
       result = result.filter((s) => s.program === programFilter);
-    }
-    if (activeBatchTab === "__UNASSIGNED__") {
-      result = result.filter((s) => !batchByStudentId.get(s.id));
-    } else if (activeBatchTab !== "__ALL__") {
-      result = result.filter((s) => batchByStudentId.get(s.id) === activeBatchTab);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -369,7 +347,37 @@ export default function StudentsPage() {
       });
     }
     return result;
-  }, [students, searchQuery, programFilter, activeBatchTab, batchByStudentId]);
+  }, [students, programFilter, searchQuery]);
+
+  const studentBatchGroups = useMemo(() => {
+    const groups: Record<string, Student[]> = { __UNASSIGNED__: [] };
+    for (const s of preBatchFilteredStudents) {
+      const b = batchByStudentId.get(s.id) || null;
+      if (b) {
+        if (!groups[b]) groups[b] = [];
+        groups[b].push(s);
+      } else {
+        groups.__UNASSIGNED__.push(s);
+      }
+    }
+    return groups;
+  }, [preBatchFilteredStudents, batchByStudentId]);
+
+  const batchTags = useMemo(() => {
+    return Object.keys(studentBatchGroups)
+      .filter((k) => k !== "__UNASSIGNED__")
+      .sort();
+  }, [studentBatchGroups]);
+
+  const filteredStudents = useMemo(() => {
+    let result = preBatchFilteredStudents;
+    if (activeBatchTab === "__UNASSIGNED__") {
+      result = result.filter((s) => !batchByStudentId.get(s.id));
+    } else if (activeBatchTab !== "__ALL__") {
+      result = result.filter((s) => batchByStudentId.get(s.id) === activeBatchTab);
+    }
+    return result;
+  }, [preBatchFilteredStudents, activeBatchTab, batchByStudentId]);
 
   const dueSoon = useMemo(() => {
     const now = new Date();
@@ -996,7 +1004,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__ALL__" ? "rgba(79,163,255,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            All ({students.length})
+            All ({preBatchFilteredStudents.length})
           </button>
           <button
             onClick={() => setActiveBatchTab("__UNASSIGNED__")}
