@@ -103,35 +103,54 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
 
-    const prompt = `Extract every visible trade row from this screenshot. Return a JSON object with a "trades" array.
+    const prompt = `Extract trading orders from this screenshot and group them into complete trades (entry + exit).
 
-For each visible trade row (in order from top to bottom), extract these fields:
-- symbol: trading symbol (e.g., ES, NQ, SPY)
-- direction: "Long" or "Short"
-- entry_time: time as HH:MM in 24-hour format
-- exit_time: time as HH:MM in 24-hour format
-- entry_price: entry price as number
-- exit_price: exit price as number
-- pnl: profit/loss as number (can be negative)
-- contracts: number of contracts as integer
-- commissions: commission amount as number
-- fees: fees as number
+IMPORTANT: A single trade may involve multiple orders:
+- SHORT trade: First SELL order is entry, first FILLED BUY order is exit
+- LONG trade: First BUY order is entry, first FILLED SELL order is exit
+- Ignore CANCELLED orders - only use FILLED orders
+- Use the FILLED prices, not Limit/Stop prices
+- Group by symbol and contracts to identify complete round-trip trades
 
-Use null for any field not clearly visible. Return ONLY valid JSON, no markdown or explanation.
+For each complete trade, extract:
+- symbol: trading symbol (e.g., ES, NQ, MNQ, SPY)
+- direction: "Long" or "Short" (based on which side is entry)
+- entry_time: time of entry order as HH:MM in 24-hour format
+- exit_time: time of exit order as HH:MM in 24-hour format
+- entry_price: price where position was opened (filled price)
+- exit_price: price where position was closed (filled price)
+- pnl: profit/loss as number (negative for losses)
+  * For SHORT: pnl = (entry_price - exit_price) × contracts
+  * For LONG: pnl = (exit_price - entry_price) × contracts
+- contracts: number of contracts (as integer)
+- commissions: total commissions for the trade (sum if multiple orders)
+- fees: total fees for the trade (sum if multiple orders)
 
-Example format:
+Rules:
+- If a trade shows explicit P&L on screen, use that value
+- Calculate P&L from prices if not shown
+- Only include FILLED orders in your calculations
+- Ignore pending/cancelled orders
+- Return null for fields not visible
+
+Return ONLY valid JSON, no markdown or explanation.
+
+Example for SHORT trade with 4 contracts:
+Entry: SELL 4 at 29,232.25 → Exit: BUY 4 at 29,193.75
+P&L = (29,232.25 - 29,193.75) × 4 = 38.50 × 4 = 154.00
+
 {
   "trades": [
     {
-      "symbol": "ES",
-      "direction": "Long",
-      "entry_time": "09:30",
-      "exit_time": "10:15",
-      "entry_price": 4500.25,
-      "exit_price": 4510.75,
-      "pnl": 105.00,
-      "contracts": 1,
-      "commissions": 2.50,
+      "symbol": "MNQ",
+      "direction": "Short",
+      "entry_time": "10:52",
+      "exit_time": "10:53",
+      "entry_price": 29232.25,
+      "exit_price": 29193.75,
+      "pnl": 154.00,
+      "contracts": 4,
+      "commissions": null,
       "fees": null
     }
   ]
