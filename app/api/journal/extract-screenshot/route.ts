@@ -91,10 +91,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Only png, jpg, and jpeg files are supported." }, { status: 400 });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "OPENAI_API_KEY is not configured. Screenshot extraction is unavailable." },
+      { error: "ANTHROPIC_API_KEY is not configured. Screenshot extraction is unavailable." },
       { status: 503 }
     );
   }
@@ -103,79 +103,65 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
 
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    const prompt = `Extract every visible trade row from this screenshot. Return a JSON object with a "trades" array.
+
+For each visible trade row (in order from top to bottom), extract these fields:
+- symbol: trading symbol (e.g., ES, NQ, SPY)
+- direction: "Long" or "Short"
+- entry_time: time as HH:MM in 24-hour format
+- exit_time: time as HH:MM in 24-hour format
+- entry_price: entry price as number
+- exit_price: exit price as number
+- pnl: profit/loss as number (can be negative)
+- contracts: number of contracts as integer
+- commissions: commission amount as number
+- fees: fees as number
+
+Use null for any field not clearly visible. Return ONLY valid JSON, no markdown or explanation.
+
+Example format:
+{
+  "trades": [
+    {
+      "symbol": "ES",
+      "direction": "Long",
+      "entry_time": "09:30",
+      "exit_time": "10:15",
+      "entry_price": 4500.25,
+      "exit_price": 4510.75,
+      "pnl": 105.00,
+      "contracts": 1,
+      "commissions": 2.50,
+      "fees": null
+    }
+  ]
+}`;
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "gpt-4.1-mini",
-        temperature: 0,
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "trade_screenshot_extract",
-            strict: true,
-            schema: {
-              type: "object",
-              additionalProperties: false,
-              properties: {
-                trades: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    additionalProperties: false,
-                    properties: {
-                      symbol: { type: ["string", "null"] },
-                      direction: { type: ["string", "null"] },
-                      entry_time: { type: ["string", "null"] },
-                      exit_time: { type: ["string", "null"] },
-                      entry_price: { type: ["number", "null"] },
-                      exit_price: { type: ["number", "null"] },
-                      pnl: { type: ["number", "null"] },
-                      contracts: { type: ["number", "null"] },
-                      commissions: { type: ["number", "null"] },
-                      fees: { type: ["number", "null"] }
-                    },
-                    required: [
-                      "symbol",
-                      "direction",
-                      "entry_time",
-                      "exit_time",
-                      "entry_price",
-                      "exit_price",
-                      "pnl",
-                      "contracts",
-                      "commissions",
-                      "fees"
-                    ]
-                  }
-                }
-              },
-              required: ["trades"],
-            },
-          },
-        },
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2048,
         messages: [
-          {
-            role: "system",
-            content:
-              "Extract every visible trade row from the screenshot. Table-style screenshots may contain multiple rows, and each visible row must become a separate trade object in order from top to bottom. Only return values that are clearly visible for each row. Use null when a field is missing or uncertain. Normalize direction to Long or Short. Normalize times to 24-hour HH:MM with no timezone conversion. Return numbers only for prices, pnl, contracts, commissions, and fees. Ignore setup, emotion, and notes.",
-          },
           {
             role: "user",
             content: [
               {
-                type: "text",
-                text:
-                  "Read the screenshot and return all visible trade rows as a trades array. For each row, extract symbol, direction, entry_time, exit_time, entry_price, exit_price, pnl, contracts, commissions, and fees. If only one trade row is visible, still return a trades array with one item.",
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: file.type as "image/png" | "image/jpeg" | "image/webp" | "image/gif",
+                  data: base64,
+                },
               },
               {
-                type: "image_url",
-                image_url: {
-                  url: `data:${file.type};base64,${base64}`,
-                },
+                type: "text",
+                text: prompt,
               },
             ],
           },
@@ -183,18 +169,24 @@ export async function POST(req: NextRequest) {
       }),
     });
 
-    const payload = await response.json();
     if (!response.ok) {
-      const message = payload?.error?.message || "Screenshot extraction failed.";
-      return NextResponse.json({ error: message }, { status: response.status });
+      const errText = await response.text();
+      console.error("Anthropic API error:", errText);
+      return NextResponse.json(
+        { error: "Screenshot extraction failed" },
+        { status: 502 }
+      );
     }
 
-    const content = extractJsonText(payload);
-    if (!content) {
-      return NextResponse.json({ error: "No extraction result returned." }, { status: 502 });
+    const payload = await response.json();
+    const content = payload.content?.[0]?.text ?? "";
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return NextResponse.json({ error: "Could not parse AI response" }, { status: 422 });
     }
 
-    const parsed = JSON.parse(content);
+    const parsed = JSON.parse(jsonMatch[0]);
     const rawTrades = Array.isArray(parsed?.trades) ? parsed.trades : [];
     const trades = rawTrades
       .map((trade: Record<string, unknown>) => normalizePayload(trade))
