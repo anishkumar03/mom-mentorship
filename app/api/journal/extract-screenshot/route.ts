@@ -59,16 +59,48 @@ function normalizeSymbol(value: unknown) {
   return normalized || null;
 }
 
+function getPointValue(symbol: string | null): number {
+  if (!symbol) return 1;
+  const sym = symbol.toUpperCase();
+  const pointValues: Record<string, number> = {
+    ES: 50,
+    MES: 5,
+    NQ: 20,
+    MNQ: 20,
+    YM: 5,
+    MYM: 0.5,
+    GC: 100,
+    CL: 1000,
+    NG: 10000,
+  };
+  return pointValues[sym] || 1;
+}
+
 function normalizePayload(value: any): ExtractedTrade {
+  const symbol = normalizeSymbol(value?.symbol);
+  const entryPrice = normalizeNumber(value?.entry_price);
+  const exitPrice = normalizeNumber(value?.exit_price);
+  const contracts = normalizeNumber(value?.contracts);
+  const direction = normalizeDirection(value?.direction);
+
+  let pnl = normalizeNumber(value?.pnl);
+
+  if (pnl === null && entryPrice !== null && exitPrice !== null && contracts !== null) {
+    const pointValue = getPointValue(symbol);
+    const priceDiff = entryPrice - exitPrice;
+    const directionMultiplier = direction === "Short" ? 1 : -1;
+    pnl = priceDiff * pointValue * contracts * directionMultiplier;
+  }
+
   return {
-    symbol: normalizeSymbol(value?.symbol),
-    direction: normalizeDirection(value?.direction),
+    symbol,
+    direction,
     entry_time: normalizeTime(value?.entry_time),
     exit_time: normalizeTime(value?.exit_time),
-    entry_price: normalizeNumber(value?.entry_price),
-    exit_price: normalizeNumber(value?.exit_price),
-    pnl: normalizeNumber(value?.pnl),
-    contracts: normalizeNumber(value?.contracts),
+    entry_price: entryPrice,
+    exit_price: exitPrice,
+    pnl,
+    contracts,
     commissions: normalizeNumber(value?.commissions),
     fees: normalizeNumber(value?.fees),
   };
@@ -135,9 +167,16 @@ Rules:
 
 Return ONLY valid JSON, no markdown or explanation.
 
-Example for SHORT trade with 4 contracts:
+Example for SHORT trade with 4 MNQ contracts (Point value = $20):
 Entry: SELL 4 at 29,232.25 → Exit: BUY 4 at 29,193.75
-P&L = (29,232.25 - 29,193.75) × 4 = 38.50 × 4 = 154.00
+Price diff = 29,232.25 - 29,193.75 = 38.50 points
+P&L = 38.50 × $20 (point value) × 4 (contracts) = $3,080
+
+Common futures point values:
+- ES: $50/point, MES: $5/point
+- NQ: $20/point, MNQ: $20/point
+- YM: $5/point, MYM: $0.50/point
+- GC: $100/point, CL: $1000/point
 
 {
   "trades": [
