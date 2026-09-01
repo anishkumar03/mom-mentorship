@@ -66,7 +66,7 @@ function getPointValue(symbol: string | null): number {
     ES: 50,
     MES: 5,
     NQ: 20,
-    MNQ: 20,
+    MNQ: 2,
     YM: 5,
     MYM: 0.5,
     GC: 100,
@@ -167,14 +167,14 @@ Rules:
 
 Return ONLY valid JSON, no markdown or explanation.
 
-Example for SHORT trade with 4 MNQ contracts (Point value = $20):
+Example for SHORT trade with 4 MNQ contracts (Point value = $2):
 Entry: SELL 4 at 29,232.25 → Exit: BUY 4 at 29,193.75
 Price diff = 29,232.25 - 29,193.75 = 38.50 points
-P&L = 38.50 × $20 (point value) × 4 (contracts) = $3,080
+P&L = 38.50 × $2 (point value) × 4 (contracts) = $308
 
 Common futures point values:
 - ES: $50/point, MES: $5/point
-- NQ: $20/point, MNQ: $20/point
+- NQ: $20/point, MNQ: $2/point
 - YM: $5/point, MYM: $0.50/point
 - GC: $100/point, CL: $1000/point
 
