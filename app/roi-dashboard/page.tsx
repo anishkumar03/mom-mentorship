@@ -346,21 +346,25 @@ export default function RoiDashboardPage() {
 
       <div style={{ display: "grid", gap: 12, gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}>
         {kpis.map((k) => (
-          <div key={k.label} className="card" style={{ padding: 14, borderColor: k.tone === "red" ? "rgba(255, 86, 86, 0.45)" : k.tone === "green" ? "rgba(76, 200, 140, 0.4)" : "var(--border)" }}>
-            <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>{k.label}</div>
-            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>{loading ? "—" : k.value}</div>
-            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>{subtitleText}</div>
+          <div key={k.label} className="card" style={{
+            padding: 16,
+            borderColor: k.tone === "red" ? "rgba(239, 68, 68, 0.4)" : k.tone === "green" ? "rgba(16, 185, 129, 0.4)" : "var(--border)",
+            background: k.tone === "red" ? "linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(19, 35, 57, 0.2) 100%)" : k.tone === "green" ? "linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(19, 35, 57, 0.2) 100%)" : undefined
+          }}>
+            <div style={{ fontSize: 12, color: k.tone === "red" ? "#fca5a5" : k.tone === "green" ? "#6ee7b7" : "var(--muted)", fontWeight: 600 }}>{k.label}</div>
+            <div style={{ fontSize: 24, fontWeight: 700, marginTop: 8, color: k.tone === "red" ? "#fecaca" : k.tone === "green" ? "#a7f3d0" : "white" }}>{loading ? "—" : k.value}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>{subtitleText}</div>
           </div>
         ))}
-        <div className="card" style={{ padding: 14 }}>
+        <div className="card" style={{ padding: 16 }}>
           <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>Evaluations Purchased</div>
-          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>{loading ? "—" : discipline.evalCount}</div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Based on selected month</div>
+          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 8, color: "white" }}>{loading ? "—" : discipline.evalCount}</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Based on selected month</div>
         </div>
-        <div className="card" style={{ padding: 14 }}>
+        <div className="card" style={{ padding: 16 }}>
           <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 600 }}>Reset Fees</div>
-          <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6 }}>{loading ? "—" : discipline.resetCount}</div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Based on selected month</div>
+          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 8, color: "white" }}>{loading ? "—" : discipline.resetCount}</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>Based on selected month</div>
         </div>
       </div>
       <div className="card" style={{ marginTop: 16, padding: 16 }}>
@@ -373,22 +377,22 @@ export default function RoiDashboardPage() {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
               <thead>
-                <tr style={{ textAlign: "left", color: "var(--muted)" }}>
-                  <th style={{ padding: "8px 6px" }}>Firm</th>
-                  <th style={{ padding: "8px 6px" }}>Spend</th>
-                  <th style={{ padding: "8px 6px" }}>Payouts</th>
-                  <th style={{ padding: "8px 6px" }}>Net</th>
-                  <th style={{ padding: "8px 6px" }}>ROI %</th>
+                <tr style={{ textAlign: "left", color: "white", background: "rgba(26, 47, 71, 0.5)", borderBottom: "2px solid var(--border)" }}>
+                  <th style={{ padding: "12px 12px", fontWeight: 600 }}>Firm</th>
+                  <th style={{ padding: "12px 12px", fontWeight: 600, textAlign: "right" }}>Spend</th>
+                  <th style={{ padding: "12px 12px", fontWeight: 600, textAlign: "right" }}>Payouts</th>
+                  <th style={{ padding: "12px 12px", fontWeight: 600, textAlign: "right" }}>Net</th>
+                  <th style={{ padding: "12px 12px", fontWeight: 600, textAlign: "right" }}>ROI %</th>
                 </tr>
               </thead>
               <tbody>
                 {summary?.byFirm?.map((f) => (
-                  <tr key={f.firm_id} style={{ borderTop: "1px solid var(--border)" }}>
-                    <td style={{ padding: "8px 6px" }}>{f.firm_name}</td>
-                    <td style={{ padding: "8px 6px" }}>{money(f.spend)}</td>
-                    <td style={{ padding: "8px 6px" }}>{money(f.payouts)}</td>
-                    <td style={{ padding: "8px 6px" }}>{money(f.net)}</td>
-                    <td style={{ padding: "8px 6px" }}>{f.roiPct == null ? "—" : `${f.roiPct.toFixed(1)}%`}</td>
+                  <tr key={f.firm_id} style={{ borderBottom: "1px solid var(--border)", transition: "background 0.2s ease" }}>
+                    <td style={{ padding: "12px", fontWeight: 500, color: "white" }}>{f.firm_name}</td>
+                    <td style={{ padding: "12px", textAlign: "right", color: "var(--muted)" }}>{money(f.spend)}</td>
+                    <td style={{ padding: "12px", textAlign: "right", color: "#6ee7b7", fontWeight: 500 }}>{money(f.payouts)}</td>
+                    <td style={{ padding: "12px", textAlign: "right", color: f.net >= 0 ? "#6ee7b7" : "#fca5a5", fontWeight: 600 }}>{money(f.net)}</td>
+                    <td style={{ padding: "12px", textAlign: "right", color: f.roiPct == null ? "var(--muted)" : f.roiPct >= 0 ? "#6ee7b7" : "#fca5a5", fontWeight: 500 }}>{f.roiPct == null ? "—" : `${f.roiPct.toFixed(1)}%`}</td>
                   </tr>
                 ))}
               </tbody>
@@ -405,16 +409,26 @@ export default function RoiDashboardPage() {
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {recentEntries.map((e) => (
-                <div key={e.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, border: "1px solid var(--border)", borderRadius: 10, padding: "8px 10px" }}>
+                <div key={e.id} style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "12px",
+                  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.3) 0%, rgba(19, 35, 57, 0.1) 100%)",
+                  transition: "all 0.2s ease"
+                }}>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 13 }}>{e.firm_name ?? "—"}</div>
-                    <div style={{ color: "var(--muted)", fontSize: 12 }}>
-                      {e.entry_date ? new Date(e.entry_date).toLocaleDateString() : "—"} &bull; {e.entry_type}
+                    <div style={{ fontWeight: 600, fontSize: 13, color: "white" }}>{e.firm_name ?? "—"}</div>
+                    <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>
+                      {e.entry_date ? new Date(e.entry_date).toLocaleDateString() : "—"} • {e.entry_type}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>{money(e.amount)}</div>
-                    <div style={{ color: "var(--muted)", fontSize: 12 }}>{e.category ?? "—"}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: e.entry_type === "payout" ? "#6ee7b7" : "#fca5a5" }}>{money(e.amount)}</div>
+                    <div style={{ color: "var(--muted)", fontSize: 12, marginTop: 4 }}>{e.category ?? "—"}</div>
                   </div>
                 </div>
               ))}
@@ -511,39 +525,53 @@ export default function RoiDashboardPage() {
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.6)",
+  background: "rgba(0,0,0,0.8)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
-  zIndex: 9999
+  zIndex: 9999,
+  backdropFilter: "blur(4px)"
 };
 
 const modalCard: React.CSSProperties = {
   width: 420,
-  borderRadius: 14,
-  padding: 16,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33"
+  borderRadius: 12,
+  padding: 24,
+  border: "1px solid var(--border)",
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
+  maxWidth: "90vw"
 };
 
 const actionBtnStyle: React.CSSProperties = {
   height: 40,
   padding: "0 16px",
-  borderRadius: 10
+  borderRadius: 8,
+  fontWeight: 500,
+  transition: "all 0.2s ease"
 };
 
 const toggleStyle: React.CSSProperties = {
-  height: 30,
-  padding: "0 10px",
+  height: 32,
+  padding: "0 12px",
   borderRadius: 999,
   fontSize: 12,
-  opacity: 0.7
+  fontWeight: 500,
+  opacity: 0.7,
+  transition: "all 0.2s ease",
+  border: "1px solid var(--border)"
 };
 
 const toggleActiveStyle: React.CSSProperties = {
-  ...toggleStyle,
+  height: 32,
+  padding: "0 12px",
+  borderRadius: 999,
+  fontSize: 12,
+  fontWeight: 600,
   opacity: 1,
-  borderColor: "rgba(79, 163, 255, 0.6)"
+  borderColor: "var(--accent)",
+  background: "rgba(59, 130, 246, 0.1)",
+  transition: "all 0.2s ease"
 };
 
 
