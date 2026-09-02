@@ -137,7 +137,9 @@ export async function POST(req: NextRequest) {
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
 
-    const prompt = `Extract trading orders from this screenshot and group them into complete trades (entry + exit).
+    const prompt = `CRITICAL: You must return ONLY a JSON object. No text before or after. No markdown. Just raw JSON.
+
+Extract trading orders from this screenshot and group them into complete trades (entry + exit).
 
 IMPORTANT: A single trade may involve multiple orders:
 - SHORT trade: First SELL order is entry, first FILLED BUY order is exit
@@ -167,18 +169,7 @@ Rules:
 - Ignore pending/cancelled orders
 - Return null for fields not visible
 
-Return ONLY valid JSON, no markdown or explanation.
-
-Example for SHORT trade with 4 MNQ contracts (Point value = $2):
-Entry: SELL 4 at 29,232.25 → Exit: BUY 4 at 29,193.75
-Price diff = 29,232.25 - 29,193.75 = 38.50 points
-P&L = 38.50 × $2 (point value) × 4 (contracts) = $308
-
-Common futures point values:
-- ES: $50/point, MES: $5/point
-- NQ: $20/point, MNQ: $2/point
-- YM: $5/point, MYM: $0.50/point
-- GC: $100/point, CL: $1000/point
+START RESPONSE WITH { AND END WITH }. NO OTHER TEXT.
 
 {
   "trades": [
@@ -189,7 +180,7 @@ Common futures point values:
       "exit_time": "10:53",
       "entry_price": 29232.25,
       "exit_price": 29193.75,
-      "pnl": 154.00,
+      "pnl": 308.00,
       "contracts": 4,
       "commissions": null,
       "fees": null
@@ -246,20 +237,25 @@ Common futures point values:
     const payload = await response.json();
     const content = payload.content?.[0]?.text ?? "";
 
-    console.log("AI Response:", content.slice(0, 500));
-
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("No JSON found in response:", content.slice(0, 500));
-      return NextResponse.json({ error: `Could not parse AI response: ${content.slice(0, 300)}` }, { status: 422 });
-    }
+    console.log("AI Response:", content.slice(0, 1000));
 
     let parsed;
+
     try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch (parseError) {
-      console.error("JSON parse error:", jsonMatch[0].slice(0, 300));
-      return NextResponse.json({ error: `Invalid JSON in response: ${parseError}` }, { status: 422 });
+      parsed = JSON.parse(content);
+    } catch {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.error("No JSON found in response:", content.slice(0, 1000));
+        return NextResponse.json({ error: `Could not parse AI response: ${content.slice(0, 300)}` }, { status: 422 });
+      }
+
+      try {
+        parsed = JSON.parse(jsonMatch[0]);
+      } catch (parseError) {
+        console.error("JSON parse error:", jsonMatch[0].slice(0, 500));
+        return NextResponse.json({ error: `Invalid JSON: ${String(parseError).slice(0, 200)}` }, { status: 422 });
+      }
     }
     const rawTrades = Array.isArray(parsed?.trades) ? parsed.trades : [];
     const trades = rawTrades
