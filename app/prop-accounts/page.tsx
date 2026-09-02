@@ -100,6 +100,8 @@ export default function PropAccountsPage() {
   const [sAvgLoss, setSAvgLoss] = useState("");
   const [sLargestWin, setSLargestWin] = useState("");
   const [sLargestLoss, setSLargestLoss] = useState("");
+  const [sGrossPnl, setSGrossPnl] = useState("");
+  const [sBrokerFees, setSBrokerFees] = useState("");
   const [sNotes, setSNotes] = useState("");
 
   const [extracting, setExtracting] = useState(false);
@@ -279,6 +281,8 @@ export default function PropAccountsPage() {
   const resetSnapshotForm = () => {
     setSnapshotDate(new Date().toISOString().slice(0, 10));
     setSBalance("");
+    setSGrossPnl("");
+    setSBrokerFees("");
     setSPnl("");
     setSDrawdown("");
     setSMaxDrawdown("");
@@ -308,6 +312,8 @@ export default function PropAccountsPage() {
       account_id: snapshotAccount.id,
       snapshot_date: snapshotDate || new Date().toISOString().slice(0, 10),
       balance: Number(sBalance) || 0,
+      gross_pnl: sGrossPnl ? Number(sGrossPnl) : null,
+      broker_fees: sBrokerFees ? Number(sBrokerFees) : null,
       pnl: Number(sPnl) || 0,
       drawdown: Number(sDrawdown) || 0,
       max_drawdown: Number(sMaxDrawdown) || 0,
@@ -358,6 +364,8 @@ export default function PropAccountsPage() {
       }
       const d = json.data;
       if (d.balance != null) setSBalance(String(d.balance));
+      if (d.gross_pnl != null) setSGrossPnl(String(d.gross_pnl));
+      if (d.broker_fees != null) setSBrokerFees(String(d.broker_fees));
       if (d.pnl != null) setSPnl(String(d.pnl));
       if (d.drawdown != null) setSDrawdown(String(d.drawdown));
       if (d.max_drawdown != null) setSMaxDrawdown(String(d.max_drawdown));
@@ -590,6 +598,8 @@ export default function PropAccountsPage() {
             snapshotDate={snapshotDate}
             setSnapshotDate={setSnapshotDate}
             sBalance={sBalance} setSBalance={setSBalance}
+            sGrossPnl={sGrossPnl} setSGrossPnl={setSGrossPnl}
+            sBrokerFees={sBrokerFees} setSBrokerFees={setSBrokerFees}
             sPnl={sPnl} setSPnl={setSPnl}
             sDrawdown={sDrawdown} setSDrawdown={setSDrawdown}
             sMaxDrawdown={sMaxDrawdown} setSMaxDrawdown={setSMaxDrawdown}
@@ -899,6 +909,8 @@ function SnapshotModal({
   snapshotAccount,
   snapshotDate, setSnapshotDate,
   sBalance, setSBalance,
+  sGrossPnl, setSGrossPnl,
+  sBrokerFees, setSBrokerFees,
   sPnl, setSPnl,
   sDrawdown, setSDrawdown,
   sMaxDrawdown, setSMaxDrawdown,
@@ -919,6 +931,8 @@ function SnapshotModal({
   snapshotAccount: PropAccount;
   snapshotDate: string; setSnapshotDate: (v: string) => void;
   sBalance: string; setSBalance: (v: string) => void;
+  sGrossPnl: string; setSGrossPnl: (v: string) => void;
+  sBrokerFees: string; setSBrokerFees: (v: string) => void;
   sPnl: string; setSPnl: (v: string) => void;
   sDrawdown: string; setSDrawdown: (v: string) => void;
   sMaxDrawdown: string; setSMaxDrawdown: (v: string) => void;
@@ -1019,7 +1033,15 @@ function SnapshotModal({
             <input type="number" step="0.01" placeholder="0.00" value={sBalance} onChange={(e) => setSBalance(e.target.value)} style={input} />
           </div>
           <div>
-            <label style={label}>P&amp;L</label>
+            <label style={label}>Gross P&amp;L (before fees)</label>
+            <input type="number" step="0.01" placeholder="0.00" value={sGrossPnl} onChange={(e) => setSGrossPnl(e.target.value)} style={input} />
+          </div>
+          <div>
+            <label style={label}>Broker Fees</label>
+            <input type="number" step="0.01" placeholder="0.00" value={sBrokerFees} onChange={(e) => setSBrokerFees(e.target.value)} style={input} />
+          </div>
+          <div>
+            <label style={label}>Net P&amp;L</label>
             <input type="number" step="0.01" placeholder="0.00" value={sPnl} onChange={(e) => setSPnl(e.target.value)} style={input} />
           </div>
           <div>
