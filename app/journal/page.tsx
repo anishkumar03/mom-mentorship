@@ -2477,30 +2477,34 @@ const badge: React.CSSProperties = {
 const tradeCard: React.CSSProperties = {
   border: "1px solid var(--border)",
   borderRadius: "var(--radius)",
-  padding: 14,
-  background: "var(--cardSoft)"
+  padding: 16,
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
+  transition: "all 0.3s ease"
 };
 
 const previewCard: React.CSSProperties = {
-  border: "1px solid rgba(79, 163, 255, 0.24)",
+  border: "1px solid rgba(59, 130, 246, 0.3)",
   borderRadius: "var(--radius)",
-  padding: 14,
-  background: "rgba(79, 163, 255, 0.08)",
-  minHeight: "100%"
+  padding: 16,
+  background: "linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(19, 35, 57, 0.04) 100%)",
+  minHeight: "100%",
+  boxShadow: "0 2px 8px rgba(59, 130, 246, 0.1)"
 };
 
 const queueBannerStyle: React.CSSProperties = {
-  marginTop: 14,
+  marginTop: 16,
   marginBottom: 12,
-  padding: 14,
-  borderRadius: 14,
-  border: "1px solid rgba(77, 163, 255, 0.24)",
-  background: "linear-gradient(180deg, rgba(77, 163, 255, 0.12), rgba(22, 36, 58, 0.92))",
+  padding: 16,
+  borderRadius: 8,
+  border: "1px solid rgba(59, 130, 246, 0.3)",
+  background: "linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(22, 36, 58, 0.5) 100%)",
   display: "flex",
   alignItems: "stretch",
   justifyContent: "space-between",
-  gap: 14,
-  flexWrap: "wrap"
+  gap: 16,
+  flexWrap: "wrap",
+  boxShadow: "0 4px 12px rgba(59, 130, 246, 0.1)"
 };
 
 const queueBannerTopRowStyle: React.CSSProperties = {
@@ -2557,26 +2561,28 @@ const queueFooterStyle: React.CSSProperties = {
 };
 
 const screenshotSectionCardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 14,
-  background: "rgba(255,255,255,0.03)",
-  padding: 14,
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.4) 0%, rgba(19, 35, 57, 0.2) 100%)",
+  padding: 16,
   minHeight: "100%",
   display: "grid",
   gap: 12,
-  alignContent: "start"
+  alignContent: "start",
+  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)"
 };
 
 const dropZoneStyle: React.CSSProperties = {
-  border: "1px dashed rgba(77, 163, 255, 0.3)",
-  borderRadius: 14,
-  padding: 18,
-  minHeight: 168,
+  border: "2px dashed rgba(59, 130, 246, 0.3)",
+  borderRadius: 8,
+  padding: 20,
+  minHeight: 180,
   display: "grid",
   alignContent: "center",
   justifyItems: "start",
-  gap: 10,
-  transition: "background 140ms ease, border-color 140ms ease, box-shadow 140ms ease"
+  gap: 12,
+  transition: "all 140ms ease",
+  background: "rgba(59, 130, 246, 0.05)"
 };
 
 const screenshotPreviewWrap: React.CSSProperties = {
@@ -2750,23 +2756,25 @@ const modalOverlay: React.CSSProperties = {
 const modalCard: React.CSSProperties = {
   width: 420,
   maxWidth: "90vw",
-  borderRadius: 14,
-  padding: 20,
+  borderRadius: 12,
+  padding: 24,
   border: "1px solid var(--border)",
-  background: "var(--card)"
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)"
 };
 
 const calendarCell: React.CSSProperties = {
-  padding: 8,
-  borderRadius: 10,
+  padding: 10,
+  borderRadius: 8,
   border: "1px solid var(--border)",
-  background: "var(--cardSoft)",
+  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.4) 0%, rgba(19, 35, 57, 0.2) 100%)",
   textAlign: "left",
   minHeight: 72,
   cursor: "pointer",
   display: "flex",
   flexDirection: "column",
-  alignItems: "flex-start"
+  alignItems: "flex-start",
+  transition: "all 0.2s ease"
 };
 
 const calendarCellEmpty: React.CSSProperties = {
