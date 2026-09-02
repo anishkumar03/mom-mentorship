@@ -2062,16 +2062,38 @@ export default function JournalPage() {
                               </div>
 
                               {screenshotUrl && (
-                                <a href={screenshotUrl} target="_blank" rel="noreferrer">
+                                <a
+                                  href={screenshotUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.transform = "scale(1.05)";
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.4)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.transform = "scale(1)";
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
+                                  }}
+                                >
                                   <img
                                     src={screenshotUrl}
                                     alt="Trade screenshot"
                                     style={{
-                                      width: 70,
-                                      height: 50,
+                                      width: 140,
+                                      height: 85,
                                       objectFit: "cover",
-                                      borderRadius: 6,
-                                      border: "1px solid rgba(255,255,255,0.12)"
+                                      borderRadius: 8,
+                                      border: "2px solid rgba(59,130,246,0.4)",
+                                      background: "rgba(0,0,0,0.3)",
+                                      boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                                      transition: "all 0.2s ease"
                                     }}
                                   />
                                 </a>
