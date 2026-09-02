@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   LineChart,
@@ -53,6 +53,17 @@ function fmtPnl(n: number) {
 }
 
 export default function JournalDashboard({ trades, month }: Props) {
+  const [expandedCharts, setExpandedCharts] = useState({
+    equity: true,
+    daily: true,
+    winLoss: true,
+    setup: true,
+  });
+
+  const toggleChart = (chart: keyof typeof expandedCharts) => {
+    setExpandedCharts((prev) => ({ ...prev, [chart]: !prev[chart] }));
+  };
+
   const stats = useMemo(() => {
     const validTrades = trades.filter((t) => typeof t.pnl === "number" && !Number.isNaN(t.pnl));
     const totalTrades = validTrades.length;
@@ -384,84 +395,196 @@ export default function JournalDashboard({ trades, month }: Props) {
       {/* Charts Row 1: Equity Curve + Daily PnL */}
       <div className="dash-grid-2">
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Equity Curve</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={equityCurve}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9fb3d1" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#9fb3d1" }} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Line
-                type="monotone"
-                dataKey="cumulative"
-                stroke={BLUE}
-                strokeWidth={2}
-                dot={{ r: 3, fill: BLUE }}
-                name="Cumulative PnL"
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Equity Curve</div>
+            <button
+              onClick={() => toggleChart("equity")}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "var(--muted)",
+                fontSize: 12,
+                fontWeight: 500,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(59, 130, 246, 0.1)";
+                e.currentTarget.style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                e.currentTarget.style.color = "var(--muted)";
+              }}
+            >
+              {expandedCharts.equity ? "▼" : "▶"} {expandedCharts.equity ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {expandedCharts.equity && (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={equityCurve}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9fb3d1" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#9fb3d1" }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Line
+                  type="monotone"
+                  dataKey="cumulative"
+                  stroke={BLUE}
+                  strokeWidth={2}
+                  dot={{ r: 3, fill: BLUE }}
+                  name="Cumulative PnL"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Daily PnL</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={dailyPnl}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9fb3d1" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#9fb3d1" }} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="pnl" name="PnL" radius={[4, 4, 0, 0]}>
-                {dailyPnl.map((entry, i) => (
-                  <Cell key={i} fill={entry.fill} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Daily PnL</div>
+            <button
+              onClick={() => toggleChart("daily")}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "var(--muted)",
+                fontSize: 12,
+                fontWeight: 500,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(59, 130, 246, 0.1)";
+                e.currentTarget.style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                e.currentTarget.style.color = "var(--muted)";
+              }}
+            >
+              {expandedCharts.daily ? "▼" : "▶"} {expandedCharts.daily ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {expandedCharts.daily && (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={dailyPnl}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9fb3d1" }} />
+                <YAxis tick={{ fontSize: 11, fill: "#9fb3d1" }} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="pnl" name="PnL" radius={[4, 4, 0, 0]}>
+                  {dailyPnl.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
       {/* Charts Row 2: Win Rate Donut + PnL by Setup */}
       <div className="dash-grid-2">
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>Win / Loss Distribution</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <PieChart>
-              <Pie
-                data={winLossPie}
-                cx="50%"
-                cy="50%"
-                innerRadius={55}
-                outerRadius={85}
-                paddingAngle={3}
-                dataKey="value"
-                label={({ name, value }) => `${name}: ${value}`}
-              >
-                {winLossPie.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Pie>
-              <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Tooltip contentStyle={tooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>Win / Loss Distribution</div>
+            <button
+              onClick={() => toggleChart("winLoss")}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "var(--muted)",
+                fontSize: 12,
+                fontWeight: 500,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(59, 130, 246, 0.1)";
+                e.currentTarget.style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                e.currentTarget.style.color = "var(--muted)";
+              }}
+            >
+              {expandedCharts.winLoss ? "▼" : "▶"} {expandedCharts.winLoss ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {expandedCharts.winLoss && (
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={winLossPie}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={3}
+                  dataKey="value"
+                  label={({ name, value }) => `${name}: ${value}`}
+                >
+                  {winLossPie.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Tooltip contentStyle={tooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </div>
 
         <div className="card" style={{ padding: 16 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>PnL by Setup</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={setupBreakdown} layout="vertical">
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis type="number" tick={{ fontSize: 11, fill: "#9fb3d1" }} />
-              <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "#9fb3d1" }} width={100} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="total" name="Total PnL" radius={[0, 4, 4, 0]}>
-                {setupBreakdown.map((entry, i) => (
-                  <Cell key={i} fill={entry.total >= 0 ? GREEN : RED} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <div style={{ fontWeight: 700, fontSize: 14 }}>PnL by Setup</div>
+            <button
+              onClick={() => toggleChart("setup")}
+              style={{
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid var(--border)",
+                borderRadius: 6,
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "var(--muted)",
+                fontSize: 12,
+                fontWeight: 500,
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(59, 130, 246, 0.1)";
+                e.currentTarget.style.color = "white";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "rgba(255,255,255,0.08)";
+                e.currentTarget.style.color = "var(--muted)";
+              }}
+            >
+              {expandedCharts.setup ? "▼" : "▶"} {expandedCharts.setup ? "Collapse" : "Expand"}
+            </button>
+          </div>
+          {expandedCharts.setup && (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={setupBreakdown} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: "#9fb3d1" }} />
+                <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "#9fb3d1" }} width={100} />
+                <Tooltip contentStyle={tooltipStyle} />
+                <Bar dataKey="total" name="Total PnL" radius={[0, 4, 4, 0]}>
+                  {setupBreakdown.map((entry, i) => (
+                    <Cell key={i} fill={entry.total >= 0 ? GREEN : RED} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </div>
       </div>
 
