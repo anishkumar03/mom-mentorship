@@ -155,12 +155,15 @@ For each complete trade, extract:
 - exit_time: time of exit order as HH:MM in 24-hour format
 - entry_price: price where position was opened (filled price)
 - exit_price: price where position was closed (filled price)
-- pnl: profit/loss as number (negative for losses)
-  * For SHORT: pnl = (entry_price - exit_price) × contracts
-  * For LONG: pnl = (exit_price - entry_price) × contracts
+- pnl: profit/loss as number (null - will be calculated server-side)
 - contracts: number of contracts (as integer)
 - commissions: total commissions for the trade (sum if multiple orders)
 - fees: total fees for the trade (sum if multiple orders)
+
+Point values for P&L calculation (server will handle this):
+- ES: $50/point, MES: $5/point
+- NQ: $20/point, MNQ: $2/point
+- YM: $5/point, MYM: $0.50/point
 
 Rules:
 - If a trade shows explicit P&L on screen, use that value
@@ -180,7 +183,7 @@ START RESPONSE WITH { AND END WITH }. NO OTHER TEXT.
       "exit_time": "10:53",
       "entry_price": 29232.25,
       "exit_price": 29193.75,
-      "pnl": 308.00,
+      "pnl": null,
       "contracts": 4,
       "commissions": null,
       "fees": null
