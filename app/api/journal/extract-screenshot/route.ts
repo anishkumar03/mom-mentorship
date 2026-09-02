@@ -131,6 +131,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+
   try {
     const bytes = await file.arrayBuffer();
     const base64 = Buffer.from(bytes).toString("base64");
@@ -195,13 +197,18 @@ Common futures point values:
   ]
 }`;
 
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    };
+    if (workspaceId) {
+      headers["anthropic-workspace-id"] = workspaceId;
+    }
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      headers,
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 2048,

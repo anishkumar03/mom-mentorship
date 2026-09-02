@@ -9,6 +9,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+
   const body = await req.json();
   const { image } = body as { image?: string };
 
@@ -58,13 +60,18 @@ Important:
 - Return ONLY the JSON object, no markdown, no explanation`;
 
   try {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    };
+    if (workspaceId) {
+      headers["anthropic-workspace-id"] = workspaceId;
+    }
+
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
+      headers,
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1024,
