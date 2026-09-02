@@ -1113,26 +1113,27 @@ function MetricCard({
 }
 
 const page: React.CSSProperties = {
-  maxWidth: 1100,
-  margin: "20px auto",
-  padding: 16,
+  maxWidth: 1120,
+  margin: "0 auto",
+  padding: 24,
   color: "white",
-  fontFamily: "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
-  background: "linear-gradient(180deg, #071427 0%, #061122 100%)",
+  fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif",
+  background: "var(--bg)",
   minHeight: "100vh",
 };
 
 const panel: React.CSSProperties = {
-  padding: 16,
-  borderRadius: 14,
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.03)",
+  padding: 20,
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
 };
 
 const grid2: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-  gap: 12,
+  gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+  gap: 16,
 };
 
 const label: React.CSSProperties = {
@@ -1146,100 +1147,113 @@ const label: React.CSSProperties = {
 const input: React.CSSProperties = {
   width: "100%",
   padding: "10px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(0,0,0,0.3)",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "rgba(26, 47, 71, 0.6)",
   color: "white",
   fontSize: 14,
   outline: "none",
   boxSizing: "border-box",
+  transition: "all 0.2s ease",
 };
 
 const inputSmall: React.CSSProperties = {
   padding: "8px 12px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(0,0,0,0.3)",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "rgba(26, 47, 71, 0.6)",
   color: "white",
   fontSize: 13,
   outline: "none",
+  transition: "all 0.2s ease",
 };
 
 const statCard: React.CSSProperties = {
-  padding: 14,
-  borderRadius: 12,
-  border: "1px solid rgba(255,255,255,0.08)",
-  background: "rgba(255,255,255,0.03)",
+  padding: 16,
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.4) 0%, rgba(19, 35, 57, 0.2) 100%)",
+  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.2)",
 };
 
 const btnPrimary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(31,79,255,0.4)",
-  background: "#1f4fff",
+  padding: "10px 16px",
+  borderRadius: 8,
+  border: "1px solid var(--accent)",
+  background: "var(--accent)",
   color: "white",
   cursor: "pointer",
   textDecoration: "none",
   fontSize: 13,
   fontWeight: 600,
+  transition: "all 0.2s ease",
 };
 
 const btnSecondary: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.06)",
+  padding: "10px 16px",
+  borderRadius: 8,
+  border: "1px solid var(--border)",
+  background: "rgba(255,255,255,0.08)",
   color: "white",
   cursor: "pointer",
   fontSize: 13,
+  fontWeight: 500,
+  transition: "all 0.2s ease",
 };
 
 const btnDanger: React.CSSProperties = {
-  padding: "9px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,59,48,0.3)",
-  background: "rgba(255,59,48,0.15)",
+  padding: "10px 16px",
+  borderRadius: 8,
+  border: "1px solid rgba(239, 68, 68, 0.3)",
+  background: "rgba(239, 68, 68, 0.1)",
   color: "#fca5a5",
   cursor: "pointer",
   fontSize: 13,
+  fontWeight: 500,
+  transition: "all 0.2s ease",
 };
 
 const btnDangerSmall: React.CSSProperties = {
-  padding: "5px 10px",
+  padding: "6px 12px",
   borderRadius: 6,
-  border: "1px solid rgba(255,59,48,0.3)",
-  background: "rgba(255,59,48,0.12)",
+  border: "1px solid rgba(239, 68, 68, 0.3)",
+  background: "rgba(239, 68, 68, 0.1)",
   color: "#fca5a5",
   cursor: "pointer",
   fontSize: 11,
+  fontWeight: 500,
   flexShrink: 0,
+  transition: "all 0.2s ease",
 };
 
 const cardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 14,
+  border: "1px solid var(--border)",
+  borderRadius: 8,
   padding: 16,
-  background: "rgba(255,255,255,0.03)",
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
 };
 
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.7)",
+  background: "rgba(0,0,0,0.8)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   zIndex: 9999,
   padding: 16,
+  backdropFilter: "blur(4px)",
 };
 
 const modalCard: React.CSSProperties = {
   width: 540,
   maxWidth: "100%",
-  borderRadius: 16,
-  padding: 20,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33",
+  borderRadius: 12,
+  padding: 24,
+  border: "1px solid var(--border)",
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
   maxHeight: "90vh",
   overflow: "auto",
+  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
 };

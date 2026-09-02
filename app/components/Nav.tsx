@@ -31,11 +31,11 @@ export default function Nav() {
       WebkitOverflowScrolling: "touch",
       padding: "8px 12px",
       flexWrap: "wrap",
+      maxWidth: "100%",
     }}>
       {links.map((l) => {
         const active = pathname?.startsWith(l.href);
         const isQuickAdd = l.href === "/quick-add";
-        const isApplications = l.href === "/applications";
         return (
           <Link
             key={l.href}
@@ -44,33 +44,24 @@ export default function Nav() {
               color: "white",
               background: "var(--accent)",
               borderRadius: 6,
-              padding: "4px 12px",
+              padding: "6px 14px",
               fontSize: 13,
-              fontWeight: 700,
+              fontWeight: 600,
               whiteSpace: "nowrap",
               textDecoration: "none",
-            } : isApplications ? {
-              color: active ? "white" : "#C9A84C",
-              borderBottom: active ? "2px solid #C9A84C" : "2px solid rgba(201,168,76,0.3)",
-              paddingBottom: 6,
-              paddingLeft: 8,
-              paddingRight: 8,
-              fontSize: 13,
-              fontWeight: active ? 700 : 500,
-              whiteSpace: "nowrap",
-              textDecoration: "none",
-              transition: "color 0.15s, border-color 0.15s",
+              transition: "all 0.2s ease",
+              border: "1px solid var(--accent)",
             } : {
-              color: active ? "white" : "var(--muted)",
+              color: active ? "#ffffff" : "var(--muted)",
               borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
               paddingBottom: 6,
               paddingLeft: 8,
               paddingRight: 8,
               fontSize: 13,
-              fontWeight: active ? 700 : 400,
+              fontWeight: active ? 600 : 500,
               whiteSpace: "nowrap",
               textDecoration: "none",
-              transition: "color 0.15s, border-color 0.15s",
+              transition: "all 0.2s ease",
             }}
           >
             {l.label}
