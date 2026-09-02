@@ -229,9 +229,9 @@ Common futures point values:
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic API error:", errText);
+      console.error("Anthropic API error:", response.status, errText);
       return NextResponse.json(
-        { error: "Screenshot extraction failed" },
+        { error: `Screenshot extraction failed: ${response.status} - ${errText.slice(0, 200)}` },
         { status: 502 }
       );
     }
