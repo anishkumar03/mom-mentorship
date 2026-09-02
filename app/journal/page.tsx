@@ -2022,6 +2022,7 @@ export default function JournalPage() {
                     </div>
                     {day.trades.map((t) => {
                       const screenshotUrl = resolveScreenshotUrl(t);
+                      const setupScreenshotUrl = t.setup_screenshot_url;
                       return (
                         <div key={t.id} style={{ ...tradeCard, background: "var(--card)" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
@@ -2061,6 +2062,57 @@ export default function JournalPage() {
                                 {pnlBadge(t.pnl)}
                               </div>
 
+                              {setupScreenshotUrl && (
+                                <a
+                                  href={setupScreenshotUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer",
+                                    transition: "all 0.2s ease",
+                                    position: "relative"
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.transform = "scale(1.05)";
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.boxShadow = "0 8px 16px rgba(0,0,0,0.4)";
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.transform = "scale(1)";
+                                    (e.currentTarget.querySelector('img') as HTMLImageElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
+                                  }}
+                                  title="Setup screenshot"
+                                >
+                                  <img
+                                    src={setupScreenshotUrl}
+                                    alt="Setup screenshot"
+                                    style={{
+                                      width: 100,
+                                      height: 65,
+                                      objectFit: "cover",
+                                      borderRadius: 8,
+                                      border: "2px solid rgba(168,85,247,0.4)",
+                                      background: "rgba(0,0,0,0.3)",
+                                      boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+                                      transition: "all 0.2s ease"
+                                    }}
+                                  />
+                                  <span style={{
+                                    position: "absolute",
+                                    bottom: 0,
+                                    right: 0,
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    background: "rgba(168,85,247,0.8)",
+                                    color: "white",
+                                    padding: "2px 6px",
+                                    borderRadius: "0 6px",
+                                  }}>Setup</span>
+                                </a>
+                              )}
+
                               {screenshotUrl && (
                                 <a
                                   href={screenshotUrl}
@@ -2081,6 +2133,7 @@ export default function JournalPage() {
                                     (e.currentTarget.querySelector('img') as HTMLImageElement).style.transform = "scale(1)";
                                     (e.currentTarget.querySelector('img') as HTMLImageElement).style.boxShadow = "0 2px 8px rgba(0,0,0,0.2)";
                                   }}
+                                  title="Trade entry screenshot"
                                 >
                                   <img
                                     src={screenshotUrl}
