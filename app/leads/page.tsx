@@ -1612,17 +1612,18 @@ const panel: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
-  borderRadius: 12,
-  padding: 12,
-  background: "rgba(255,255,255,0.03)",
-  transition: "transform 120ms ease, box-shadow 120ms ease",
-  boxShadow: "0 0 0 rgba(0,0,0,0)"
+  border: "1px solid var(--border)",
+  borderRadius: 8,
+  padding: 14,
+  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.4) 0%, rgba(19, 35, 57, 0.2) 100%)",
+  transition: "all 0.2s ease",
+  boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
 };
 
 const cardHoverStyle: React.CSSProperties = {
   transform: "translateY(-2px)",
-  boxShadow: "0 12px 24px rgba(0,0,0,0.18)"
+  borderColor: "rgba(59, 130, 246, 0.3)",
+  boxShadow: "0 8px 16px rgba(59, 130, 246, 0.1)"
 };
 
 const followBadgeBase: React.CSSProperties = {
@@ -1768,30 +1769,33 @@ const linkBtnSmall: React.CSSProperties = {
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.7)",
+  background: "rgba(0,0,0,0.8)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   zIndex: 9999,
   padding: 16,
+  backdropFilter: "blur(4px)",
 };
 
 const modalCard: React.CSSProperties = {
   width: 400,
   maxWidth: "100%",
-  borderRadius: 16,
-  padding: 20,
-  border: "1px solid rgba(255,255,255,0.10)",
-  background: "#0b1b33",
+  borderRadius: 12,
+  padding: 24,
+  border: "1px solid var(--border)",
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
 };
 
 const emailModalCard: React.CSSProperties = {
   width: 560,
   maxWidth: "100%",
-  borderRadius: 16,
-  padding: 20,
-  border: "1px solid rgba(139,92,246,0.2)",
-  background: "#0b1b33",
+  borderRadius: 12,
+  padding: 24,
+  border: "1px solid var(--border)",
+  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
+  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
   maxHeight: "90vh",
   overflowY: "auto",
 };
