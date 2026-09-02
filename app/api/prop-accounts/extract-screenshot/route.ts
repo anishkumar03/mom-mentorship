@@ -29,35 +29,42 @@ export async function POST(req: NextRequest) {
   const mediaType = match[1] as "image/png" | "image/jpeg" | "image/webp" | "image/gif";
   const base64Data = match[2];
 
-  const prompt = `You are analyzing a prop firm trading account performance screenshot. Extract ALL visible metrics and return them as a JSON object.
+  const prompt = `You are analyzing a prop firm trading account screenshot. This could be:
+1. An account SUMMARY/DASHBOARD showing performance metrics (balance, P&L, drawdown, etc.)
+2. An account performance OVERVIEW with key statistics
+3. Any other account performance-related screenshot
+
+Extract ALL visible account performance metrics and return them as a JSON object.
 
 Return ONLY a valid JSON object with these fields (use null for any field not visible):
 
 {
   "account_name": "string or null — the account name/ID/number if visible",
-  "firm": "string or null — the prop firm name (e.g. FTMO, TopStep, Apex, MyFundedFX, etc.)",
-  "balance": number or null — current account balance,
-  "pnl": number or null — total profit/loss (net P&L),
-  "drawdown": number or null — current drawdown percentage (as a number, e.g. 2.5 for 2.5%),
-  "max_drawdown": number or null — maximum drawdown percentage,
-  "profit_factor": number or null — profit factor ratio,
-  "win_rate": number or null — win rate percentage (as a number, e.g. 65 for 65%),
-  "total_trades": number or null — total number of trades,
-  "winning_trades": number or null — number of winning trades,
-  "losing_trades": number or null — number of losing trades,
-  "avg_win": number or null — average winning trade amount,
-  "avg_loss": number or null — average losing trade amount,
-  "largest_win": number or null — largest single winning trade,
-  "largest_loss": number or null — largest single losing trade,
-  "status": "string or null — account status if visible (e.g. Active, Funded, Passed, Failed, Breached)"
+  "firm": "string or null — the prop firm name (e.g. FTMO, TopStep, Apex, MyFundedFX, Lucid, etc.)",
+  "balance": number or null — current account balance or starting balance",
+  "pnl": number or null — total profit/loss (net P&L)",
+  "drawdown": number or null — current drawdown percentage (as a number, e.g. 2.5 for 2.5%)",
+  "max_drawdown": number or null — maximum drawdown percentage",
+  "profit_factor": number or null — profit factor ratio",
+  "win_rate": number or null — win rate percentage (as a number, e.g. 65 for 65%)",
+  "total_trades": number or null — total number of trades",
+  "winning_trades": number or null — number of winning trades",
+  "losing_trades": number or null — number of losing trades",
+  "avg_win": number or null — average winning trade amount",
+  "avg_loss": number or null — average losing trade amount",
+  "largest_win": number or null — largest single winning trade",
+  "largest_loss": number or null — largest single losing trade",
+  "status": "string or null — account status if visible (e.g. Active, Funded, Passed, Failed, Breached, Paper Trading, etc.)"
 }
 
 Important:
 - Extract numbers WITHOUT currency symbols or commas
 - For percentages, return the number only (65.5 not "65.5%")
 - For negative P&L or drawdown, use negative numbers
-- If the screenshot shows a dashboard with multiple metrics, extract all you can find
-- Return ONLY the JSON object, no markdown, no explanation`;
+- Look for any visible account metrics, even if partially visible
+- If certain fields are not visible, use null (don't guess)
+- This is for ACCOUNT PERFORMANCE metrics, not individual trade details
+- Return ONLY the JSON object, no markdown, no explanation, no other text`;
 
   try {
     const headers: Record<string, string> = {
@@ -107,16 +114,27 @@ Important:
     const text =
       result.content?.[0]?.text ?? "";
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    console.log("AI Response:", text.slice(0, 500));
+
+    let jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
+      console.error("No JSON found in response:", text.slice(0, 1000));
       return NextResponse.json(
-        { error: "Could not parse AI response", raw: text },
+        { error: "Could not extract metrics from screenshot. Make sure the screenshot shows account performance data (balance, P&L, drawdown, etc.), not individual trade details." },
         { status: 422 }
       );
     }
 
-    const extracted = JSON.parse(jsonMatch[0]);
-    return NextResponse.json({ data: extracted });
+    try {
+      const extracted = JSON.parse(jsonMatch[0]);
+      return NextResponse.json({ data: extracted });
+    } catch (parseError) {
+      console.error("JSON parse error:", parseError);
+      return NextResponse.json(
+        { error: "Invalid data extracted from screenshot. Please ensure the screenshot is clear and shows account performance metrics." },
+        { status: 422 }
+      );
+    }
   } catch (err: unknown) {
     console.error("Extract screenshot error:", err);
     return NextResponse.json(
