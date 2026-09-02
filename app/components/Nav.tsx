@@ -8,6 +8,7 @@ const links = [
   { href: "/leads", label: "Leads" },
   { href: "/applications", label: "Applications" },
   { href: "/journal", label: "Journal" },
+  { href: "/prop-accounts", label: "Prop Accounts" },
   { href: "/students", label: "Students" },
   { href: "/notes", label: "Notes" },
   { href: "/batches", label: "Batches" },

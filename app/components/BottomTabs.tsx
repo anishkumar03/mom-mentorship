@@ -9,6 +9,7 @@ const tabs = [
   { href: "/roi-dashboard", label: "ROI" },
   { href: "/leads", label: "Leads" },
   { href: "/journal", label: "Journal" },
+  { href: "/prop-accounts", label: "Prop Accounts" },
   { href: "/students", label: "Students" },
   { href: "/notes", label: "Notes" },
   { href: "/batches", label: "Batches" },
