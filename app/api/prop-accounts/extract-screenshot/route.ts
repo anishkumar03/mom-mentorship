@@ -29,12 +29,14 @@ export async function POST(req: NextRequest) {
   const mediaType = match[1] as "image/png" | "image/jpeg" | "image/webp" | "image/gif";
   const base64Data = match[2];
 
-  const prompt = `You are analyzing a prop firm trading account screenshot. This could be:
-1. An account SUMMARY/DASHBOARD showing performance metrics (balance, P&L, drawdown, etc.)
-2. An account performance OVERVIEW with key statistics
-3. Any other account performance-related screenshot
+  const prompt = `You are analyzing a prop firm trading account screenshot from firms like FTMO, TopStep, Apex, MyFundedFX, Lucid, etc.
 
 Extract ALL visible account performance metrics and return them as a JSON object.
+
+CRITICAL FOR LUCID & TOPSTEP: These firms show broker fees/charges separately. Extract both:
+- "gross_pnl": The trading profit BEFORE broker fees (labeled as "Gross P&L" or just "P&L")
+- "broker_fees": Any broker fees, commissions, or charges (labeled as "Total Charges", "Commissions", "Fees", etc.)
+- "pnl": Calculate as (gross_pnl - broker_fees) for the net profit/loss
 
 Return ONLY a valid JSON object with these fields (use null for any field not visible):
 
@@ -42,7 +44,9 @@ Return ONLY a valid JSON object with these fields (use null for any field not vi
   "account_name": "string or null — the account name/ID/number if visible",
   "firm": "string or null — the prop firm name (e.g. FTMO, TopStep, Apex, MyFundedFX, Lucid, etc.)",
   "balance": number or null — current account balance or starting balance",
-  "pnl": number or null — total profit/loss (net P&L)",
+  "gross_pnl": number or null — trading profit BEFORE fees/commissions",
+  "broker_fees": number or null — total broker fees, commissions, or charges",
+  "pnl": number or null — NET profit/loss (gross_pnl minus broker_fees)",
   "drawdown": number or null — current drawdown percentage (as a number, e.g. 2.5 for 2.5%)",
   "max_drawdown": number or null — maximum drawdown percentage",
   "profit_factor": number or null — profit factor ratio",
@@ -60,10 +64,10 @@ Return ONLY a valid JSON object with these fields (use null for any field not vi
 Important:
 - Extract numbers WITHOUT currency symbols or commas
 - For percentages, return the number only (65.5 not "65.5%")
-- For negative P&L or drawdown, use negative numbers
-- Look for any visible account metrics, even if partially visible
+- For negative values, use negative numbers
+- ALWAYS look for broker fees/commissions/charges and extract separately
+- pnl = gross_pnl - broker_fees (calculate if both are visible)
 - If certain fields are not visible, use null (don't guess)
-- This is for ACCOUNT PERFORMANCE metrics, not individual trade details
 - Return ONLY the JSON object, no markdown, no explanation, no other text`;
 
   try {
