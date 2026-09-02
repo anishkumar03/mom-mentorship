@@ -246,12 +246,21 @@ Common futures point values:
     const payload = await response.json();
     const content = payload.content?.[0]?.text ?? "";
 
+    console.log("AI Response:", content.slice(0, 500));
+
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      return NextResponse.json({ error: "Could not parse AI response" }, { status: 422 });
+      console.error("No JSON found in response:", content.slice(0, 500));
+      return NextResponse.json({ error: `Could not parse AI response: ${content.slice(0, 300)}` }, { status: 422 });
     }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (parseError) {
+      console.error("JSON parse error:", jsonMatch[0].slice(0, 300));
+      return NextResponse.json({ error: `Invalid JSON in response: ${parseError}` }, { status: 422 });
+    }
     const rawTrades = Array.isArray(parsed?.trades) ? parsed.trades : [];
     const trades = rawTrades
       .map((trade: Record<string, unknown>) => normalizePayload(trade))
