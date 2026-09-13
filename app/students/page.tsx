@@ -377,6 +377,7 @@ export default function StudentsPage() {
     // Apply payment status filter
     if (paymentStatusFilter !== "all") {
       result = result.filter((s) => {
+        if (s.total_fee <= 0) return false;
         const paid = totalsByStudent.get(s.id) ?? 0;
         const balance = s.total_fee - paid;
 
@@ -429,6 +430,7 @@ export default function StudentsPage() {
       const unpaid: Student[] = [];
 
       for (const s of batchStudents) {
+        if (s.total_fee <= 0) continue;
         const paid = totalsByStudent.get(s.id) ?? 0;
         const balance = s.total_fee - paid;
 
@@ -463,6 +465,8 @@ export default function StudentsPage() {
       totalRevenue += s.total_fee;
       const paid = totalsByStudent.get(s.id) ?? 0;
       totalCollected += paid;
+
+      if (s.total_fee <= 0) continue;
 
       if (s.paid_in_full || paid >= s.total_fee) {
         paidCount++;
