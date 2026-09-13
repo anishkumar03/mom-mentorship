@@ -373,6 +373,10 @@ export default function StudentsPage() {
     return counts;
   }, [batchTags, studentBatchGroups]);
 
+  const totalStudentsWithFees = useMemo(() => {
+    return preBatchFilteredStudents.filter((s) => s.total_fee > 0).length;
+  }, [preBatchFilteredStudents]);
+
   const filteredStudents = useMemo(() => {
     let result = preBatchFilteredStudents;
 
@@ -1224,7 +1228,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__ALL__" ? "rgba(79,163,255,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            All ({preBatchFilteredStudents.length})
+            All ({totalStudentsWithFees})
           </button>
           <button
             onClick={() => setActiveBatchTab("__UNASSIGNED__")}
