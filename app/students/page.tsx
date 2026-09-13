@@ -364,6 +364,46 @@ export default function StudentsPage() {
       .sort();
   }, [studentBatchGroups]);
 
+  const filteredBatchGroups = useMemo(() => {
+    const groups: Record<string, Student[]> = { __UNASSIGNED__: [] };
+
+    for (const batch of batchTags) {
+      groups[batch] = [];
+    }
+
+    for (const s of preBatchFilteredStudents) {
+      const b = batchByStudentId.get(s.id) || null;
+
+      if (paymentStatusFilter !== "all") {
+        const paid = totalsByStudent.get(s.id) ?? 0;
+        const balance = s.total_fee - paid;
+        let matches = false;
+
+        switch (paymentStatusFilter) {
+          case "full":
+            matches = paid >= s.total_fee || s.paid_in_full;
+            break;
+          case "half":
+            matches = paid > 0 && paid < s.total_fee;
+            break;
+          case "unpaid":
+            matches = paid === 0 || balance >= s.total_fee;
+            break;
+        }
+
+        if (!matches) continue;
+      }
+
+      if (b) {
+        if (!groups[b]) groups[b] = [];
+        groups[b].push(s);
+      } else {
+        groups.__UNASSIGNED__.push(s);
+      }
+    }
+
+    return groups;
+  }, [preBatchFilteredStudents, batchByStudentId, paymentStatusFilter, totalsByStudent, batchTags]);
 
   const filteredStudents = useMemo(() => {
     let result = preBatchFilteredStudents;
@@ -1212,7 +1252,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__ALL__" ? "rgba(79,163,255,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            All ({preBatchFilteredStudents.length})
+            All ({Object.values(filteredBatchGroups).reduce((sum, arr) => sum + arr.length, 0)})
           </button>
           <button
             onClick={() => setActiveBatchTab("__UNASSIGNED__")}
@@ -1222,7 +1262,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__UNASSIGNED__" ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            Unassigned ({studentBatchGroups.__UNASSIGNED__?.length ?? 0})
+            Unassigned ({filteredBatchGroups.__UNASSIGNED__?.length ?? 0})
           </button>
           {batchTags.map((b) => (
             <button
@@ -1234,7 +1274,7 @@ export default function StudentsPage() {
                 borderColor: activeBatchTab === b ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)",
               }}
             >
-              {b} ({studentBatchGroups[b]?.length ?? 0})
+              {b} ({filteredBatchGroups[b]?.length ?? 0})
             </button>
           ))}
         </div>
