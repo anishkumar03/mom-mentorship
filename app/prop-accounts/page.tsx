@@ -879,6 +879,8 @@ export default function PropAccountsPage() {
           snapshotDate={snapshotDate}
           setSnapshotDate={setSnapshotDate}
           sBalance={sBalance} setSBalance={setSBalance}
+          sGrossPnl={sGrossPnl} setSGrossPnl={setSGrossPnl}
+          sBrokerFees={sBrokerFees} setSBrokerFees={setSBrokerFees}
           sPnl={sPnl} setSPnl={setSPnl}
           sDrawdown={sDrawdown} setSDrawdown={setSDrawdown}
           sMaxDrawdown={sMaxDrawdown} setSMaxDrawdown={setSMaxDrawdown}
