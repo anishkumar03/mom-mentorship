@@ -364,18 +364,6 @@ export default function StudentsPage() {
       .sort();
   }, [studentBatchGroups]);
 
-  const batchStudentCountsWithFees = useMemo(() => {
-    const counts: Record<string, number> = { __UNASSIGNED__: 0 };
-    for (const batch of batchTags) {
-      counts[batch] = (studentBatchGroups[batch] || []).filter((s) => s.total_fee > 0).length;
-    }
-    counts.__UNASSIGNED__ = (studentBatchGroups.__UNASSIGNED__ || []).filter((s) => s.total_fee > 0).length;
-    return counts;
-  }, [batchTags, studentBatchGroups]);
-
-  const totalStudentsWithFees = useMemo(() => {
-    return preBatchFilteredStudents.filter((s) => s.total_fee > 0).length;
-  }, [preBatchFilteredStudents]);
 
   const filteredStudents = useMemo(() => {
     let result = preBatchFilteredStudents;
@@ -390,7 +378,6 @@ export default function StudentsPage() {
     // Apply payment status filter
     if (paymentStatusFilter !== "all") {
       result = result.filter((s) => {
-        if (s.total_fee <= 0) return false;
         const paid = totalsByStudent.get(s.id) ?? 0;
         const balance = s.total_fee - paid;
 
@@ -443,7 +430,6 @@ export default function StudentsPage() {
       const unpaid: Student[] = [];
 
       for (const s of batchStudents) {
-        if (s.total_fee <= 0) continue;
         const paid = totalsByStudent.get(s.id) ?? 0;
         const balance = s.total_fee - paid;
 
@@ -478,8 +464,6 @@ export default function StudentsPage() {
       totalRevenue += s.total_fee;
       const paid = totalsByStudent.get(s.id) ?? 0;
       totalCollected += paid;
-
-      if (s.total_fee <= 0) continue;
 
       if (s.paid_in_full || paid >= s.total_fee) {
         paidCount++;
@@ -1228,7 +1212,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__ALL__" ? "rgba(79,163,255,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            All ({totalStudentsWithFees})
+            All ({preBatchFilteredStudents.length})
           </button>
           <button
             onClick={() => setActiveBatchTab("__UNASSIGNED__")}
@@ -1238,7 +1222,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__UNASSIGNED__" ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            Unassigned ({batchStudentCountsWithFees.__UNASSIGNED__ ?? 0})
+            Unassigned ({studentBatchGroups.__UNASSIGNED__?.length ?? 0})
           </button>
           {batchTags.map((b) => (
             <button
@@ -1250,7 +1234,7 @@ export default function StudentsPage() {
                 borderColor: activeBatchTab === b ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)",
               }}
             >
-              {b} ({batchStudentCountsWithFees[b] ?? 0})
+              {b} ({studentBatchGroups[b]?.length ?? 0})
             </button>
           ))}
         </div>
