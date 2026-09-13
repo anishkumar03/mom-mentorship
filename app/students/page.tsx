@@ -364,6 +364,15 @@ export default function StudentsPage() {
       .sort();
   }, [studentBatchGroups]);
 
+  const batchStudentCountsWithFees = useMemo(() => {
+    const counts: Record<string, number> = { __UNASSIGNED__: 0 };
+    for (const batch of batchTags) {
+      counts[batch] = (studentBatchGroups[batch] || []).filter((s) => s.total_fee > 0).length;
+    }
+    counts.__UNASSIGNED__ = (studentBatchGroups.__UNASSIGNED__ || []).filter((s) => s.total_fee > 0).length;
+    return counts;
+  }, [batchTags, studentBatchGroups]);
+
   const filteredStudents = useMemo(() => {
     let result = preBatchFilteredStudents;
 
@@ -1225,7 +1234,7 @@ export default function StudentsPage() {
               borderColor: activeBatchTab === "__UNASSIGNED__" ? "rgba(251,191,36,0.4)" : "rgba(255,255,255,0.12)",
             }}
           >
-            Unassigned ({studentBatchGroups.__UNASSIGNED__?.length ?? 0})
+            Unassigned ({batchStudentCountsWithFees.__UNASSIGNED__ ?? 0})
           </button>
           {batchTags.map((b) => (
             <button
@@ -1237,7 +1246,7 @@ export default function StudentsPage() {
                 borderColor: activeBatchTab === b ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.12)",
               }}
             >
-              {b} ({studentBatchGroups[b]?.length ?? 0})
+              {b} ({batchStudentCountsWithFees[b] ?? 0})
             </button>
           ))}
         </div>
