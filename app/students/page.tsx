@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 import { PAYMENT_METHODS } from "../../lib/constants";
 import { usePrograms } from "../../lib/usePrograms";
@@ -41,7 +40,6 @@ type LeadBatchRow = {
   student_id: string | null;
   batch: string | null;
 };
-
 
 function toLocalInputValue(iso: string | null) {
   if (!iso) return "";
@@ -169,7 +167,7 @@ function displayName(s: Student) {
 }
 
 function csvEscape(value: string) {
-  const safe = value.replace(/"/g, '""');
+  const safe = value.replace(/"/g, "\"\"");
   return `"${safe}"`;
 }
 
@@ -206,13 +204,15 @@ export default function StudentsPage() {
 
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [paymentStudent, setPaymentStudent] = useState<Student | null>(null);
-    const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentDate, setPaymentDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
   const [paymentNote, setPaymentNote] = useState("");
   const [balanceFilter, setBalanceFilter] = useState<string | null>(null);
   const [paymentsTab, setPaymentsTab] = useState<string | null>(null);
   const [paymentsRange, setPaymentsRange] = useState<string | null>(null);
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<"all" | "full" | "half" | "unpaid">("all");
+  const [showBatchDashboard, setShowBatchDashboard] = useState(true);
 
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
@@ -320,8 +320,6 @@ export default function StudentsPage() {
     return map;
   }, [payments]);
 
-  // A student's batch tag comes from the lead that converted into them (leads.batch),
-  // matched via leads.student_id — the same source of truth the Batches tab uses.
   const batchByStudentId = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const l of leadBatches) {
@@ -330,9 +328,6 @@ export default function StudentsPage() {
     return map;
   }, [leadBatches]);
 
-  // Everything the batch tag pills should reflect: program + search, but not the batch tab
-  // itself (that's what each pill's count varies by). Keeps pill counts in sync with what
-  // clicking that pill actually shows, instead of counting across all programs.
   const preBatchFilteredStudents = useMemo(() => {
     let result = students;
     if (programFilter !== "All") {
@@ -371,13 +366,35 @@ export default function StudentsPage() {
 
   const filteredStudents = useMemo(() => {
     let result = preBatchFilteredStudents;
+
+    // Apply batch filter
     if (activeBatchTab === "__UNASSIGNED__") {
       result = result.filter((s) => !batchByStudentId.get(s.id));
     } else if (activeBatchTab !== "__ALL__") {
       result = result.filter((s) => batchByStudentId.get(s.id) === activeBatchTab);
     }
+
+    // Apply payment status filter
+    if (paymentStatusFilter !== "all") {
+      result = result.filter((s) => {
+        const paid = totalsByStudent.get(s.id) ?? 0;
+        const balance = s.total_fee - paid;
+
+        switch (paymentStatusFilter) {
+          case "full":
+            return paid >= s.total_fee || s.paid_in_full;
+          case "half":
+            return paid > 0 && paid < s.total_fee;
+          case "unpaid":
+            return paid === 0 || balance >= s.total_fee;
+          default:
+            return true;
+        }
+      });
+    }
+
     return result;
-  }, [preBatchFilteredStudents, activeBatchTab, batchByStudentId]);
+  }, [preBatchFilteredStudents, activeBatchTab, batchByStudentId, paymentStatusFilter, totalsByStudent]);
 
   const dueSoon = useMemo(() => {
     const now = new Date();
@@ -402,21 +419,66 @@ export default function StudentsPage() {
       });
   }, [students, totalsByStudent]);
 
+  const batchPaymentStats = useMemo(() => {
+    const stats: Record<string, { fullPaid: Student[]; halfPaid: Student[]; unpaid: Student[]; count: { full: number; half: number; unpaid: number } }> = {};
+
+    for (const batch of batchTags) {
+      const batchStudents = studentBatchGroups[batch] || [];
+      const fullPaid: Student[] = [];
+      const halfPaid: Student[] = [];
+      const unpaid: Student[] = [];
+
+      for (const s of batchStudents) {
+        const paid = totalsByStudent.get(s.id) ?? 0;
+        const balance = s.total_fee - paid;
+
+        if (paid >= s.total_fee || s.paid_in_full) {
+          fullPaid.push(s);
+        } else if (paid > 0 && paid < s.total_fee) {
+          halfPaid.push(s);
+        } else {
+          unpaid.push(s);
+        }
+      }
+
+      stats[batch] = {
+        fullPaid,
+        halfPaid,
+        unpaid,
+        count: { full: fullPaid.length, half: halfPaid.length, unpaid: unpaid.length }
+      };
+    }
+
+    return stats;
+  }, [batchTags, studentBatchGroups, totalsByStudent]);
+
   const summaryStats = useMemo(() => {
     let totalRevenue = 0;
     let totalCollected = 0;
     let paidCount = 0;
+    let halfPaidCount = 0;
+    let unpaidCount = 0;
+
     for (const s of students) {
       totalRevenue += s.total_fee;
       const paid = totalsByStudent.get(s.id) ?? 0;
       totalCollected += paid;
-      if (s.paid_in_full || paid >= s.total_fee) paidCount++;
+
+      if (s.paid_in_full || paid >= s.total_fee) {
+        paidCount++;
+      } else if (paid > 0 && paid < s.total_fee) {
+        halfPaidCount++;
+      } else {
+        unpaidCount++;
+      }
     }
     return {
       totalRevenue,
       totalCollected,
       outstanding: totalRevenue - totalCollected,
       paidCount,
+      halfPaidCount,
+      unpaidCount,
       totalStudents: students.length,
     };
   }, [students, totalsByStudent]);
@@ -462,7 +524,7 @@ export default function StudentsPage() {
     };
 
     if (studentColumns.includes("phone")) {
-            payload.phone = phone.trim() ? phone.trim() : null;
+      payload.phone = phone.trim() ? phone.trim() : null;
     }
     if (studentColumns.includes("due_date")) {
       payload.due_date = dueDate ? dueDate : null;
@@ -529,6 +591,7 @@ export default function StudentsPage() {
           payment_date: now,
         });
         if (insertRes.error) {
+          // Retry with only one date column if both fail
           const retry = await supabase.from("payments").insert({
             student_id: savedStudent.id,
             amount,
@@ -541,6 +604,7 @@ export default function StudentsPage() {
       }
     }
 
+    // Sync updated fields back to the linked lead(s)
     if (editingId && savedStudent) {
       const leadPayload: Record<string, unknown> = {};
       if (savedStudent.email != null) leadPayload.email = savedStudent.email;
@@ -590,6 +654,7 @@ export default function StudentsPage() {
 
     let { error } = await supabase.from("payments").insert(payload);
     if (error) {
+      // Retry without paid_at in case only payment_date exists
       const { paid_at: _, ...fallback } = payload as any;
       const retry = await supabase.from("payments").insert(fallback);
       error = retry.error;
@@ -618,6 +683,7 @@ export default function StudentsPage() {
   };
 
   const openReminder = (s: Student) => {
+    // eslint-disable-next-line react-hooks/purity
     const def = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
     def.setSeconds(0, 0);
     setReminderStudent(s);
@@ -652,12 +718,13 @@ export default function StudentsPage() {
 
     setDeletingStudentId(student.id);
 
+    // Delete linked leads first (so confirmed/leads pages stay in sync)
     await supabase.from("leads").delete().eq("student_id", student.id);
 
     const { error } = await supabase.from("students").delete().eq("id", student.id);
     if (error) {
       alert(error.message);
-            setDeletingStudentId(null);
+      setDeletingStudentId(null);
       return;
     }
 
@@ -771,6 +838,112 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* Payment Status Filter */}
+      {students.length > 0 && (
+        <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12, fontWeight: 600, opacity: 0.7 }}>Payment Status:</span>
+          {(["all", "full", "half", "unpaid"] as const).map((status) => (
+            <button
+              key={status}
+              onClick={() => setPaymentStatusFilter(status)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 6,
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: paymentStatusFilter === status ? "rgba(79,163,255,0.2)" : "rgba(255,255,255,0.08)",
+                color: paymentStatusFilter === status ? "white" : "rgba(255,255,255,0.7)",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              {status === "all" ? "All" : status === "full" ? "✓ Fully Paid" : status === "half" ? "⚠ Half Paid" : "❌ Unpaid"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Batch-wise Payment Dashboard */}
+      {students.length > 0 && showBatchDashboard && batchTags.length > 0 && (
+        <div style={{ ...panel, marginTop: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <h3 style={{ margin: 0, fontSize: 15 }}>Payment Status by Batch</h3>
+            <button
+              onClick={() => setShowBatchDashboard(false)}
+              style={{
+                padding: "4px 8px",
+                fontSize: 12,
+                background: "rgba(255,255,255,0.08)",
+                border: "1px solid rgba(255,255,255,0.12)",
+                borderRadius: 4,
+                cursor: "pointer",
+                color: "rgba(255,255,255,0.7)",
+              }}
+            >
+              Hide
+            </button>
+          </div>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+            gap: 12,
+          }}>
+            {batchTags.map((batch) => {
+              const stats = batchPaymentStats[batch];
+              const total = stats.count.full + stats.count.half + stats.count.unpaid;
+              return (
+                <div key={batch} style={{
+                  padding: 12,
+                  borderRadius: 8,
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.4) 0%, rgba(19, 35, 57, 0.2) 100%)",
+                }}>
+                  <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 10 }}>{batch}</div>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ color: "#6ee7b7" }}>✓ Fully Paid:</span>
+                      <span style={{ fontWeight: 600, color: "#6ee7b7" }}>{stats.count.full}/{total}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ color: "#fcd34d" }}>⚠ Half Paid:</span>
+                      <span style={{ fontWeight: 600, color: "#fcd34d" }}>{stats.count.half}/{total}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                      <span style={{ color: "#fca5a5" }}>❌ Unpaid:</span>
+                      <span style={{ fontWeight: 600, color: "#fca5a5" }}>{stats.count.unpaid}/{total}</span>
+                    </div>
+                    {stats.count.half > 0 && (
+                      <button
+                        onClick={() => {
+                          setPaymentStatusFilter("half");
+                          setActiveBatchTab(batch);
+                        }}
+                        style={{
+                          marginTop: 8,
+                          padding: "6px 10px",
+                          fontSize: 11,
+                          fontWeight: 600,
+                          background: "rgba(252, 211, 77, 0.1)",
+                          border: "1px solid rgba(252, 211, 77, 0.3)",
+                          borderRadius: 4,
+                          color: "#fcd34d",
+                          cursor: "pointer",
+                          transition: "all 0.2s ease",
+                        }}
+                      >
+                        Follow-up List
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Summary stats */}
       {students.length > 0 && (
         <div style={{
           display: "grid",
@@ -795,9 +968,22 @@ export default function StudentsPage() {
               {money(summaryStats.outstanding)}
             </div>
           </div>
+          <div style={statCard}>
+            <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>Half Paid (Follow-up)</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4, color: "#fcd34d" }}>
+              {summaryStats.halfPaidCount}
+            </div>
+          </div>
+          <div style={statCard}>
+            <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>Unpaid</div>
+            <div style={{ fontSize: 18, fontWeight: 800, marginTop: 4, color: "#fca5a5" }}>
+              {summaryStats.unpaidCount}
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Due Soon */}
       {dueSoon.length > 0 && (
         <div style={{ ...panel, marginTop: 12 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
@@ -855,10 +1041,11 @@ export default function StudentsPage() {
                 </div>
               );
             })}
-                      </div>
+          </div>
         </div>
       )}
 
+      {/* Add/Edit Form */}
       {formOpen && (
         <div style={{ ...panel, marginTop: 12 }}>
           <h3 style={{ marginTop: 0, fontSize: 15 }}>{editingId ? "Edit Student" : "Add Student"}</h3>
@@ -969,6 +1156,7 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* Student list */}
       <div style={{ ...panel, marginTop: 12 }}>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center" }}>
           <select
@@ -1034,10 +1222,10 @@ export default function StudentsPage() {
         <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
           {filteredStudents.map((s) => {
             const totalPaid = totalsByStudent.get(s.id) ?? 0;
-            const isPaidFull = !!s.paid_in_full || (s.total_fee > 0 && totalPaid >= s.total_fee);
-            const paidDisplay = isPaidFull ? Math.max(s.total_fee, totalPaid) : totalPaid;
-            const balance = isPaidFull ? 0 : Math.max(0, s.total_fee - totalPaid);
-            const balanceDisplay = balance;
+            const balance = Math.max(0, s.total_fee - totalPaid);
+            const isPaidFull = !!s.paid_in_full;
+            const paidDisplay = isPaidFull ? s.total_fee : totalPaid;
+            const balanceDisplay = isPaidFull ? 0 : Math.max(0, s.total_fee - totalPaid);
             return (
               <div key={s.id} style={{
                 ...cardStyle,
@@ -1089,7 +1277,7 @@ export default function StudentsPage() {
                         <span>Balance: <strong style={{ color: balanceDisplay > 0 ? "#fca5a5" : "#86efac" }}>
                           {money(balanceDisplay)}
                         </strong></span>
-                                      )}
+                      )}
                     </div>
 
                     <ProgressBar totalFee={s.total_fee} totalPaid={totalPaid} isPaidFull={isPaidFull} />
@@ -1104,9 +1292,6 @@ export default function StudentsPage() {
                     <button onClick={() => loadEdit(s)} style={btnSecondary}>Edit</button>
                     <button onClick={() => openPayments(s)} style={btnPrimary}>Add Payment</button>
                     <button onClick={() => openReminder(s)} style={btnSecondary}>Reminder</button>
-                    <Link href={`/notes?student=${s.id}`} style={{ ...btnSecondary, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
-                      Notes
-                    </Link>
                     <button
                       onClick={() => deleteStudent(s)}
                       style={btnDanger}
@@ -1139,6 +1324,7 @@ export default function StudentsPage() {
         )}
       </div>
 
+      {/* Payment Modal */}
       {paymentOpen && paymentStudent && (
         <div style={modalOverlay} onClick={() => setPaymentOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -1200,6 +1386,7 @@ export default function StudentsPage() {
               <button onClick={savePayment} style={btnPrimary}>Add Payment</button>
             </div>
 
+            {/* Previous payments */}
             <div style={{ marginTop: 18, fontWeight: 700, fontSize: 13 }}>Previous payments</div>
             <div style={{ display: "grid", gap: 8, marginTop: 8, maxHeight: 240, overflow: "auto" }}>
               {(paymentsByStudent.get(paymentStudent.id) ?? []).map((p) => (
@@ -1232,6 +1419,7 @@ export default function StudentsPage() {
         </div>
       )}
 
+      {/* Reminder Modal */}
       {reminderOpen && reminderStudent && (
         <div style={modalOverlay} onClick={() => setReminderOpen(false)}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
@@ -1257,6 +1445,7 @@ export default function StudentsPage() {
     </div>
   );
 }
+
 const page: React.CSSProperties = {
   maxWidth: 1100,
   margin: "20px auto",
@@ -1308,16 +1497,6 @@ const inputSmall: React.CSSProperties = {
   color: "white",
   fontSize: 13,
   outline: "none",
-};
-
-const tabBtn: React.CSSProperties = {
-  padding: "7px 14px",
-  borderRadius: 10,
-  border: "1px solid rgba(255,255,255,0.12)",
-  color: "white",
-  cursor: "pointer",
-  fontSize: 13,
-  fontWeight: 600,
 };
 
 const statCard: React.CSSProperties = {
@@ -1391,6 +1570,18 @@ const linkBtnSmall: React.CSSProperties = {
   display: "inline-flex",
   alignItems: "center",
   fontSize: 12,
+};
+
+const tabBtn: React.CSSProperties = {
+  padding: "8px 14px",
+  borderRadius: 8,
+  border: "1px solid rgba(255,255,255,0.12)",
+  background: "rgba(255,255,255,0.06)",
+  color: "white",
+  cursor: "pointer",
+  fontSize: 13,
+  fontWeight: 500,
+  transition: "all 0.2s ease",
 };
 
 const cardStyle: React.CSSProperties = {
