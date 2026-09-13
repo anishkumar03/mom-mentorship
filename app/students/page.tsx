@@ -320,10 +320,19 @@ export default function StudentsPage() {
     return map;
   }, [payments]);
 
+  const extractMonthBatch = (batchStr: string | null): string | null => {
+    if (!batchStr) return null;
+    const match = batchStr.match(/^(January|February|March|April|May|June|July|August|September|October|November|December)/i);
+    return match ? match[1] + " Batch" : null;
+  };
+
   const batchByStudentId = useMemo(() => {
     const map = new Map<string, string | null>();
     for (const l of leadBatches) {
-      if (l.student_id) map.set(l.student_id, l.batch);
+      if (l.student_id) {
+        const monthBatch = extractMonthBatch(l.batch);
+        map.set(l.student_id, monthBatch);
+      }
     }
     return map;
   }, [leadBatches]);
@@ -359,9 +368,14 @@ export default function StudentsPage() {
   }, [preBatchFilteredStudents, batchByStudentId]);
 
   const batchTags = useMemo(() => {
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     return Object.keys(studentBatchGroups)
       .filter((k) => k !== "__UNASSIGNED__")
-      .sort();
+      .sort((a, b) => {
+        const monthA = months.findIndex(m => a.includes(m));
+        const monthB = months.findIndex(m => b.includes(m));
+        return monthA - monthB;
+      });
   }, [studentBatchGroups]);
 
   const filteredStudents = useMemo(() => {
