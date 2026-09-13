@@ -865,6 +865,25 @@ export default function StudentsPage() {
               {status === "all" ? "All" : status === "full" ? "✓ Fully Paid" : status === "half" ? "⚠ Half Paid" : "❌ Unpaid"}
             </button>
           ))}
+          {!showBatchDashboard && (
+            <button
+              onClick={() => setShowBatchDashboard(true)}
+              style={{
+                marginLeft: "auto",
+                padding: "6px 12px",
+                borderRadius: 6,
+                border: "1px solid rgba(79,163,255,0.3)",
+                background: "rgba(79,163,255,0.1)",
+                color: "#93c5fd",
+                fontSize: 12,
+                fontWeight: 500,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              Show Batch Dashboard
+            </button>
+          )}
         </div>
       )}
 
