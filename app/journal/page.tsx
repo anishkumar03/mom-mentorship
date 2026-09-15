@@ -1945,35 +1945,17 @@ export default function JournalPage() {
       {/* Performance Dashboard */}
       {!loading && <JournalDashboard trades={filteredBase as any} month={month} />}
 
+      {selectedDay && (
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
           <div style={{ fontWeight: 700, fontSize: 15 }}>
-            {selectedDay ? `Trades on ${toDateLabel(selectedDay)}` : "Trades by Day"}
+            Trades on {toDateLabel(selectedDay)}
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {!selectedDay && groupedDays.length > 0 && (
-              <button
-                onClick={() => {
-                  const allExpanded = expandedDays.size === groupedDays.length;
-                  if (allExpanded) {
-                    setExpandedDays(new Set());
-                  } else {
-                    setExpandedDays(new Set(groupedDays.map((d) => d.date)));
-                  }
-                }}
-                style={actionBtn}
-              >
-                {expandedDays.size === groupedDays.length ? "Collapse All" : "Expand All"}
-              </button>
-            )}
-            {selectedDay && (
-              <button onClick={() => setSelectedDay(null)} style={actionBtn}>Clear day filter</button>
-            )}
-          </div>
+          <button onClick={() => setSelectedDay(null)} style={actionBtn}>Close</button>
         </div>
 
         <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-          {groupedDays.map((day) => {
+          {groupedDays.filter((day) => day.date === selectedDay).map((day) => {
             const isExpanded = expandedDays.has(day.date);
             return (
               <div key={day.date} style={tradeCard}>
@@ -2190,6 +2172,7 @@ export default function JournalPage() {
           )}
         </div>
       </div>
+      )}
 
       <div className="card" style={{ padding: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
