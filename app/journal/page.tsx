@@ -1950,9 +1950,26 @@ export default function JournalPage() {
           <div style={{ fontWeight: 700, fontSize: 15 }}>
             {selectedDay ? `Trades on ${toDateLabel(selectedDay)}` : "Trades by Day"}
           </div>
-          {selectedDay && (
-            <button onClick={() => setSelectedDay(null)} style={actionBtn}>Clear day filter</button>
-          )}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {!selectedDay && groupedDays.length > 0 && (
+              <button
+                onClick={() => {
+                  const allExpanded = expandedDays.size === groupedDays.length;
+                  if (allExpanded) {
+                    setExpandedDays(new Set());
+                  } else {
+                    setExpandedDays(new Set(groupedDays.map((d) => d.date)));
+                  }
+                }}
+                style={actionBtn}
+              >
+                {expandedDays.size === groupedDays.length ? "Collapse All" : "Expand All"}
+              </button>
+            )}
+            {selectedDay && (
+              <button onClick={() => setSelectedDay(null)} style={actionBtn}>Clear day filter</button>
+            )}
+          </div>
         </div>
 
         <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
@@ -2209,7 +2226,7 @@ export default function JournalPage() {
                 </div>
                 <div
                   style={{
-                    fontSize: 12,
+                    fontSize: 16,
                     fontWeight: 600,
                     color: pnlTotal >= 0 ? "#4cc88c" : "#ff6b6b",
                     marginTop: 6

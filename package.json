@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "backfill:payments": "node scripts/backfill_paid_in_full_payments.js",
-    "seed:roi": "node scripts/seed_roi.js"
+    "seed:roi": "node scripts/seed_roi.js",
+    "add:september-trades": "node scripts/add_september_trades.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.95.3",
