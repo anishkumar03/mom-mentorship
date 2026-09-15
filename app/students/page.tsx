@@ -381,7 +381,7 @@ export default function StudentsPage() {
 
         switch (paymentStatusFilter) {
           case "full":
-            matches = paid >= s.total_fee || s.paid_in_full;
+            matches = paid >= s.total_fee || s.paid_in_full === true;
             break;
           case "half":
             matches = paid > 0 && paid < s.total_fee;
