@@ -852,6 +852,28 @@ export default function LeadsPage() {
     }
   };
 
+  const markBatchSentManually = async (l: Lead) => {
+    const confirmed = confirm(`Mark "${l.full_name || l.name}" as batch sent?`);
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .update({ batch_sent_at: new Date().toISOString() })
+        .eq("id", l.id);
+
+      if (error) {
+        alert(`Error: ${error.message}`);
+        return;
+      }
+
+      alert("Lead marked as batch sent!");
+      await fetchAll();
+    } catch (err) {
+      alert(`Failed to mark: ${err}`);
+    }
+  };
+
   const archiveLead = async (l: Lead) => {
     if (!leadColumns.includes("archived")) {
       alert("Archive is unavailable because this leads table has no archived column.");
@@ -1196,11 +1218,20 @@ export default function LeadsPage() {
             }}>Email</button>
           )}
           {l.email && (
-            <button onClick={() => openBatch(l)} style={{
-              ...btnSecondary,
-              background: "rgba(59,130,246,0.12)",
-              borderColor: "rgba(59,130,246,0.25)",
-            }}>Send Batch</button>
+            <>
+              <button onClick={() => openBatch(l)} style={{
+                ...btnSecondary,
+                background: "rgba(59,130,246,0.12)",
+                borderColor: "rgba(59,130,246,0.25)",
+              }}>Send Batch</button>
+              {!l.batch_sent_at && (
+                <button onClick={() => markBatchSentManually(l)} style={{
+                  ...btnSecondary,
+                  background: "rgba(34,197,94,0.12)",
+                  borderColor: "rgba(34,197,94,0.25)",
+                }}>Mark Batch Sent</button>
+              )}
+            </>
           )}
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
