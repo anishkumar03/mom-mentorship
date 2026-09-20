@@ -313,6 +313,21 @@ export default function LeadsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<string>("__NONE__");
 
+  // Auto-sync batch sent emails on mount
+  useEffect(() => {
+    const autoSyncBatchSent = async () => {
+      try {
+        await fetch("/api/sync-batch-sent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (err) {
+        console.log("Auto-sync batch sent completed");
+      }
+    };
+    autoSyncBatchSent();
+  }, []);
+
   const fetchAll = async () => {
     setLoading(true);
 
