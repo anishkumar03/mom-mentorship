@@ -1304,15 +1304,19 @@ export default function LeadsPage() {
             Add follow-up dates, then tap Add to Calendar to get phone notifications.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             onClick={syncBatchSentFromResend}
             disabled={syncBatchSentLoading}
             style={{
-              ...btnSecondary,
               padding: "10px 16px",
               fontSize: 13,
               fontWeight: 600,
+              background: "#4f46e5",
+              color: "white",
+              border: "1px solid #4338ca",
+              borderRadius: 6,
+              cursor: "pointer",
             }}
           >
             {syncBatchSentLoading ? "Syncing..." : "Sync Batch Sent"}
