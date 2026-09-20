@@ -221,25 +221,21 @@ export async function POST(req: NextRequest) {
 
     const batch = batches[0]
 
-    const { data: students, error: studentErr } = await supabase
+    // Try to get student name, but it's not required (leads can send without being students)
+    let firstName = 'there'
+    const { data: students } = await supabase
       .from('students')
-      .select('full_name, name, email')
+      .select('full_name, name')
       .ilike('email', email.toLowerCase())
       .limit(1)
 
-    if (studentErr) {
-      return NextResponse.json({ error: studentErr.message }, { status: 500 })
+    if (students && students.length > 0) {
+      firstName = (students[0].full_name || students[0].name || 'there').split(' ')[0]
+    } else {
+      // Try to extract name from email for leads
+      const emailName = email.split('@')[0].replace(/[._]/g, ' ')
+      firstName = emailName.split(' ')[0] || 'there'
     }
-
-    if (!students || students.length === 0) {
-      return NextResponse.json(
-        { error: `No student found with email: ${email}` },
-        { status: 404 }
-      )
-    }
-
-    const student = students[0]
-    const firstName = (student.full_name || student.name || 'there').split(' ')[0]
 
     let html: string
     let subject: string

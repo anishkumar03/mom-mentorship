@@ -1664,8 +1664,8 @@ export default function LeadsPage() {
             >
               <option value="">-- Choose a batch --</option>
               {batches.map((b) => (
-                <option key={b.id} value={b.batch_key}>
-                  {b.batch_name} ({b.type === 'group' ? '👥 Group' : '🎯 1-on-1'})
+                <option key={b.id} value={b.batch_key} title={b.batch_name}>
+                  {b.batch_key} ({b.type === 'group' ? '👥 Group' : '🎯 1-on-1'})
                 </option>
               ))}
             </select>
