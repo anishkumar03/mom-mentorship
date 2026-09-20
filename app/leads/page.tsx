@@ -1304,37 +1304,39 @@ export default function LeadsPage() {
             Add follow-up dates, then tap Add to Calendar to get phone notifications.
           </div>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            onClick={syncBatchSentFromResend}
-            disabled={syncBatchSentLoading}
-            style={{
-              padding: "10px 16px",
-              fontSize: 13,
-              fontWeight: 600,
-              background: "#4f46e5",
-              color: "white",
-              border: "1px solid #4338ca",
-              borderRadius: 6,
-              cursor: "pointer",
-            }}
-          >
-            {syncBatchSentLoading ? "Syncing..." : "Sync Batch Sent"}
-          </button>
-          <button
-            onClick={() => { resetForm(); setFormOpen(!formOpen); }}
-            style={{
-              ...btnPrimary,
-              padding: "10px 20px",
-              fontSize: 14,
-              fontWeight: 700,
-            }}
-          >
-            {formOpen ? "Close Form" : "+ Add Lead"}
-          </button>
-        </div>
+        <button
+          onClick={() => { resetForm(); setFormOpen(!formOpen); }}
+          style={{
+            ...btnPrimary,
+            padding: "10px 20px",
+            fontSize: 14,
+            fontWeight: 700,
+          }}
+        >
+          {formOpen ? "Close Form" : "+ Add Lead"}
+        </button>
       </div>
 
+
+      {/* Sync Batch Sent Button */}
+      <div style={{ marginTop: 12, padding: 10, background: "rgba(79,70,229,0.1)", borderRadius: 8, border: "1px solid rgba(79,70,229,0.3)" }}>
+        <button
+          onClick={syncBatchSentFromResend}
+          disabled={syncBatchSentLoading}
+          style={{
+            padding: "10px 16px",
+            fontSize: 13,
+            fontWeight: 600,
+            background: "#4f46e5",
+            color: "white",
+            border: "1px solid #4338ca",
+            borderRadius: 6,
+            cursor: syncBatchSentLoading ? "default" : "pointer",
+          }}
+        >
+          {syncBatchSentLoading ? "Syncing..." : "🔄 Sync Batch Sent"}
+        </button>
+      </div>
 
       {/* Convert feedback */}
       {convertError && (
