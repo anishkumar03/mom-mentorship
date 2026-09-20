@@ -317,12 +317,18 @@ export default function LeadsPage() {
   useEffect(() => {
     const autoSyncBatchSent = async () => {
       try {
-        await fetch("/api/sync-batch-sent", {
+        console.log("Starting auto-sync of batch sent emails...");
+        const res = await fetch("/api/sync-batch-sent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
+        const data = await res.json();
+        console.log("Auto-sync result:", data);
+        if (res.ok && data.updated > 0) {
+          console.log(`✓ Auto-synced: ${data.updated} leads updated`);
+        }
       } catch (err) {
-        console.log("Auto-sync batch sent completed");
+        console.error("Auto-sync error:", err);
       }
     };
     autoSyncBatchSent();
