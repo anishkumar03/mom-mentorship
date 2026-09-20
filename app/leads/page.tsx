@@ -300,6 +300,7 @@ export default function LeadsPage() {
   const [selectedBatch, setSelectedBatch] = useState<string>("");
   const [batchSending, setBatchSending] = useState(false);
   const [batchesData, setBatchesData] = useState<any[]>([]);
+  const [syncBatchSentLoading, setSyncBatchSentLoading] = useState(false);
 
   const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [queryFollowup, setQueryFollowup] = useState<string | null>(null);
@@ -828,6 +829,29 @@ export default function LeadsPage() {
     }
   };
 
+  const syncBatchSentFromResend = async () => {
+    setSyncBatchSentLoading(true);
+    try {
+      const res = await fetch("/api/sync-batch-sent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Error: ${data.error}`);
+        return;
+      }
+
+      alert(`Sync complete: ${data.updated} leads updated, ${data.skipped} skipped`);
+      await fetchAll();
+    } catch (err) {
+      alert(`Failed to sync: ${err}`);
+    } finally {
+      setSyncBatchSentLoading(false);
+    }
+  };
+
   const archiveLead = async (l: Lead) => {
     if (!leadColumns.includes("archived")) {
       alert("Archive is unavailable because this leads table has no archived column.");
@@ -1222,17 +1246,31 @@ export default function LeadsPage() {
             Add follow-up dates, then tap Add to Calendar to get phone notifications.
           </div>
         </div>
-        <button
-          onClick={() => { resetForm(); setFormOpen(!formOpen); }}
-          style={{
-            ...btnPrimary,
-            padding: "10px 20px",
-            fontSize: 14,
-            fontWeight: 700,
-          }}
-        >
-          {formOpen ? "Close Form" : "+ Add Lead"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={syncBatchSentFromResend}
+            disabled={syncBatchSentLoading}
+            style={{
+              ...btnSecondary,
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            {syncBatchSentLoading ? "Syncing..." : "Sync Batch Sent"}
+          </button>
+          <button
+            onClick={() => { resetForm(); setFormOpen(!formOpen); }}
+            style={{
+              ...btnPrimary,
+              padding: "10px 20px",
+              fontSize: 14,
+              fontWeight: 700,
+            }}
+          >
+            {formOpen ? "Close Form" : "+ Add Lead"}
+          </button>
+        </div>
       </div>
 
 
