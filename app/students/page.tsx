@@ -217,6 +217,12 @@ export default function StudentsPage() {
   const [reminderOpen, setReminderOpen] = useState(false);
   const [reminderStudent, setReminderStudent] = useState<Student | null>(null);
   const [reminderDate, setReminderDate] = useState("");
+
+  const [batchSendOpen, setBatchSendOpen] = useState(false);
+  const [batchSendStudent, setBatchSendStudent] = useState<Student | null>(null);
+  const [selectedBatchKey, setSelectedBatchKey] = useState("");
+  const [batches, setBatches] = useState<Array<{ id: string; batch_key: string; batch_name: string; type: string }>>([]);
+  const [sendingBatch, setSendingBatch] = useState(false);
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
 
   const fetchStudents = async () => {
@@ -288,10 +294,24 @@ export default function StudentsPage() {
     }
   };
 
+  const fetchBatches = async () => {
+    const { data, error } = await supabase
+      .from("email_batches")
+      .select("id,batch_key,batch_name,type")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error(error);
+      setBatches([]);
+    } else {
+      setBatches(Array.isArray(data) ? data : []);
+    }
+  };
+
   useEffect(() => {
     fetchStudents();
     fetchPayments();
     fetchLeadBatches();
+    fetchBatches();
   }, []);
 
   useEffect(() => {
@@ -772,6 +792,36 @@ export default function StudentsPage() {
     await fetchStudents();
     router.refresh();
     setDeletingStudentId(null);
+  };
+
+  const sendBatchEmail = async () => {
+    if (!batchSendStudent || !selectedBatchKey) return;
+
+    setSendingBatch(true);
+    try {
+      const response = await fetch('/api/send-batch-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: batchSendStudent.email,
+          batchKey: selectedBatchKey,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Error: ${data.error || 'Failed to send email'}`);
+      } else {
+        alert(`✓ Email sent to ${batchSendStudent.full_name || batchSendStudent.name}!`);
+        setBatchSendOpen(false);
+        setBatchSendStudent(null);
+        setSelectedBatchKey("");
+      }
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+    } finally {
+      setSendingBatch(false);
+    }
   };
 
   const exportCsv = () => {
@@ -1351,6 +1401,16 @@ export default function StudentsPage() {
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "flex-end", alignContent: "flex-start" }}>
                     <button onClick={() => loadEdit(s)} style={btnSecondary}>Edit</button>
                     <button onClick={() => openPayments(s)} style={btnPrimary}>Add Payment</button>
+                    <button
+                      onClick={() => {
+                        setBatchSendStudent(s);
+                        setBatchSendOpen(true);
+                        setSelectedBatchKey("");
+                      }}
+                      style={btnPrimary}
+                    >
+                      Send Batch
+                    </button>
                     <button onClick={() => openReminder(s)} style={btnSecondary}>Reminder</button>
                     <button
                       onClick={() => deleteStudent(s)}
@@ -1498,6 +1558,42 @@ export default function StudentsPage() {
             <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
               <button onClick={() => setReminderOpen(false)} style={btnSecondary}>Cancel</button>
               <button onClick={saveReminder} style={btnPrimary}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {batchSendOpen && batchSendStudent && (
+        <div style={modalOverlay} onClick={() => setBatchSendOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Send Batch Details</div>
+            <div style={{ opacity: 0.85, marginTop: 6 }}>
+              To: {displayName(batchSendStudent)} ({batchSendStudent.email})
+            </div>
+
+            <label style={{ ...label, marginTop: 12 }}>Select Batch *</label>
+            <select
+              value={selectedBatchKey}
+              onChange={(e) => setSelectedBatchKey(e.target.value)}
+              style={{ ...input, marginTop: 4 }}
+            >
+              <option value="">-- Choose a batch --</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.batch_key}>
+                  {b.batch_name} ({b.type === 'group' ? '👥 Group' : '🎯 1-on-1'})
+                </option>
+              ))}
+            </select>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
+              <button onClick={() => setBatchSendOpen(false)} style={btnSecondary}>Cancel</button>
+              <button
+                onClick={sendBatchEmail}
+                style={btnPrimary}
+                disabled={sendingBatch || !selectedBatchKey}
+              >
+                {sendingBatch ? "Sending..." : "Send Email"}
+              </button>
             </div>
           </div>
         </div>
