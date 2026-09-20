@@ -30,18 +30,13 @@ type Lead = {
   follow_up_at: string | null;
   last_note?: string | null;
   last_contacted_at?: string | null;
-
-  welcome_email_status?: string | null;
-  welcome_email_error?: string | null;
+  batch_sent_at?: string | null;
 
   archived?: boolean | null;
   created_at?: string | null;
 };
 
-// "Confirmed" is no longer a status you set manually — converting a lead to a student
-// (student_id) is the only signal for that now. Left out of the selectable list, but
-// STATUS_COLORS/stageKey below still render it correctly for any older lead that has it.
-const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Lost"] as const;
+const STATUSES = ["New", "Contacted", "Nurture", "Follow Up", "Confirmed", "Lost"] as const;
 const LEAD_SOURCES = ["Instagram", "WhatsApp", "Referral", "YouTube", "Manual"] as const;
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
@@ -299,6 +294,14 @@ export default function LeadsPage() {
   const [emailDraftId, setEmailDraftId] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
 
+  // Batch send modal
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchLead, setBatchLead] = useState<Lead | null>(null);
+  const [selectedBatch, setSelectedBatch] = useState<string>("");
+  const [batchSending, setBatchSending] = useState(false);
+  const [batchesData, setBatchesData] = useState<any[]>([]);
+  const [syncBatchSentLoading, setSyncBatchSentLoading] = useState(false);
+
   const [queryStatus, setQueryStatus] = useState<string | null>(null);
   const [queryFollowup, setQueryFollowup] = useState<string | null>(null);
   const [contactedHint, setContactedHint] = useState<string | null>(null);
@@ -307,14 +310,35 @@ export default function LeadsPage() {
   const [convertError, setConvertError] = useState<string | null>(null);
   const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-
-  const [batchSendOpen, setBatchSendOpen] = useState(false);
-  const [batchSendLead, setBatchSendLead] = useState<Lead | null>(null);
-  const [selectedBatchKey, setSelectedBatchKey] = useState("");
-  const [batches, setBatches] = useState<Array<{ id: string; batch_key: string; batch_name: string; type: string }>>([]);
-  const [sendingBatch, setSendingBatch] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<string>("__NONE__");
+
+  // Auto-sync batch sent emails on mount
+  useEffect(() => {
+    console.log("⚡ Leads component mounted, starting batch email sync...");
+    const autoSyncBatchSent = async () => {
+      try {
+        console.log("🔄 Starting auto-sync of batch sent emails...");
+        const res = await fetch("/api/sync-batch-sent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        console.log("📡 Sync response status:", res.status);
+        const data = await res.json();
+        console.log("📊 Auto-sync result:", data);
+        if (res.ok && data.updated > 0) {
+          console.log(`✅ Auto-synced: ${data.updated} leads updated`);
+        } else if (res.ok) {
+          console.log(`ℹ️ Sync completed: ${data.updated} updated, ${data.skipped} skipped`);
+        }
+      } catch (err) {
+        console.error("❌ Auto-sync error:", err);
+      }
+    };
+    // Delay sync to ensure component is fully loaded
+    const timer = setTimeout(autoSyncBatchSent, 500);
+    return () => clearTimeout(timer);
+  }, []);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -356,22 +380,8 @@ export default function LeadsPage() {
     setLoading(false);
   };
 
-  const fetchBatches = async () => {
-    const { data, error } = await supabase
-      .from("email_batches")
-      .select("id,batch_key,batch_name,type")
-      .order("created_at", { ascending: false });
-    if (error) {
-      console.error(error);
-      setBatches([]);
-    } else {
-      setBatches(Array.isArray(data) ? data : []);
-    }
-  };
-
   useEffect(() => {
     fetchAll();
-    fetchBatches();
   }, []);
 
   useEffect(() => {
@@ -800,6 +810,97 @@ export default function LeadsPage() {
     setEmailDrafts([]);
   };
 
+  // ─── Batch send functions ───
+  const openBatch = async (l: Lead) => {
+    setBatchLead(l);
+    setSelectedBatch("");
+    setBatchOpen(true);
+    const { data } = await supabase.from("email_batches").select("*").order("batch_name");
+    setBatchesData(data ?? []);
+  };
+
+  const closeBatchModal = () => {
+    setBatchOpen(false);
+    setBatchLead(null);
+    setSelectedBatch("");
+  };
+
+  const sendBatchEmail = async () => {
+    if (!batchLead?.email || !selectedBatch) return;
+
+    setBatchSending(true);
+    try {
+      const res = await fetch("/api/send-batch-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: batchLead.email,
+          batchKey: selectedBatch,
+          name: batchLead.full_name || batchLead.name,
+        }),
+      });
+
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`Error: ${error.error}`);
+        return;
+      }
+
+      alert("Batch email sent successfully!");
+      closeBatchModal();
+      await fetchAll();
+    } catch (err) {
+      alert(`Failed to send batch email: ${err}`);
+    } finally {
+      setBatchSending(false);
+    }
+  };
+
+  const syncBatchSentFromResend = async () => {
+    setSyncBatchSentLoading(true);
+    try {
+      const res = await fetch("/api/sync-batch-sent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Error: ${data.error}`);
+        return;
+      }
+
+      alert(`Sync complete: ${data.updated} leads updated, ${data.skipped} skipped`);
+      await fetchAll();
+    } catch (err) {
+      alert(`Failed to sync: ${err}`);
+    } finally {
+      setSyncBatchSentLoading(false);
+    }
+  };
+
+  const markBatchSentManually = async (l: Lead) => {
+    const confirmed = confirm(`Mark "${l.full_name || l.name}" as batch sent?`);
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from("leads")
+        .update({ batch_sent_at: new Date().toISOString() })
+        .eq("id", l.id);
+
+      if (error) {
+        alert(`Error: ${error.message}`);
+        return;
+      }
+
+      alert("Lead marked as batch sent!");
+      await fetchAll();
+    } catch (err) {
+      alert(`Failed to mark: ${err}`);
+    }
+  };
+
   const archiveLead = async (l: Lead) => {
     if (!leadColumns.includes("archived")) {
       alert("Archive is unavailable because this leads table has no archived column.");
@@ -845,7 +946,7 @@ export default function LeadsPage() {
       if (existing.data && existing.data.length > 0) {
         const { error } = await supabase
           .from("leads")
-          .update({ student_id: existing.data[0].id, converted_at: new Date().toISOString() })
+          .update({ student_id: existing.data[0].id, status: "Confirmed", converted_at: new Date().toISOString() })
           .eq("id", l.id);
         if (error) {
           setConvertError(error.message);
@@ -889,7 +990,7 @@ export default function LeadsPage() {
 
     const { error } = await supabase
       .from("leads")
-      .update({ student_id: inserted.data.id, converted_at: new Date().toISOString() })
+      .update({ student_id: inserted.data.id, status: "Confirmed", converted_at: new Date().toISOString() })
       .eq("id", l.id);
 
     if (error) {
@@ -900,39 +1001,6 @@ export default function LeadsPage() {
     setConvertSuccess("Converted to student.");
     fetchAll();
     router.refresh();
-  };
-
-  const sendBatchEmail = async () => {
-    if (!batchSendLead || !selectedBatchKey) return;
-
-    setSendingBatch(true);
-    try {
-      const response = await fetch('/api/send-batch-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: batchSendLead.email,
-          batchKey: selectedBatchKey,
-          name: batchSendLead.full_name || batchSendLead.name,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        alert(`Error: ${data.error || 'Failed to send email'}`);
-      } else {
-        alert(`✓ Email sent to ${batchSendLead.full_name || batchSendLead.name}!`);
-        setBatchSendOpen(false);
-        setBatchSendLead(null);
-        setSelectedBatchKey("");
-        // Refresh leads to show batch sent badge
-        await fetchAll();
-      }
-    } catch (error: any) {
-      alert(`Error: ${error.message}`);
-    } finally {
-      setSendingBatch(false);
-    }
   };
 
   const StatusBadge = ({ status }: { status: string }) => {
@@ -983,27 +1051,6 @@ export default function LeadsPage() {
           {abbr}
         </span>
         {src}
-      </span>
-    );
-  };
-
-  // Stays quiet for successful sends — only surfaces when a lead didn't get their welcome email.
-  const WelcomeEmailBadge = ({ l }: { l: Lead }) => {
-    const status = l.welcome_email_status;
-    if (!status || status === "sent") return null;
-    const label = status === "failed" ? "⚠ Welcome email failed" : status === "skipped_duplicate" ? "Welcome email skipped (duplicate)" : status;
-    const title = status === "failed" && l.welcome_email_error ? l.welcome_email_error : undefined;
-    return (
-      <span title={title} style={{
-        display: "inline-block",
-        padding: "3px 10px",
-        borderRadius: 999,
-        background: status === "failed" ? "rgba(239,68,68,0.15)" : "rgba(255,255,255,0.08)",
-        color: status === "failed" ? "#fca5a5" : "rgba(255,255,255,0.6)",
-        fontSize: 11,
-        fontWeight: 700,
-      }}>
-        {label}
       </span>
     );
   };
@@ -1116,7 +1163,6 @@ export default function LeadsPage() {
               <span style={{ fontWeight: 700, fontSize: 15 }}>{name}</span>
               <StatusBadge status={l.status ?? "New"} />
               <ChannelBadge source={l.source} />
-              <WelcomeEmailBadge l={l} />
             </div>
 
             {/* Contact info row */}
@@ -1151,17 +1197,6 @@ export default function LeadsPage() {
               {l.last_contacted_at && (
                 <span>Contacted {timeAgo(l.last_contacted_at)}</span>
               )}
-              {(l as any).batch_sent_at && (
-                <span style={{
-                  padding: "4px 10px",
-                  borderRadius: 6,
-                  background: "rgba(34, 197, 94, 0.15)",
-                  color: "#86efac",
-                  opacity: 1
-                }}>
-                  ✓ Batch Sent {timeAgo((l as any).batch_sent_at)}
-                </span>
-              )}
               {l.follow_up_at && (
                 <span style={{ color: isOverdue ? "#fca5a5" : "#fcd34d" }}>
                   {isOverdue ? "Overdue: " : "Follow-up: "}
@@ -1182,6 +1217,19 @@ export default function LeadsPage() {
           </div>
         ) : null}
 
+        {/* Batch sent badge */}
+        {l.batch_sent_at && (
+          <div style={{
+            marginTop: 8, fontSize: 12,
+            padding: "4px 10px", borderRadius: 4,
+            background: "rgba(34,197,94,0.15)",
+            color: "#86efac",
+            display: "inline-block"
+          }}>
+            ✓ Batch Sent {timeAgo(l.batch_sent_at)}
+          </div>
+        )}
+
         {/* Action buttons */}
         <div style={{
           display: "flex", flexWrap: "wrap", gap: 6, marginTop: 12,
@@ -1198,43 +1246,41 @@ export default function LeadsPage() {
           )}
           {l.email && (
             <>
-              <button onClick={() => {
-                setBatchSendLead(l);
-                setBatchSendOpen(true);
-                setSelectedBatchKey("");
-              }} style={btnPrimary}>Send Batch</button>
-              {!(l as any).batch_sent_at && (
-                <button onClick={async () => {
-                  const ok = confirm("Mark this lead as batch sent?");
-                  if (!ok) return;
-                  try {
-                    await supabase
-                      .from('leads')
-                      .update({ batch_sent_at: new Date().toISOString() })
-                      .eq('id', l.id);
-                    alert("✓ Marked as batch sent");
-                    await fetchAll();
-                  } catch (err) {
-                    alert("Error marking as sent");
-                  }
-                }} style={{ ...btnSecondary, fontSize: 12 }}>Mark Batch Sent</button>
+              <button onClick={() => openBatch(l)} style={{
+                ...btnSecondary,
+                background: "rgba(59,130,246,0.12)",
+                borderColor: "rgba(59,130,246,0.25)",
+              }}>Send Batch</button>
+              {!l.batch_sent_at && (
+                <button onClick={() => markBatchSentManually(l)} style={{
+                  ...btnSecondary,
+                  background: "rgba(34,197,94,0.12)",
+                  borderColor: "rgba(34,197,94,0.25)",
+                }}>Mark Batch Sent</button>
               )}
             </>
           )}
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
           <button onClick={() => setStatusOnly(l, "Nurture")} style={btnSecondary}>Nurture</button>
-          <button
-            onClick={() => convertToStudent(l)}
-            style={{
-              ...btnSecondary,
-              background: "rgba(34,197,94,0.15)",
-              borderColor: "rgba(34,197,94,0.3)",
-            }}
-            disabled={!!l.student_id}
-          >
-            {l.student_id ? "Converted" : "Convert to Student"}
-          </button>
+          <button onClick={() => setStatusOnly(l, "Confirmed")} style={{
+            ...btnSecondary,
+            background: "rgba(34,197,94,0.12)",
+            borderColor: "rgba(34,197,94,0.25)",
+          }}>Confirmed</button>
+          {stageKey(l.status) === "Confirmed" && (
+            <button
+              onClick={() => convertToStudent(l)}
+              style={{
+                ...btnSecondary,
+                background: "rgba(34,197,94,0.15)",
+                borderColor: "rgba(34,197,94,0.3)",
+              }}
+              disabled={!!l.student_id}
+            >
+              {l.student_id ? "Converted" : "Convert to Student"}
+            </button>
+          )}
           <button onClick={() => setStatusOnly(l, "Lost")} style={btnDanger}>Lost</button>
           <button onClick={() => archiveLead(l)} style={btnSecondary}>Archive</button>
           <button onClick={() => deleteLead(l)} style={btnDanger}>Delete</button>
@@ -1271,6 +1317,26 @@ export default function LeadsPage() {
         </button>
       </div>
 
+
+      {/* Sync Batch Sent Button */}
+      <div style={{ marginTop: 12, padding: 10, background: "rgba(79,70,229,0.1)", borderRadius: 8, border: "1px solid rgba(79,70,229,0.3)" }}>
+        <button
+          onClick={syncBatchSentFromResend}
+          disabled={syncBatchSentLoading}
+          style={{
+            padding: "10px 16px",
+            fontSize: 13,
+            fontWeight: 600,
+            background: "#4f46e5",
+            color: "white",
+            border: "1px solid #4338ca",
+            borderRadius: 6,
+            cursor: syncBatchSentLoading ? "default" : "pointer",
+          }}
+        >
+          {syncBatchSentLoading ? "Syncing..." : "🔄 Sync Batch Sent"}
+        </button>
+      </div>
 
       {/* Convert feedback */}
       {convertError && (
@@ -1680,36 +1746,52 @@ export default function LeadsPage() {
         </div>
       )}
 
-      {batchSendOpen && batchSendLead && (
-        <div style={modalOverlay} onClick={() => setBatchSendOpen(false)}>
+      {/* Batch send modal */}
+      {batchOpen && (
+        <div style={modalOverlay} onClick={closeBatchModal}>
           <div style={modalCard} onClick={(e) => e.stopPropagation()}>
-            <div style={{ fontWeight: 700, fontSize: 16 }}>Send Batch Details</div>
-            <div style={{ opacity: 0.85, marginTop: 6 }}>
-              To: {leadName(batchSendLead)} &lt;{batchSendLead.email}&gt;
+            <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 16 }}>
+              Send Batch Details
             </div>
 
-            <label style={{ ...label, marginTop: 12 }}>Select Batch *</label>
-            <select
-              value={selectedBatchKey}
-              onChange={(e) => setSelectedBatchKey(e.target.value)}
-              style={{ ...input, marginTop: 4 }}
-            >
-              <option value="">-- Choose a batch --</option>
-              {batches.map((b) => (
-                <option key={b.id} value={b.batch_key} title={b.batch_name}>
-                  {b.batch_key} ({b.type === 'group' ? '👥 Group' : '🎯 1-on-1'})
-                </option>
-              ))}
-            </select>
+            <div style={{ marginBottom: 16 }}>
+              <label style={label}>Select Batch</label>
+              <select
+                value={selectedBatch}
+                onChange={(e) => setSelectedBatch(e.target.value)}
+                style={{
+                  ...input,
+                  width: "100%",
+                  padding: "8px 12px",
+                  borderRadius: 6,
+                  border: "1px solid rgba(139,92,246,0.3)",
+                  background: "rgba(139,92,246,0.05)",
+                  color: "white",
+                }}
+              >
+                <option value="">-- Select a batch --</option>
+                {batchesData.map((batch) => (
+                  <option key={batch.id} value={batch.batch_key}>
+                    {batch.batch_key}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
-              <button onClick={() => setBatchSendOpen(false)} style={btnSecondary}>Cancel</button>
+            <div style={{ marginBottom: 16, fontSize: 13, opacity: 0.8 }}>
+              <p style={{ margin: 0 }}>
+                Email will be sent to: <strong>{batchLead?.email}</strong>
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button onClick={closeBatchModal} style={btnSecondary}>Cancel</button>
               <button
                 onClick={sendBatchEmail}
                 style={btnPrimary}
-                disabled={sendingBatch || !selectedBatchKey}
+                disabled={!selectedBatch || batchSending}
               >
-                {sendingBatch ? "Sending..." : "Send Email"}
+                {batchSending ? "Sending..." : "Send"}
               </button>
             </div>
           </div>
@@ -1737,18 +1819,17 @@ const panel: React.CSSProperties = {
 };
 
 const cardStyle: React.CSSProperties = {
-  border: "1px solid var(--border)",
-  borderRadius: 8,
-  padding: 14,
-  background: "linear-gradient(135deg, rgba(26, 47, 71, 0.4) 0%, rgba(19, 35, 57, 0.2) 100%)",
-  transition: "all 0.2s ease",
-  boxShadow: "0 2px 8px rgba(0,0,0,0.2)"
+  border: "1px solid rgba(255,255,255,0.08)",
+  borderRadius: 12,
+  padding: 12,
+  background: "rgba(255,255,255,0.03)",
+  transition: "transform 120ms ease, box-shadow 120ms ease",
+  boxShadow: "0 0 0 rgba(0,0,0,0)"
 };
 
 const cardHoverStyle: React.CSSProperties = {
   transform: "translateY(-2px)",
-  borderColor: "rgba(59, 130, 246, 0.3)",
-  boxShadow: "0 8px 16px rgba(59, 130, 246, 0.1)"
+  boxShadow: "0 12px 24px rgba(0,0,0,0.18)"
 };
 
 const followBadgeBase: React.CSSProperties = {
@@ -1894,33 +1975,30 @@ const linkBtnSmall: React.CSSProperties = {
 const modalOverlay: React.CSSProperties = {
   position: "fixed",
   inset: 0,
-  background: "rgba(0,0,0,0.8)",
+  background: "rgba(0,0,0,0.7)",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   zIndex: 9999,
   padding: 16,
-  backdropFilter: "blur(4px)",
 };
 
 const modalCard: React.CSSProperties = {
   width: 400,
   maxWidth: "100%",
-  borderRadius: 12,
-  padding: 24,
-  border: "1px solid var(--border)",
-  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
-  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
+  borderRadius: 16,
+  padding: 20,
+  border: "1px solid rgba(255,255,255,0.10)",
+  background: "#0b1b33",
 };
 
 const emailModalCard: React.CSSProperties = {
   width: 560,
   maxWidth: "100%",
-  borderRadius: 12,
-  padding: 24,
-  border: "1px solid var(--border)",
-  background: "linear-gradient(135deg, var(--card) 0%, var(--cardSoft) 100%)",
-  boxShadow: "0 20px 50px rgba(0, 0, 0, 0.5)",
+  borderRadius: 16,
+  padding: 20,
+  border: "1px solid rgba(139,92,246,0.2)",
+  background: "#0b1b33",
   maxHeight: "90vh",
   overflowY: "auto",
 };
