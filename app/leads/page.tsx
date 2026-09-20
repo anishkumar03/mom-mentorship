@@ -1197,11 +1197,29 @@ export default function LeadsPage() {
             }}>Email</button>
           )}
           {l.email && (
-            <button onClick={() => {
-              setBatchSendLead(l);
-              setBatchSendOpen(true);
-              setSelectedBatchKey("");
-            }} style={btnPrimary}>Send Batch</button>
+            <>
+              <button onClick={() => {
+                setBatchSendLead(l);
+                setBatchSendOpen(true);
+                setSelectedBatchKey("");
+              }} style={btnPrimary}>Send Batch</button>
+              {!(l as any).batch_sent_at && (
+                <button onClick={async () => {
+                  const ok = confirm("Mark this lead as batch sent?");
+                  if (!ok) return;
+                  try {
+                    await supabase
+                      .from('leads')
+                      .update({ batch_sent_at: new Date().toISOString() })
+                      .eq('id', l.id);
+                    alert("✓ Marked as batch sent");
+                    await fetchAll();
+                  } catch (err) {
+                    alert("Error marking as sent");
+                  }
+                }} style={{ ...btnSecondary, fontSize: 12 }}>Mark Batch Sent</button>
+              )}
+            </>
           )}
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
