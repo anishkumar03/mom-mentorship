@@ -925,6 +925,8 @@ export default function LeadsPage() {
         setBatchSendOpen(false);
         setBatchSendLead(null);
         setSelectedBatchKey("");
+        // Refresh leads to show batch sent badge
+        await fetchAll();
       }
     } catch (error: any) {
       alert(`Error: ${error.message}`);
