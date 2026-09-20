@@ -113,7 +113,7 @@ ${sessionScheduleBlock}
 </p>
 <p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">Payment</p>
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 6px;"><strong>Canada</strong> — Interac e-Transfer to anish@mindovermarkets.net<br/><strong>Outside Canada</strong> — <a href="https://buy.stripe.com/bJebJ04IB0866mq1I65Rm00" style="color:#d4a832;">Pay with Stripe</a></p>
-<p style="font-size:13px;color:#dc2626;margin:0 0 24px;">Please complete payment before ${paymentDeadline} and include your full name in the transfer message. Payment is non-refundable. Limited to 10 seats.</p>
+<p style="font-size:13px;color:#dc2626;margin:0 0 24px;">Please complete payment before ${paymentDeadline} and include your full name in the transfer message. Payment is non-refundable.</p>
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 24px;">If you have any questions, simply reply to this email and I will personally guide you through the next steps.</p>
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0;">Let's make these 7 weeks a powerful turning point in your trading journey.<br/><br/>Warm regards,<br/><strong style="color:#0a1628;">Anish Kumar Pillai</strong><br/>Mind Over Markets<br/><a href="mailto:anish@mindovermarkets.net" style="color:#d4a832;">anish@mindovermarkets.net</a><br/>+1 (613) 701-4597</p>
 </td></tr>
