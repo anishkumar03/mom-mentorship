@@ -307,6 +307,12 @@ export default function LeadsPage() {
   const [convertError, setConvertError] = useState<string | null>(null);
   const [convertSuccess, setConvertSuccess] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+
+  const [batchSendOpen, setBatchSendOpen] = useState(false);
+  const [batchSendLead, setBatchSendLead] = useState<Lead | null>(null);
+  const [selectedBatchKey, setSelectedBatchKey] = useState("");
+  const [batches, setBatches] = useState<Array<{ id: string; batch_key: string; batch_name: string; type: string }>>([]);
+  const [sendingBatch, setSendingBatch] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<string>("__NONE__");
 
@@ -350,8 +356,22 @@ export default function LeadsPage() {
     setLoading(false);
   };
 
+  const fetchBatches = async () => {
+    const { data, error } = await supabase
+      .from("email_batches")
+      .select("id,batch_key,batch_name,type")
+      .order("created_at", { ascending: false });
+    if (error) {
+      console.error(error);
+      setBatches([]);
+    } else {
+      setBatches(Array.isArray(data) ? data : []);
+    }
+  };
+
   useEffect(() => {
     fetchAll();
+    fetchBatches();
   }, []);
 
   useEffect(() => {
@@ -882,6 +902,36 @@ export default function LeadsPage() {
     router.refresh();
   };
 
+  const sendBatchEmail = async () => {
+    if (!batchSendLead || !selectedBatchKey) return;
+
+    setSendingBatch(true);
+    try {
+      const response = await fetch('/api/send-batch-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: batchSendLead.email,
+          batchKey: selectedBatchKey,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        alert(`Error: ${data.error || 'Failed to send email'}`);
+      } else {
+        alert(`✓ Email sent to ${batchSendLead.full_name || batchSendLead.name}!`);
+        setBatchSendOpen(false);
+        setBatchSendLead(null);
+        setSelectedBatchKey("");
+      }
+    } catch (error: any) {
+      alert(`Error: ${error.message}`);
+    } finally {
+      setSendingBatch(false);
+    }
+  };
+
   const StatusBadge = ({ status }: { status: string }) => {
     const stage = stageKey(status);
     const colors = STATUS_COLORS[stage] ?? STATUS_COLORS["New"];
@@ -1131,6 +1181,13 @@ export default function LeadsPage() {
               background: "rgba(139,92,246,0.12)",
               borderColor: "rgba(139,92,246,0.25)",
             }}>Email</button>
+          )}
+          {l.email && (
+            <button onClick={() => {
+              setBatchSendLead(l);
+              setBatchSendOpen(true);
+              setSelectedBatchKey("");
+            }} style={btnPrimary}>Send Batch</button>
           )}
           <button onClick={() => setStatusOnly(l, "Contacted")} style={btnSecondary}>Contacted</button>
           <button onClick={() => openFollow(l)} style={btnPrimary}>Follow</button>
@@ -1585,6 +1642,42 @@ export default function LeadsPage() {
               </button>
               <button onClick={sendEmail} style={btnPrimary} disabled={emailSending}>
                 {emailSending ? "Sending..." : "Send Email"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {batchSendOpen && batchSendLead && (
+        <div style={modalOverlay} onClick={() => setBatchSendOpen(false)}>
+          <div style={modalCard} onClick={(e) => e.stopPropagation()}>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>Send Batch Details</div>
+            <div style={{ opacity: 0.85, marginTop: 6 }}>
+              To: {leadName(batchSendLead)} &lt;{batchSendLead.email}&gt;
+            </div>
+
+            <label style={{ ...label, marginTop: 12 }}>Select Batch *</label>
+            <select
+              value={selectedBatchKey}
+              onChange={(e) => setSelectedBatchKey(e.target.value)}
+              style={{ ...input, marginTop: 4 }}
+            >
+              <option value="">-- Choose a batch --</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.batch_key}>
+                  {b.batch_name} ({b.type === 'group' ? '👥 Group' : '🎯 1-on-1'})
+                </option>
+              ))}
+            </select>
+
+            <div style={{ display: "flex", gap: 10, marginTop: 14, justifyContent: "flex-end" }}>
+              <button onClick={() => setBatchSendOpen(false)} style={btnSecondary}>Cancel</button>
+              <button
+                onClick={sendBatchEmail}
+                style={btnPrimary}
+                disabled={sendingBatch || !selectedBatchKey}
+              >
+                {sendingBatch ? "Sending..." : "Send Email"}
               </button>
             </div>
           </div>
