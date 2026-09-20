@@ -315,20 +315,25 @@ export default function LeadsPage() {
 
   // Auto-sync batch sent emails on mount
   useEffect(() => {
+    console.log("⚡ Leads component mounted, starting batch email sync...");
     const autoSyncBatchSent = async () => {
       try {
-        console.log("Starting auto-sync of batch sent emails...");
+        console.log("🔄 Starting auto-sync of batch sent emails...");
         const res = await fetch("/api/sync-batch-sent", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         });
+        console.log("📡 Sync response status:", res.status);
         const data = await res.json();
-        console.log("Auto-sync result:", data);
+        console.log("📊 Auto-sync result:", data);
         if (res.ok && data.updated > 0) {
-          console.log(`✓ Auto-synced: ${data.updated} leads updated`);
+          console.log(`✅ Auto-synced: ${data.updated} leads updated`);
+          await fetchAll();
+        } else if (res.ok) {
+          console.log(`ℹ️ Sync completed: ${data.skipped} leads skipped (already marked or no match)`);
         }
       } catch (err) {
-        console.error("Auto-sync error:", err);
+        console.error("❌ Auto-sync error:", err);
       }
     };
     autoSyncBatchSent();
