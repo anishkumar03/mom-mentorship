@@ -45,10 +45,12 @@ export async function POST(request: NextRequest) {
     let updated = 0;
     let skipped = 0;
     let emailsChecked = 0;
+    const debugInfo: any[] = [];
 
     for (const email of emails) {
       // Only process emails from batch sender
-      if (!email.from || email.from !== "anish@mindovermarkets.net") {
+      if (!email.from || !email.from.includes("anish@mindovermarkets.net")) {
+        debugInfo.push({ to: email.to?.[0], from: email.from, reason: "wrong_sender" });
         skipped++;
         continue;
       }
@@ -56,6 +58,7 @@ export async function POST(request: NextRequest) {
       // Check if email is from last 24 hours
       const emailTime = new Date(email.created_at).getTime();
       if (emailTime < oneDayAgo) {
+        debugInfo.push({ to: email.to?.[0], reason: "too_old", created_at: email.created_at });
         skipped++;
         continue;
       }
@@ -114,7 +117,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       updated,
       skipped,
+      emailsChecked,
+      totalEmailsFetched: emails.length,
       message: `Updated ${updated} leads, skipped ${skipped}`,
+      sampleEmails: emails.slice(0, 3).map((e: any) => ({
+        from: e.from,
+        to: e.to?.[0],
+        created_at: e.created_at,
+      })),
+      debugInfo: debugInfo.slice(0, 5),
     });
   } catch (error) {
     console.error("Sync batch sent error:", error);
