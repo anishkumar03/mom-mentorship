@@ -328,15 +328,16 @@ export default function LeadsPage() {
         console.log("📊 Auto-sync result:", data);
         if (res.ok && data.updated > 0) {
           console.log(`✅ Auto-synced: ${data.updated} leads updated`);
-          await fetchAll();
         } else if (res.ok) {
-          console.log(`ℹ️ Sync completed: ${data.skipped} leads skipped (already marked or no match)`);
+          console.log(`ℹ️ Sync completed: ${data.updated} updated, ${data.skipped} skipped`);
         }
       } catch (err) {
         console.error("❌ Auto-sync error:", err);
       }
     };
-    autoSyncBatchSent();
+    // Delay sync to ensure component is fully loaded
+    const timer = setTimeout(autoSyncBatchSent, 500);
+    return () => clearTimeout(timer);
   }, []);
 
   const fetchAll = async () => {
