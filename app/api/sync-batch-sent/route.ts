@@ -29,10 +29,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const response = await queryResendAPI(`/emails?limit=100&created_at=${oneDayAgo}`);
+    // Fetch emails from last 24 hours
+    const response = await queryResendAPI(`/emails?limit=100`);
 
-    if (!response.data) {
+    if (!response.data || response.data.length === 0) {
       return NextResponse.json({
         updated: 0,
         skipped: 0,
@@ -40,13 +40,22 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
     const emails = response.data;
     let updated = 0;
     let skipped = 0;
+    let emailsChecked = 0;
 
     for (const email of emails) {
       // Only process emails from batch sender
-      if (email.from !== "anish@mindovermarkets.net") {
+      if (!email.from || email.from !== "anish@mindovermarkets.net") {
+        skipped++;
+        continue;
+      }
+
+      // Check if email is from last 24 hours
+      const emailTime = new Date(email.created_at).getTime();
+      if (emailTime < oneDayAgo) {
         skipped++;
         continue;
       }
@@ -56,16 +65,18 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
+      emailsChecked++;
       const recipientEmail = Array.isArray(email.to) ? email.to[0] : email.to;
 
       // Check if lead exists and doesn't already have batch_sent_at
-      const { data: existing, error: selectError } = await supabase
+      const { data: existing } = await supabase
         .from("leads")
         .select("id, batch_sent_at")
-        .eq("email", recipientEmail)
-        .single();
+        .eq("email", recipientEmail.toLowerCase())
+        .single()
+        .catch(() => ({ data: null }));
 
-      if (selectError || !existing) {
+      if (!existing) {
         skipped++;
         continue;
       }
@@ -79,9 +90,10 @@ export async function POST(request: NextRequest) {
       const { error: updateError } = await supabase
         .from("leads")
         .update({ batch_sent_at: new Date(email.created_at).toISOString() })
-        .eq("email", recipientEmail);
+        .eq("id", existing.id);
 
       if (updateError) {
+        console.error("Update error:", updateError);
         skipped++;
       } else {
         updated++;
