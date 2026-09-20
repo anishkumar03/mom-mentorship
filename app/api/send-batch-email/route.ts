@@ -271,10 +271,15 @@ export async function POST(req: NextRequest) {
 
     // Update lead record to mark batch as sent (silently fail if it doesn't work)
     try {
-      await supabase
+      const now = new Date().toISOString()
+      const { error: updateErr } = await supabase
         .from('leads')
-        .update({ batch_sent_at: new Date().toISOString() })
+        .update({ batch_sent_at: now })
         .ilike('email', email.toLowerCase())
+
+      if (updateErr) {
+        console.error('Failed to update lead batch_sent_at:', updateErr.message)
+      }
     } catch (err) {
       // Silently fail if lead update doesn't work - email was still sent
       console.error('Failed to update lead batch_sent_at:', err)
