@@ -913,6 +913,7 @@ export default function LeadsPage() {
         body: JSON.stringify({
           email: batchSendLead.email,
           batchKey: selectedBatchKey,
+          name: batchSendLead.full_name || batchSendLead.name,
         }),
       });
 

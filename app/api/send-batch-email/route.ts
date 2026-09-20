@@ -193,7 +193,7 @@ function oneOnOneEmailHtml(vars: { firstName: string; fee: string }) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { email, batchKey } = body
+    const { email, batchKey, name } = body
 
     if (!email || !batchKey) {
       return NextResponse.json(
@@ -221,20 +221,22 @@ export async function POST(req: NextRequest) {
 
     const batch = batches[0]
 
-    // Try to get student name, but it's not required (leads can send without being students)
+    // Use provided name first, then try student record, fallback to email
     let firstName = 'there'
-    const { data: students } = await supabase
-      .from('students')
-      .select('full_name, name')
-      .ilike('email', email.toLowerCase())
-      .limit(1)
 
-    if (students && students.length > 0) {
-      firstName = (students[0].full_name || students[0].name || 'there').split(' ')[0]
+    if (name) {
+      firstName = (name || 'there').split(' ')[0]
     } else {
-      // Try to extract name from email for leads
-      const emailName = email.split('@')[0].replace(/[._]/g, ' ')
-      firstName = emailName.split(' ')[0] || 'there'
+      // Try to get student name if not provided
+      const { data: students } = await supabase
+        .from('students')
+        .select('full_name, name')
+        .ilike('email', email.toLowerCase())
+        .limit(1)
+
+      if (students && students.length > 0) {
+        firstName = (students[0].full_name || students[0].name || 'there').split(' ')[0]
+      }
     }
 
     let html: string
