@@ -2,13 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { Resend } from "resend";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 const groupEmailHtml = (
   studentName: string,
   batchKey: string,
@@ -127,6 +120,13 @@ const oneOnOneEmailHtml = (
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
     const { email, batchKey, name } = await request.json();
 
     if (!email || !batchKey) {

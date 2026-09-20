@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
-
 async function queryResendAPI(path: string): Promise<any> {
   const res = await fetch(`https://api.resend.com${path}`, {
     headers: {
@@ -22,6 +17,11 @@ async function queryResendAPI(path: string): Promise<any> {
 
 export async function POST(request: NextRequest) {
   try {
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
     if (!process.env.RESEND_API_KEY) {
       return NextResponse.json(
         { error: "RESEND_API_KEY not configured" },
