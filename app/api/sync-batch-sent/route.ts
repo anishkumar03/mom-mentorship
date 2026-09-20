@@ -69,14 +69,20 @@ export async function POST(request: NextRequest) {
       const recipientEmail = Array.isArray(email.to) ? email.to[0] : email.to;
 
       // Check if lead exists and doesn't already have batch_sent_at
-      const { data: existing } = await supabase
-        .from("leads")
-        .select("id, batch_sent_at")
-        .eq("email", recipientEmail.toLowerCase())
-        .single()
-        .catch(() => ({ data: null }));
+      let existing;
+      try {
+        const { data, error } = await supabase
+          .from("leads")
+          .select("id, batch_sent_at")
+          .eq("email", recipientEmail.toLowerCase())
+          .single();
 
-      if (!existing) {
+        if (error || !data) {
+          skipped++;
+          continue;
+        }
+        existing = data;
+      } catch (err) {
         skipped++;
         continue;
       }
@@ -87,16 +93,21 @@ export async function POST(request: NextRequest) {
       }
 
       // Update with batch_sent_at
-      const { error: updateError } = await supabase
-        .from("leads")
-        .update({ batch_sent_at: new Date(email.created_at).toISOString() })
-        .eq("id", existing.id);
+      try {
+        const { error: updateError } = await supabase
+          .from("leads")
+          .update({ batch_sent_at: new Date(email.created_at).toISOString() })
+          .eq("id", existing.id);
 
-      if (updateError) {
-        console.error("Update error:", updateError);
+        if (updateError) {
+          console.error("Update error:", updateError);
+          skipped++;
+        } else {
+          updated++;
+        }
+      } catch (err) {
+        console.error("Update exception:", err);
         skipped++;
-      } else {
-        updated++;
       }
     }
 
