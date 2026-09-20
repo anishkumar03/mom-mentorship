@@ -269,6 +269,17 @@ export async function POST(req: NextRequest) {
 
     await sendEmail(email, subject, html)
 
+    // Update lead record to mark batch as sent
+    await supabase
+      .from('leads')
+      .update({ batch_sent_at: new Date().toISOString() })
+      .ilike('email', email.toLowerCase())
+      .throwOnError()
+      .then()
+      .catch(() => {
+        // Silently fail if lead update doesn't work - email was still sent
+      })
+
     return NextResponse.json({
       success: true,
       message: `Email sent to ${firstName} (${email})`,

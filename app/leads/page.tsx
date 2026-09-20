@@ -1149,6 +1149,17 @@ export default function LeadsPage() {
               {l.last_contacted_at && (
                 <span>Contacted {timeAgo(l.last_contacted_at)}</span>
               )}
+              {(l as any).batch_sent_at && (
+                <span style={{
+                  padding: "4px 10px",
+                  borderRadius: 6,
+                  background: "rgba(34, 197, 94, 0.15)",
+                  color: "#86efac",
+                  opacity: 1
+                }}>
+                  ✓ Batch Sent {timeAgo((l as any).batch_sent_at)}
+                </span>
+              )}
               {l.follow_up_at && (
                 <span style={{ color: isOverdue ? "#fca5a5" : "#fcd34d" }}>
                   {isOverdue ? "Overdue: " : "Follow-up: "}
