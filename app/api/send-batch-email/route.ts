@@ -234,7 +234,7 @@ export async function POST(request: NextRequest) {
     }
 
     await resend.emails.send({
-      from: "anish@mindovermarkets.net",
+      from: "Mind Over Markets <anish@mindovermarkets.net>",
       to: email,
       subject: `Welcome to ${batch.batch_name}`,
       html: emailHtml,
