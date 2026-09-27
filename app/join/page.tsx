@@ -55,6 +55,7 @@ export default function JoinPage() {
 
     if (!form.full_name.trim()) return setError('Please enter your full name.')
     if (!form.email.trim())     return setError('Please enter your email.')
+    if (!form.phone.trim())     return setError('Please enter your WhatsApp number.')
     if (!form.market)           return setError('Please select the market you trade.')
     if (!form.experience)       return setError('Please select your experience level.')
     if (!form.mentorship_type)   return setError('Please select a mentorship type.')
@@ -67,7 +68,7 @@ export default function JoinPage() {
           full_name:       form.full_name.trim(),
           name:            form.full_name.trim(),
           email:           form.email.trim().toLowerCase(),
-          phone:           form.phone.trim() || null,
+          phone:           form.phone.trim(),
           market:          form.market,
           experience:      form.experience,
           struggling_with:  form.struggling_with.trim() || null,
@@ -300,10 +301,10 @@ export default function JoinPage() {
                 </div>
               </div>
 
-              {/* Phone */}
+              {/* WhatsApp */}
               <div>
                 <label style={{ display: 'block', color: '#94a3b8', fontSize: 13, fontWeight: 600, marginBottom: 8, letterSpacing: '0.03em', textTransform: 'uppercase' }}>
-                  Phone <span style={{ color: '#475569', fontWeight: 400, textTransform: 'none', fontSize: 12 }}>(optional)</span>
+                  WhatsApp Number <span style={{ color: '#ef4444' }}>*</span>
                 </label>
                 <input
                   className="input-field"
