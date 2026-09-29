@@ -6,6 +6,7 @@ import { Bold, Italic, Code, List, ListOrdered, CheckSquare, Calendar } from "lu
 import { createClient } from "@supabase/supabase-js";
 import dynamic from "next/dynamic";
 import { trackActivity } from "../../lib/trackActivity";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const JournalDashboard = dynamic(() => import("./JournalDashboard"), { ssr: false });
 
@@ -177,6 +178,7 @@ function buildMonthDays(monthValue: string) {
 }
 
 export default function JournalPage() {
+  const { isAuthenticated } = useAuth();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [firms, setFirms] = useState<Firm[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -349,13 +351,10 @@ export default function JournalPage() {
   }, []);
 
   useEffect(() => {
-    (async () => {
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData.user) {
-        trackActivity(userData.user.id, "journal", "opened");
-      }
-    })();
-  }, []);
+    if (isAuthenticated) {
+      trackActivity("", "journal", "opened");
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     const el = testPlanRef.current;
@@ -1042,9 +1041,8 @@ export default function JournalPage() {
         resetForm();
       }
       fetchTrades(month);
-      const { data: userData } = await supabase.auth.getUser();
-      if (userData.user) {
-        trackActivity(userData.user.id, "journal", "completed", {
+      if (isAuthenticated) {
+        trackActivity("", "journal", "completed", {
           symbol: payload.symbol,
           pnl: payload.pnl,
           emotion: payload.emotion,

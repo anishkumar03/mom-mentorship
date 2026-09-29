@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useAuth } from "@/app/components/AuthProvider";
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -18,24 +19,17 @@ type Student = {
 };
 
 export default function AdminPage() {
+  const { isAuthenticated, logout } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [status, setStatus] = useState("Checking login...");
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      window.location.href = "/login";
+      return;
+    }
+
     const run = async () => {
-      const { data } = await supabase.auth.getUser();
-      const email = data.user?.email ?? "";
-
-      if (!email) {
-        window.location.href = "/login";
-        return;
-      }
-
-      if (email !== "anish@mindovermarkets.net") {
-        setStatus("Access denied.");
-        return;
-      }
-
       const { data: rows, error } = await supabase
         .from("students")
         .select("*")
@@ -51,12 +45,7 @@ export default function AdminPage() {
     };
 
     run();
-  }, []);
-
-  const logout = async () => {
-    await supabase.auth.signOut();
-    window.location.href = "/login";
-  };
+  }, [isAuthenticated]);
 
   return (
     <div style={{ maxWidth: 1100, margin: "28px auto", padding: "0 16px", fontFamily: "system-ui, sans-serif" }}>
@@ -67,7 +56,7 @@ export default function AdminPage() {
           <Link href="/dashboard" style={linkStyle}>Dashboard</Link>
           <Link href="/pipeline" style={linkStyle}>Pipeline</Link>
           <Link href="/leads" style={linkStyle}>Leads</Link>
-          <button onClick={logout} style={btnStyle}>Logout</button>
+          <button onClick={() => { logout(); window.location.href = "/login"; }} style={btnStyle}>Logout</button>
         </div>
       </div>
 

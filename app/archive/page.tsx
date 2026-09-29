@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,6 +65,7 @@ function timeAgo(dateStr: string) {
 }
 
 export default function ArchivePage() {
+  const { isAuthenticated } = useAuth();
   const [items, setItems] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,17 +78,8 @@ export default function ArchivePage() {
     setLoading(true);
     setError(null);
 
-    const { data: userData } = await supabase.auth.getUser();
-    const email = userData.user?.email ?? "";
-
-    if (!email) {
+    if (!isAuthenticated) {
       window.location.href = "/login";
-      return;
-    }
-
-    if (email !== "anish@mindovermarkets.net") {
-      setError("Access denied");
-      setLoading(false);
       return;
     }
 
@@ -108,7 +101,7 @@ export default function ArchivePage() {
 
   useEffect(() => {
     load();
-  }, []);
+  }, [isAuthenticated]);
 
   const filtered = useMemo(() => {
     return items.filter((l) => {

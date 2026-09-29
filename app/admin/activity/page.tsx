@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useAuth } from "@/app/components/AuthProvider";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -82,20 +83,15 @@ function buildUserSummaries(logs: ActivityLog[]): UserSummary[] {
 }
 
 export default function ActivityPage() {
+  const { isAuthenticated } = useAuth();
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [summaries, setSummaries] = useState<UserSummary[]>([]);
   const [status, setStatus] = useState("Loading...");
 
   useEffect(() => {
     const run = async () => {
-      const { data: authData } = await supabase.auth.getUser();
-      const email = authData.user?.email ?? "";
-      if (!email) {
+      if (!isAuthenticated) {
         window.location.href = "/login";
-        return;
-      }
-      if (email !== "anish@mindovermarkets.net") {
-        setStatus("Access denied.");
         return;
       }
 
@@ -117,7 +113,7 @@ export default function ActivityPage() {
     };
 
     run();
-  }, []);
+  }, [isAuthenticated]);
 
   if (status !== "ready") {
     return (
