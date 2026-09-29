@@ -14,20 +14,26 @@ function RootLayoutContent({
   const { isAuthenticated, isLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [hasRedirected, setHasRedirected] = useState(false);
 
   const isPublicRoute = pathname === '/leads-form' || pathname === '/login';
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || isPublicRoute) return;
 
-    if (!isAuthenticated && !isPublicRoute && !hasRedirected) {
-      setHasRedirected(true);
+    if (!isAuthenticated) {
       router.replace(`/login?from=${pathname}`);
     }
-  }, [isAuthenticated, isLoading, pathname, isPublicRoute, hasRedirected, router]);
+  }, [isLoading, isPublicRoute, isAuthenticated, pathname, router]);
 
   if (isLoading && !isPublicRoute) {
+    return (
+      <html lang="en">
+        <body className="font-sans antialiased" />
+      </html>
+    );
+  }
+
+  if (!isAuthenticated && !isPublicRoute) {
     return (
       <html lang="en">
         <body className="font-sans antialiased" />
