@@ -6,21 +6,23 @@ interface AuthContextType {
   isAuthenticated: boolean;
   login: (username: string, password: string) => boolean;
   logout: () => void;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('momAuthToken') === 'true';
-    }
-    return false;
-  });
-  const [mounted, setMounted] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    setMounted(true);
+    try {
+      const stored = localStorage.getItem('momAuthToken');
+      setIsAuthenticated(stored === 'true');
+    } catch (e) {
+      console.error('Failed to read auth from localStorage:', e);
+    }
+    setIsLoading(false);
   }, []);
 
   const login = (username: string, password: string): boolean => {
@@ -28,22 +30,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const MOM_PASSWORD = process.env.NEXT_PUBLIC_MOM_PASSWORD || '123456';
 
     if (username === MOM_USERNAME && password === MOM_PASSWORD) {
-      localStorage.setItem('momAuthToken', 'true');
-      setIsAuthenticated(true);
-      return true;
+      try {
+        localStorage.setItem('momAuthToken', 'true');
+        setIsAuthenticated(true);
+        return true;
+      } catch (e) {
+        console.error('Failed to set auth token:', e);
+        return false;
+      }
     }
     return false;
   };
 
   const logout = () => {
-    localStorage.removeItem('momAuthToken');
+    try {
+      localStorage.removeItem('momAuthToken');
+    } catch (e) {
+      console.error('Failed to remove auth token:', e);
+    }
     setIsAuthenticated(false);
   };
 
-  if (!mounted) return <>{children}</>;
-
   return (
-    <AuthContext.Provider value={{ isAuthenticated, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, login, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
@@ -56,6 +65,7 @@ export function useAuth() {
       isAuthenticated: false,
       login: () => false,
       logout: () => {},
+      isLoading: true,
     };
   }
   return context;

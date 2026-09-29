@@ -11,25 +11,23 @@ function RootLayoutContent({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [isChecking, setIsChecking] = useState(true);
+  const [hasRedirected, setHasRedirected] = useState(false);
 
   const isPublicRoute = pathname === '/leads-form' || pathname === '/login';
 
   useEffect(() => {
-    setIsChecking(true);
+    if (isLoading) return;
 
-    if (!isAuthenticated && !isPublicRoute) {
+    if (!isAuthenticated && !isPublicRoute && !hasRedirected) {
+      setHasRedirected(true);
       router.replace(`/login?from=${pathname}`);
-      return;
     }
+  }, [isAuthenticated, isLoading, pathname, isPublicRoute, hasRedirected, router]);
 
-    setIsChecking(false);
-  }, [isAuthenticated, pathname, isPublicRoute, router]);
-
-  if (isChecking && !isPublicRoute) {
+  if (isLoading && !isPublicRoute) {
     return (
       <html lang="en">
         <body className="font-sans antialiased" />
