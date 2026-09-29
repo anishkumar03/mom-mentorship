@@ -14,20 +14,27 @@ function RootLayoutContent({
   const { isAuthenticated } = useAuth();
   const pathname = usePathname();
   const router = useRouter();
-  const [canRender, setCanRender] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
 
   const isPublicRoute = pathname === '/leads-form' || pathname === '/login';
 
   useEffect(() => {
+    setIsChecking(true);
+
     if (!isAuthenticated && !isPublicRoute) {
-      router.push(`/login?from=${pathname}`);
-    } else {
-      setCanRender(true);
+      router.replace(`/login?from=${pathname}`);
+      return;
     }
+
+    setIsChecking(false);
   }, [isAuthenticated, pathname, isPublicRoute, router]);
 
-  if (!canRender && !isPublicRoute) {
-    return null;
+  if (isChecking && !isPublicRoute) {
+    return (
+      <html lang="en">
+        <body className="font-sans antialiased" />
+      </html>
+    );
   }
 
   const hideNav = pathname === '/leads-form' || pathname === '/login';

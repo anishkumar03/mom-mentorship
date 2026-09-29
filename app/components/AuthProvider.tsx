@@ -11,15 +11,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('momAuthToken') === 'true';
+    }
+    return false;
+  });
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-    const stored = localStorage.getItem('momAuthToken');
-    if (stored === 'true') {
-      setIsAuthenticated(true);
-    }
   }, []);
 
   const login = (username: string, password: string): boolean => {
