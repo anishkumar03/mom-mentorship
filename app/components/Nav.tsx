@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "./AuthProvider";
 
 const links = [
   { href: "/quick-add", label: "+ Lead" },
@@ -21,6 +22,13 @@ const links = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
   return (
     <div className="nav" style={{
@@ -30,40 +38,61 @@ export default function Nav() {
       WebkitOverflowScrolling: "touch",
       padding: "8px 12px",
       flexWrap: "wrap",
+      alignItems: "center",
+      justifyContent: "space-between",
     }}>
-      {links.map((l) => {
-        const active = pathname?.startsWith(l.href);
-        const isQuickAdd = l.href === "/quick-add";
-        return (
-          <Link
-            key={l.href}
-            href={l.href}
-            style={isQuickAdd ? {
-              color: "white",
-              background: "var(--accent)",
-              borderRadius: 6,
-              padding: "4px 12px",
-              fontSize: 13,
-              fontWeight: 700,
-              whiteSpace: "nowrap",
-              textDecoration: "none",
-            } : {
-              color: active ? "white" : "var(--muted)",
-              borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
-              paddingBottom: 6,
-              paddingLeft: 8,
-              paddingRight: 8,
-              fontSize: 13,
-              fontWeight: active ? 700 : 400,
-              whiteSpace: "nowrap",
-              textDecoration: "none",
-              transition: "color 0.15s, border-color 0.15s",
-            }}
-          >
-            {l.label}
-          </Link>
-        );
-      })}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {links.map((l) => {
+          const active = pathname?.startsWith(l.href);
+          const isQuickAdd = l.href === "/quick-add";
+          return (
+            <Link
+              key={l.href}
+              href={l.href}
+              style={isQuickAdd ? {
+                color: "white",
+                background: "var(--accent)",
+                borderRadius: 6,
+                padding: "4px 12px",
+                fontSize: 13,
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                textDecoration: "none",
+              } : {
+                color: active ? "white" : "var(--muted)",
+                borderBottom: active ? "2px solid var(--accent)" : "2px solid transparent",
+                paddingBottom: 6,
+                paddingLeft: 8,
+                paddingRight: 8,
+                fontSize: 13,
+                fontWeight: active ? 700 : 400,
+                whiteSpace: "nowrap",
+                textDecoration: "none",
+                transition: "color 0.15s, border-color 0.15s",
+              }}
+            >
+              {l.label}
+            </Link>
+          );
+        })}
+      </div>
+      <button
+        onClick={handleLogout}
+        style={{
+          background: "none",
+          border: "none",
+          color: "var(--muted)",
+          fontSize: 13,
+          cursor: "pointer",
+          padding: "4px 8px",
+          whiteSpace: "nowrap",
+          transition: "color 0.15s",
+        }}
+        onMouseEnter={(e) => e.currentTarget.style.color = "white"}
+        onMouseLeave={(e) => e.currentTarget.style.color = "var(--muted)"}
+      >
+        Logout
+      </button>
     </div>
   );
 }
