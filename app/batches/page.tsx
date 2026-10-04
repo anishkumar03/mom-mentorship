@@ -538,6 +538,39 @@ export default function BatchesPage() {
     setSaving(false);
   };
 
+  const exportWhatsAppContacts = () => {
+    if (selectedIds.size === 0) {
+      alert("Please select at least one student");
+      return;
+    }
+
+    const ids = Array.from(selectedIds);
+    const selectedLeads = leads.filter(l => ids.includes(l.id));
+    const validLeads = selectedLeads.filter(l => l.phone && l.phone.trim());
+
+    if (!validLeads.length) {
+      alert("No selected students have phone numbers");
+      return;
+    }
+
+    let vcf = "";
+    validLeads.forEach((lead) => {
+      const name = safeName(lead);
+      const phone = lead.phone?.trim() || "";
+      vcf += `BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${name}\r\nTEL:${phone}\r\nEND:VCARD\r\n`;
+    });
+
+    const blob = new Blob([vcf], { type: "text/vcard" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `whatsapp_contacts_${new Date().toISOString().split("T")[0]}.vcf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   // FIX: store the new label in localBatches so it persists after clearing the date input
   const handleCreateBatch = async () => {
     if (!newBatchDate) return;
@@ -708,6 +741,13 @@ export default function BatchesPage() {
             style={{ ...btnPrimary, opacity: selectedIds.size === 0 ? 0.4 : 1 }}
           >
             {saving ? "Saving..." : `Move ${selectedIds.size} selected`}
+          </button>
+          <button
+            onClick={exportWhatsAppContacts}
+            disabled={selectedIds.size === 0}
+            style={{ ...btnSecondary, opacity: selectedIds.size === 0 ? 0.4 : 1 }}
+          >
+            📱 Export WhatsApp
           </button>
         </div>
 
