@@ -584,6 +584,15 @@ export default function BatchesPage() {
               if (updateError) {
                 console.error(`Failed to update student ${lead.student_id}:`, updateError);
                 updateErrors.push(`${currentName}: update failed`);
+              } else {
+                // Also update the lead's full_name to match so the UI displays the updated name
+                const { error: leadError } = await supabase
+                  .from("leads")
+                  .update({ full_name: updatedName })
+                  .eq("id", lead.id);
+                if (leadError) {
+                  console.error(`Failed to update lead ${lead.id}:`, leadError);
+                }
               }
             }
           }
