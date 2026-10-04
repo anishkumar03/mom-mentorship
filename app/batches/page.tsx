@@ -499,9 +499,24 @@ export default function BatchesPage() {
 
     const students: Student[] = Array.isArray(group.students) ? group.students : [];
     const byEmail = new Map(students.map((s) => [s.email.toLowerCase(), s]));
+
     for (const l of assignedLeads) {
       if (!l.email) continue;
-      byEmail.set(l.email.toLowerCase(), { name: safeName(l), email: l.email });
+
+      // If lead has been converted to student, fetch the student's name (which has batch tag)
+      let displayName = safeName(l);
+      if (l.student_id) {
+        const { data: studentData } = await supabase
+          .from("students")
+          .select("name")
+          .eq("id", l.student_id)
+          .single();
+        if (studentData?.name) {
+          displayName = studentData.name;
+        }
+      }
+
+      byEmail.set(l.email.toLowerCase(), { name: displayName, email: l.email });
     }
 
     const { error: updateError } = await supabase
@@ -519,6 +534,7 @@ export default function BatchesPage() {
     const ids = Array.from(selectedIds);
     const assignedLeads = leads.filter((l) => ids.includes(l.id));
 
+    // Update batch on leads
     const { error } = await supabase
       .from("leads")
       .update({ batch: batchValue })
@@ -532,31 +548,53 @@ export default function BatchesPage() {
     }
 
     // Update student names to reflect batch changes
+    const updateErrors: string[] = [];
     for (const lead of assignedLeads) {
       if (lead.student_id) {
-        // Fetch the current student name from database
-        const { data: studentData } = await supabase
-          .from("students")
-          .select("name, full_name")
-          .eq("id", lead.student_id)
-          .single();
+        try {
+          // Fetch the current student name from database
+          const { data: studentData, error: fetchError } = await supabase
+            .from("students")
+            .select("name, full_name")
+            .eq("id", lead.student_id)
+            .single();
 
-        if (studentData) {
-          const currentName = (studentData.full_name ?? studentData.name ?? "").trim();
-          if (currentName) {
-            // Remove old batch tag if exists
-            const nameWithoutBatch = currentName.replace(/ \[.*\]$/, "");
-            // Add new batch tag
-            const newBatchSuffix = batchValue ? ` [${batchValue}]` : "";
-            const updatedName = nameWithoutBatch + newBatchSuffix;
-
-            await supabase
-              .from("students")
-              .update({ name: updatedName, full_name: updatedName })
-              .eq("id", lead.student_id);
+          if (fetchError) {
+            console.error("Error fetching student:", fetchError);
+            updateErrors.push(`${lead.full_name || lead.name}: fetch failed`);
+            continue;
           }
+
+          if (studentData) {
+            const currentName = (studentData.full_name ?? studentData.name ?? "").trim();
+            if (currentName) {
+              // Remove old batch tag if exists
+              const nameWithoutBatch = currentName.replace(/ \[.*\]$/, "");
+              // Add new batch tag
+              const newBatchSuffix = batchValue ? ` [${batchValue}]` : "";
+              const updatedName = nameWithoutBatch + newBatchSuffix;
+
+              const { error: updateError } = await supabase
+                .from("students")
+                .update({ name: updatedName, full_name: updatedName })
+                .eq("id", lead.student_id);
+
+              if (updateError) {
+                console.error(`Failed to update student ${lead.student_id}:`, updateError);
+                updateErrors.push(`${currentName}: update failed`);
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error updating student:", err);
+          updateErrors.push(`${lead.full_name || lead.name}: exception occurred`);
         }
       }
+    }
+
+    // Show warnings if any updates failed
+    if (updateErrors.length > 0) {
+      alert(`⚠️ ${updateErrors.length} students' batch tags failed to update:\n${updateErrors.join("\n")}\n\nBatches were assigned but some names may not reflect the change.`);
     }
 
     setSelectedIds(new Set());
