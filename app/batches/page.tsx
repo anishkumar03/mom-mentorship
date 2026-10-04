@@ -534,18 +534,27 @@ export default function BatchesPage() {
     // Update student names to reflect batch changes
     for (const lead of assignedLeads) {
       if (lead.student_id) {
-        const studentName = (lead.full_name ?? lead.name ?? "").trim();
-        if (studentName) {
-          // Remove old batch tag if exists
-          const nameWithoutBatch = studentName.replace(/ \[.*\]$/, "");
-          // Add new batch tag
-          const newBatchSuffix = batchValue ? ` [${batchValue}]` : "";
-          const updatedName = nameWithoutBatch + " Group" + newBatchSuffix;
+        // Fetch the current student name from database
+        const { data: studentData } = await supabase
+          .from("students")
+          .select("name, full_name")
+          .eq("id", lead.student_id)
+          .single();
 
-          await supabase
-            .from("students")
-            .update({ name: updatedName, full_name: updatedName })
-            .eq("id", lead.student_id);
+        if (studentData) {
+          const currentName = (studentData.full_name ?? studentData.name ?? "").trim();
+          if (currentName) {
+            // Remove old batch tag if exists
+            const nameWithoutBatch = currentName.replace(/ \[.*\]$/, "");
+            // Add new batch tag
+            const newBatchSuffix = batchValue ? ` [${batchValue}]` : "";
+            const updatedName = nameWithoutBatch + newBatchSuffix;
+
+            await supabase
+              .from("students")
+              .update({ name: updatedName, full_name: updatedName })
+              .eq("id", lead.student_id);
+          }
         }
       }
     }
