@@ -967,8 +967,8 @@ export default function LeadsPage() {
     const safeFullName = (l.full_name ?? l.name ?? "").trim() || null;
 
     const payload = {
-      name: safeName,
-      full_name: safeFullName,
+      name: safeName + " Group",
+      full_name: safeFullName ? safeFullName + " Group" : null,
       email: email || "",
       phone: l.phone ?? null,
       program: l.program ?? null,

@@ -465,8 +465,8 @@ export default function PipelinePage() {
     const inserted = await supabase
       .from("students")
       .insert({
-        name: safeName,
-        full_name: safeFullName,
+        name: safeName + " Group",
+        full_name: safeFullName ? safeFullName + " Group" : null,
         email: email || "",
         phone: l.phone ?? null,
         program: l.program ?? "General Lead"
