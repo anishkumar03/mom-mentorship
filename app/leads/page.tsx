@@ -25,6 +25,7 @@ type Lead = {
   program: string | null;
   status: string | null;
   student_id?: string | null;
+  batch?: string | null;
 
   call_scheduled_at: string | null;
   follow_up_at: string | null;
@@ -966,9 +967,13 @@ export default function LeadsPage() {
       "Unnamed";
     const safeFullName = (l.full_name ?? l.name ?? "").trim() || null;
 
+    const batchSuffix = l.batch ? ` [${l.batch}]` : "";
+    const nameWithBatch = safeName + " Group" + batchSuffix;
+    const fullNameWithBatch = safeFullName ? safeFullName + " Group" + batchSuffix : null;
+
     const payload = {
-      name: safeName + " Group",
-      full_name: safeFullName ? safeFullName + " Group" : null,
+      name: nameWithBatch,
+      full_name: fullNameWithBatch,
       email: email || "",
       phone: l.phone ?? null,
       program: l.program ?? null,

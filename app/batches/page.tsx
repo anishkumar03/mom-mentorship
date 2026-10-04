@@ -527,14 +527,35 @@ export default function BatchesPage() {
     if (error) {
       console.error(error);
       alert("Failed to assign batch: " + error.message);
-    } else {
-      setSelectedIds(new Set());
-      setAssignBatch("__NONE__");
-      // FIX: clear local batches — they're now persisted on leads in Supabase
-      setLocalBatches([]);
-      if (batchValue) await syncStudentsToDispatchGroup(batchValue, assignedLeads);
-      await fetchAll();
+      setSaving(false);
+      return;
     }
+
+    // Update student names to reflect batch changes
+    for (const lead of assignedLeads) {
+      if (lead.student_id) {
+        const studentName = (lead.full_name ?? lead.name ?? "").trim();
+        if (studentName) {
+          // Remove old batch tag if exists
+          const nameWithoutBatch = studentName.replace(/ \[.*\]$/, "");
+          // Add new batch tag
+          const newBatchSuffix = batchValue ? ` [${batchValue}]` : "";
+          const updatedName = nameWithoutBatch + " Group" + newBatchSuffix;
+
+          await supabase
+            .from("students")
+            .update({ name: updatedName, full_name: updatedName })
+            .eq("id", lead.student_id);
+        }
+      }
+    }
+
+    setSelectedIds(new Set());
+    setAssignBatch("__NONE__");
+    // FIX: clear local batches — they're now persisted on leads in Supabase
+    setLocalBatches([]);
+    if (batchValue) await syncStudentsToDispatchGroup(batchValue, assignedLeads);
+    await fetchAll();
     setSaving(false);
   };
 

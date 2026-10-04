@@ -21,6 +21,7 @@ type Lead = {
   notes: string | null;
   source: string | null;
   student_id?: string | null;
+  batch?: string | null;
 
   program: string | null;
   status: string | null;
@@ -462,11 +463,15 @@ export default function PipelinePage() {
       "Unnamed";
     const safeFullName = (l.full_name ?? l.name ?? "").trim() || null;
 
+    const batchSuffix = l.batch ? ` [${l.batch}]` : "";
+    const nameWithBatch = safeName + " Group" + batchSuffix;
+    const fullNameWithBatch = safeFullName ? safeFullName + " Group" + batchSuffix : null;
+
     const inserted = await supabase
       .from("students")
       .insert({
-        name: safeName + " Group",
-        full_name: safeFullName ? safeFullName + " Group" : null,
+        name: nameWithBatch,
+        full_name: fullNameWithBatch,
         email: email || "",
         phone: l.phone ?? null,
         program: l.program ?? "General Lead"
