@@ -1145,6 +1145,39 @@ export default function LeadsPage() {
     await bulkUpdate({ status: nextStage });
   };
 
+  const exportWhatsAppContacts = () => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) {
+      alert("Please select at least one lead");
+      return;
+    }
+
+    const selectedLeads = leads.filter(l => ids.includes(l.id));
+    const validLeads = selectedLeads.filter(l => l.phone && l.phone.trim());
+
+    if (!validLeads.length) {
+      alert("No selected leads have phone numbers");
+      return;
+    }
+
+    let vcf = "";
+    validLeads.forEach((lead, index) => {
+      const name = leadName(lead);
+      const phone = lead.phone?.trim() || "";
+      vcf += `BEGIN:VCARD\r\nVERSION:3.0\r\nFN:${name}\r\nTEL:${phone}\r\nEND:VCARD\r\n`;
+    });
+
+    const blob = new Blob([vcf], { type: "text/vcard" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `whatsapp_contacts_${new Date().toISOString().split("T")[0]}.vcf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const card = (l: Lead) => {
     const name = leadName(l);
     const isOverdue = l.follow_up_at && new Date(l.follow_up_at).getTime() < Date.now();
@@ -1557,6 +1590,7 @@ export default function LeadsPage() {
               <button onClick={runBulkMarkContacted} style={btnSecondarySmall}>Mark contacted</button>
               <button onClick={() => runBulkMoveStage("Lost")} style={btnDangerSmall}>Move to Lost</button>
               <button onClick={runBulkArchive} style={btnSecondarySmall}>Archive</button>
+              <button onClick={exportWhatsAppContacts} style={{ ...btnSecondarySmall, background: "rgba(34, 197, 94, 0.2)", color: "#86efac", border: "1px solid rgba(34, 197, 94, 0.5)" }}>📱 Export WhatsApp</button>
               <button onClick={bulkDelete} style={btnDangerSmall}>Delete</button>
               <select
                 value={bulkStage}
