@@ -550,6 +550,8 @@ export default function BatchesPage() {
     // Update student names to reflect batch changes
     const updateErrors: string[] = [];
     for (const lead of assignedLeads) {
+      console.log(`Processing lead: ${lead.full_name}, student_id: ${lead.student_id}, batch: ${batchValue}`);
+
       if (lead.student_id) {
         try {
           // Fetch the current student name from database
@@ -589,6 +591,8 @@ export default function BatchesPage() {
           console.error("Error updating student:", err);
           updateErrors.push(`${lead.full_name || lead.name}: exception occurred`);
         }
+      } else {
+        console.log(`Lead ${lead.full_name} has no student_id - skipping student name update`);
       }
     }
 
