@@ -444,7 +444,7 @@ export default function EmailBatchesPage() {
                 <textarea
                   value={form.notes}
                   onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                  placeholder={`e.g. "Important: Due to vacation from Nov 10-20, there will be NO CLASSES on November 9 and November 16. Classes resume November 23."`}
+                  placeholder={`e.g. "Important: I will be on vacation from November 10 to 20, so there will be no classes on November 9 and November 16. Classes will resume on November 23."`}
                   style={{...inputStyle, minHeight: '80px', fontFamily: 'inherit', resize: 'vertical'}}
                 />
               </div>
