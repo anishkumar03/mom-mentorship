@@ -35,8 +35,6 @@ type BatchGroup = {
   students: Student[];
   active: boolean;
   created_at: string;
-  notes?: string | null;
-  skip_dates?: string[] | null;
 };
 
 function safeName(l: Lead) {
@@ -91,8 +89,6 @@ function DispatchBatchManager() {
   const [studentInput, setStudentInput] = useState<Record<string, { name: string; email: string }>>({});
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [err, setErr] = useState("");
-  const [batchNotes, setBatchNotes] = useState<Record<string, string>>({});
-  const [skipDatesInput, setSkipDatesInput] = useState<Record<string, string>>({});
 
   const load = async () => {
     setLoading(true);
@@ -101,19 +97,7 @@ function DispatchBatchManager() {
       .select("*")
       .order("created_at", { ascending: false });
     if (error) setErr(error.message);
-    else {
-      const batches = (data as BatchGroup[]) ?? [];
-      setGroups(batches);
-      // Initialize notes and skip dates from loaded batches
-      const notes: Record<string, string> = {};
-      const dates: Record<string, string> = {};
-      for (const b of batches) {
-        notes[b.id] = b.notes || "";
-        dates[b.id] = (b.skip_dates || []).join(", ");
-      }
-      setBatchNotes(notes);
-      setSkipDatesInput(dates);
-    }
+    else setGroups((data as BatchGroup[]) ?? []);
     setLoading(false);
   };
 
@@ -127,8 +111,6 @@ function DispatchBatchManager() {
       zoom_title_match: newBatch.zoom_title_match.trim(),
       students: [],
       active: true,
-      notes: null,
-      skip_dates: null,
     });
     if (error) setErr(error.message);
     else { setNewBatch({ batch_name: "", zoom_title_match: "" }); setCreating(false); await load(); }
@@ -165,36 +147,6 @@ function DispatchBatchManager() {
     const updated = (g.students || []).filter(s => s.email !== email);
     await supabase.from("batch_groups").update({ students: updated }).eq("id", g.id);
     setGroups(prev => prev.map(x => x.id === g.id ? { ...x, students: updated } : x));
-  };
-
-  const saveBatchNotes = async (gid: string) => {
-    const notes = batchNotes[gid] || "";
-    const { error } = await supabase
-      .from("batch_groups")
-      .update({ notes: notes || null })
-      .eq("id", gid);
-    if (error) {
-      setErr(error.message);
-    } else {
-      setGroups(prev => prev.map(x => x.id === gid ? { ...x, notes: notes || null } : x));
-    }
-  };
-
-  const saveSkipDates = async (gid: string) => {
-    const datesStr = skipDatesInput[gid] || "";
-    const skipDates = datesStr
-      .split(",")
-      .map(d => d.trim())
-      .filter(d => d.length > 0) || null;
-    const { error } = await supabase
-      .from("batch_groups")
-      .update({ skip_dates: skipDates && skipDates.length > 0 ? skipDates : null })
-      .eq("id", gid);
-    if (error) {
-      setErr(error.message);
-    } else {
-      setGroups(prev => prev.map(x => x.id === gid ? { ...x, skip_dates: skipDates && skipDates.length > 0 ? skipDates : null } : x));
-    }
   };
 
   return (
@@ -361,41 +313,6 @@ function DispatchBatchManager() {
                       {saving[g.id] ? "..." : "+ Add"}
                     </button>
                   </div>
-                </div>
-
-                {/* Batch Notes */}
-                <div style={{ marginBottom: 14, padding: "12px 10px", background: "rgba(79,163,255,0.08)", borderRadius: 8, border: "1px solid rgba(79,163,255,0.2)" }}>
-                  <div style={{ fontSize: 11, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 8 }}>📝 BATCH NOTES</div>
-                  <textarea
-                    value={batchNotes[g.id] || ""}
-                    onChange={e => setBatchNotes(n => ({ ...n, [g.id]: e.target.value }))}
-                    onBlur={() => saveBatchNotes(g.id)}
-                    placeholder="Add notes about this batch (e.g., vacation dates, special instructions)"
-                    style={{
-                      ...inputSmall,
-                      width: "100%",
-                      minHeight: "60px",
-                      fontFamily: "inherit",
-                      resize: "vertical",
-                    }}
-                  />
-                </div>
-
-                {/* Skip Dates */}
-                <div style={{ marginBottom: 14, padding: "12px 10px", background: "rgba(245,158,11,0.08)", borderRadius: 8, border: "1px solid rgba(245,158,11,0.2)" }}>
-                  <div style={{ fontSize: 11, opacity: 0.6, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 600, marginBottom: 8 }}>🚫 SKIP DATES</div>
-                  <input
-                    value={skipDatesInput[g.id] || ""}
-                    onChange={e => setSkipDatesInput(d => ({ ...d, [g.id]: e.target.value }))}
-                    onBlur={() => saveSkipDates(g.id)}
-                    placeholder="Enter dates to skip (comma-separated, e.g., 2026-11-09, 2026-11-16, Nov 9, Nov 16)"
-                    style={{ ...inputSmall, width: "100%" }}
-                  />
-                  {g.skip_dates && g.skip_dates.length > 0 && (
-                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.8 }}>
-                      <strong>Skip dates:</strong> {g.skip_dates.join(", ")}
-                    </div>
-                  )}
                 </div>
 
                 {/* Actions */}
