@@ -14,6 +14,7 @@ const groupEmailHtml = (vars: any) => {
     sessionDay,
     sessionTime,
     sessions,
+    notes,
   } = vars;
 
   const activeSessions = sessions?.filter((s: any) => s.status !== "skipped") || [];
@@ -56,6 +57,10 @@ ${scheduleTableRow}
 <p style="font-size:14px;color:#374151;line-height:1.8;margin:0 0 6px;"><strong>Zoom Join Link:</strong></p>
 <p style="margin:0 0 24px;"><a href="${zoomLink}" style="color:#d4a832;font-size:14px;">${zoomLink}</a></p>
 ${sessionScheduleBlock}
+${notes ? `<div style="background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:16px;margin-bottom:24px;">
+<p style="font-size:14px;font-weight:700;color:#92400e;margin:0 0 8px;">⚠️ Important Notice</p>
+<p style="font-size:14px;color:#b45309;line-height:1.8;margin:0;">${notes.split('\n').join('<br/>')}</p>
+</div>` : ""}
 <p style="font-size:14px;font-weight:700;color:#0a1628;margin:0 0 10px;">What's Included</p>
 <p style="font-size:14px;color:#374151;line-height:2;margin:0 0 24px;">
 &bull; 7 weeks of structured mentorship with live guidance<br/>
@@ -229,6 +234,7 @@ export async function POST(request: NextRequest) {
         sessionDay: batch.session_day || "Wednesday",
         sessionTime: batch.session_time || "7:00 PM - 9:00 PM ET",
         sessions: sessions || [],
+        notes: batch.notes || "",
       };
       emailHtml = groupEmailHtml(emailVars);
     }

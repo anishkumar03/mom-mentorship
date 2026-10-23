@@ -20,6 +20,7 @@ interface Batch {
   zoom_link: string | null
   session_day: string | null
   session_time: string | null
+  notes: string | null
   created_at: string
 }
 
@@ -38,6 +39,7 @@ const empty = {
   start_date: '', end_date: '', fee: '',
   payment_deadline: '', zoom_link: '',
   session_day: 'Wednesday', session_time: '7:00 PM – 9:00 PM ET',
+  notes: '',
 }
 
 // UTC-safe date math — session_date is a plain date column, no timezone to worry about.
@@ -115,6 +117,7 @@ export default function EmailBatchesPage() {
       zoom_link:        b.zoom_link || '',
       session_day:      b.session_day || 'Wednesday',
       session_time:     b.session_time || '7:00 PM – 9:00 PM ET',
+      notes:            b.notes || '',
     })
     setShowForm(true)
   }
@@ -142,6 +145,7 @@ export default function EmailBatchesPage() {
       zoom_link:        form.zoom_link   || null,
       session_day:      form.type === 'group' ? form.session_day  : null,
       session_time:     form.type === 'group' ? form.session_time : null,
+      notes:            form.notes || null,
     }
 
     if (editing) {
@@ -433,6 +437,17 @@ export default function EmailBatchesPage() {
                   </div>
                 </>
               )}
+
+              {/* Notes/Important Information */}
+              <div>
+                <label style={labelStyle}>📝 Important Notes <span style={{ color: '#94a3b8', fontWeight: 400 }}>(shown in email)</span></label>
+                <textarea
+                  value={form.notes}
+                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder={`e.g. "Important: Due to vacation from Nov 10-20, there will be NO CLASSES on November 9 and November 16. Classes resume November 23."`}
+                  style={{...inputStyle, minHeight: '80px', fontFamily: 'inherit', resize: 'vertical'}}
+                />
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '10px', marginTop: '28px' }}>
